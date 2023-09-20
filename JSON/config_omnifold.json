@@ -1,0 +1,10 @@
+{
+    'NITER': 15,
+    'LR': 1e-4,
+    'BATCH_SIZE': 512,
+    'EPOCHS': 100,
+    'NPATIENCE': 10,
+    'NHEADS':2,
+    'NTRANSF':4,
+    'NDIM':64,
+}
