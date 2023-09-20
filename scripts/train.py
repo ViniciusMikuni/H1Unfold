@@ -36,7 +36,7 @@ if __name__ == "__main__":
 
     flags = parser.parse_args()
 
-    if flags.verbose and hvd.rank()==0:
+    if flags.verbose:
         print(80*'#')
         print("Total hvd size {}, rank: {}, local size: {}, local rank{}".format(hvd.size(), hvd.rank(), hvd.local_size(), hvd.local_rank()))
         print(80*'#')

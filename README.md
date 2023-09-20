@@ -13,3 +13,12 @@ salloc -C gpu -q interactive  -t 10 -n 16 --ntasks-per-node=4 --gpus-per-task=1 
 ```
 
 For an example for a job submission file, look at ```submit.sh``` in the scripts folder.
+
+
+## Training
+
+Right now the closure test, standard unfolding and bootstrapping are available. Additional systematic uncertainties will be made available later as the respective files are processed. To train OmniFold you can run
+
+```bash
+python train.py [--closure] [--nstrap N]
+```
