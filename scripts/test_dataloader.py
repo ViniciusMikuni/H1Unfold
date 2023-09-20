@@ -2,6 +2,7 @@ from dataloader import TFDataset
 import numpy as np
 import tensorflow as tf
 import utils
+import os
 utils.SetStyle()
 
 if __name__ == "__main__":
@@ -10,7 +11,8 @@ if __name__ == "__main__":
     file_data = ['test_data.h5']
     dataloader_mc = TFDataset(file_mc,base_path,is_mc=True)
     dataloader_data = TFDataset(file_data,base_path,is_mc=False)
-
+    if not os.path.exists('../plots'):
+        os.makedirs('../plots')
     
     #Let's make some plots
     particles_mc, events_mc = dataloader_mc.reco
@@ -39,6 +41,7 @@ if __name__ == "__main__":
         fig,ax = utils.HistRoutine(feed_dict,
                                    xlabel=utils.event_names[str(feature)],
                                    weights = weights,
+                                   label_loc='upper left',
                                    )
         fig.savefig('../plots/event_{}.pdf'.format(feature))
     #Flatten for plotting
@@ -59,15 +62,8 @@ if __name__ == "__main__":
         #     }
         fig,ax = utils.HistRoutine(feed_dict,
                                    xlabel=utils.particle_names[str(feature)],
+                                   label_loc='upper left',
                                    #weights = weights,
                                    )
         fig.savefig('../plots/part_{}.pdf'.format(feature))
-
-
-        
-
-    # for entry in dataloader.reco:
-    #     print(entry[0].numpy())
-    #     input()
-    #print(list(dataloader.data.as_numpy_iterator()))
     

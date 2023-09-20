@@ -27,8 +27,8 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
 
-    #parser.add_argument('--data_folder', default='/pscratch/sd/v/vmikuni/H1v2/h5', help='Folder containing data and MC files')
-    parser.add_argument('--data_folder', default='/global/cfs/cdirs/m3246/vmikuni/H1v2/h5/', help='Folder containing data and MC files')
+    parser.add_argument('--data_folder', default='/pscratch/sd/v/vmikuni/H1v2/h5', help='Folder containing data and MC files')
+    #parser.add_argument('--data_folder', default='/global/cfs/cdirs/m3246/vmikuni/H1v2/h5/', help='Folder containing data and MC files')
     parser.add_argument('--config', default='config_general.json', help='Basic config file containing general options')
     parser.add_argument('--closure', action='store_true', default=False,help='Train omnifold for a closure test using simulation')
     parser.add_argument('--nstrap', type=int,default=0, help='Unique id for bootstrapping')
