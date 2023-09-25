@@ -6,9 +6,12 @@ import os
 utils.SetStyle()
 
 if __name__ == "__main__":
-    base_path = '/global/cfs/cdirs/m3246/vmikuni/H1v2/h5/'
+    #base_path = '/global/cfs/cdirs/m3246/vmikuni/H1v2/h5/'
+    base_path = '/pscratch/sd/v/vmikuni/H1v2/h5'
     file_mc = ['test_sim.h5']
     file_data = ['test_data.h5']
+    # file_mc = ['toy1.h5']
+    # file_data = ['toy2.h5']
     dataloader_mc = TFDataset(file_mc,base_path,is_mc=True)
     dataloader_data = TFDataset(file_data,base_path,is_mc=False)
     if not os.path.exists('../plots'):
@@ -17,7 +20,13 @@ if __name__ == "__main__":
     #Let's make some plots
     particles_mc, events_mc = dataloader_mc.reco
     pass_reco_mc = dataloader_mc.pass_reco
-    print("Acceptance MC: {}".format(1.0*np.sum(pass_reco_mc)/pass_reco_mc.shape[0]))
+    print("Pass reco MC: {}".format(1.0*np.sum(pass_reco_mc)/pass_reco_mc.shape[0]))
+    print("Pass gen fid MC: {}".format(1.0*np.sum(dataloader_mc.pass_gen)/pass_reco_mc.shape[0]))
+    print("Pass fid but not pass reco {}".format(1.0*np.sum(dataloader_mc.pass_gen[pass_reco_mc==0])/np.sum(dataloader_mc.pass_gen)))
+    print("Pass fid  pass reco {}".format(1.0*np.sum(dataloader_mc.pass_gen[pass_reco_mc])/np.sum(dataloader_mc.pass_gen)))
+    print("Not pass fid but pass reco {}".format(1.0*np.sum(dataloader_mc.pass_gen[pass_reco_mc]==0)/np.sum(dataloader_mc.pass_gen==0)))
+    
+    print("Pass reco to pass fiducial ratio: {}".format(1.0*np.sum(pass_reco_mc)/np.sum(dataloader_mc.pass_gen)))
     particles_mc = particles_mc[pass_reco_mc]
     events_mc = events_mc[pass_reco_mc]
     
@@ -25,9 +34,10 @@ if __name__ == "__main__":
 
     particles_data, events_data  = dataloader_data.reco
     pass_reco_data = dataloader_data.pass_reco
-    print("Acceptance data: {}".format(1.0*np.sum(pass_reco_data)/pass_reco_data.shape[0]))
+    print("Pass reco data: {}".format(1.0*np.sum(pass_reco_data)/pass_reco_data.shape[0]))
     particles_data = particles_data[pass_reco_data]
     events_data = events_data[pass_reco_data]
+
     
     for feature in range(events_data.shape[-1]):
         feed_dict = {
@@ -56,10 +66,6 @@ if __name__ == "__main__":
             'data': particles_data[:,feature],
             'mc': particles_mc[:,feature],            
         }
-        # weights = {
-        #     'data':np.ones(events_data.shape[0]),
-        #     'mc': np.array(wgt)[pass_reco_mc],
-        #     }
         fig,ax = utils.HistRoutine(feed_dict,
                                    xlabel=utils.particle_names[str(feature)],
                                    label_loc='upper left',
