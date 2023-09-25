@@ -1,6 +1,8 @@
 import numpy as np
 
 colors = {
+    'data':'black',
+    'mc':'darkorange',
     'LO':'b', 
     'NLO':'g',
     'NNLO':'r', 
@@ -25,6 +27,7 @@ markers = {
     'Djangoh':'P',
     'Rapgap':'X',
     'Rapgap_unfolded':'X',
+    'mc':'X',    
 
     'Pythia': '^',
     'Pythia_Vincia': '^',
