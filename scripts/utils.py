@@ -7,6 +7,7 @@ import matplotlib.ticker as mtick
 import uproot3 as uproot
 import os
 import json,yaml
+import options
 
 line_style = {
     'data':'dotted',
@@ -20,15 +21,15 @@ colors = {
 
 
 event_names = {
-    '0': 'log(Q)',
-    '1': 'e_px/Q',
-    '2': 'e_py/Q',
-    '3': 'e_pz/Q',
+    '0': 'log(Q)/5 -1',
+    '1': r'$e_{px}$/Q',
+    '2': r'$e_{py}$/Q',
+    '3': r'1 + $e_{pz}$/Q',
     }
 particle_names = {
     '0': 'log(1.0+ pt/Q)',
-    '1': r'$\Delta\eta$',
-    '2': r'$\Delta\phi$',
+    '1': r'$\eta_e + \eta_p$',
+    '2': r'$\phi_e - \phi_p$',
     '3': 'Charge',
     }
 
@@ -177,15 +178,19 @@ def HistRoutine(feed_dict,
         binning = np.linspace(np.quantile(feed_dict[reference_name],0.0),np.quantile(feed_dict[reference_name],1),30)
         
     xaxis = [(binning[i] + binning[i+1])/2.0 for i in range(len(binning)-1)]
-    reference_hist,_ = np.histogram(feed_dict[reference_name],bins=binning,density=True)
+
+    if weights is not None:
+        reference_hist,_ = np.histogram(feed_dict[reference_name],weights=weights[reference_name],bins=binning,density=True)
+    else:
+        reference_hist,_ = np.histogram(feed_dict[reference_name],bins=binning,density=True)
 
     maxy = 0    
     for ip,plot in enumerate(feed_dict.keys()):
         plot_style = ref_plot if reference_name == plot else other_plots
         if weights is not None:
-            dist,_,_=ax0.hist(feed_dict[plot],bins=binning,label=plot,linestyle=line_style[plot],color=colors[plot],density=True,weights=weights[plot],**plot_style)
+            dist,_,_=ax0.hist(feed_dict[plot],bins=binning,label=plot,color=options.colors[plot],density=True,weights=weights[plot],**plot_style)
         else:
-            dist,_,_=ax0.hist(feed_dict[plot],bins=binning,label=plot,linestyle=line_style[plot],color=colors[plot],density=True,**plot_style)
+            dist,_,_=ax0.hist(feed_dict[plot],bins=binning,label=plot,color=options.colors[plot],density=True,**plot_style)
 
         if np.max(dist) > maxy:
             maxy = np.max(dist)
@@ -193,8 +198,9 @@ def HistRoutine(feed_dict,
         if plot_ratio:
             if reference_name!=plot:
                 ratio = np.ma.divide(dist,reference_hist).filled(0)
-                ax1.plot(xaxis,ratio,color=colors[plot],
-                         marker='+',ms=8,lw=0,markerfacecolor='none',markeredgewidth=3)
+                ax1.plot(xaxis,ratio,color=options.colors[plot],
+                         marker=options.markers[plot],ms=10,
+                         lw=0,markerfacecolor='none',markeredgewidth=3)
                 if uncertainty is not None:
                     for ibin in range(len(binning)-1):
                         xup = binning[ibin+1]
@@ -212,7 +218,7 @@ def HistRoutine(feed_dict,
         FormatFig(xlabel = "", ylabel = ylabel,ax0=ax0) 
         plt.ylabel('Ratio to Truth')
         plt.axhline(y=1.0, color='r', linestyle='-',linewidth=1)
-        plt.ylim([0.0,2.0])
+        plt.ylim([0.8,1.2])
         plt.xlabel(xlabel)
     else:
         FormatFig(xlabel = xlabel, ylabel = ylabel,ax0=ax0) 

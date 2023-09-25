@@ -4,7 +4,6 @@ import argparse
 import logging
 import json
 from omnifold import  Multifold
-import h5py as h5
 import os
 import horovod.tensorflow.keras as hvd
 import tensorflow as tf
@@ -32,6 +31,7 @@ if __name__ == "__main__":
     parser.add_argument('--config', default='config_general.json', help='Basic config file containing general options')
     parser.add_argument('--closure', action='store_true', default=False,help='Train omnifold for a closure test using simulation')
     parser.add_argument('--nstrap', type=int,default=0, help='Unique id for bootstrapping')
+    parser.add_argument('--start', type=int,default=0, help='Which omnifold iteration to start with')
     parser.add_argument('--verbose', action='store_true', default=False,help='Display additional information during training')
 
     flags = parser.parse_args()
@@ -48,15 +48,16 @@ if __name__ == "__main__":
     data_file_names = ['data.h5']
     if flags.closure:
         #use djangoh as pseudo data
-        #data_file_names = ['test_sim.h5']
         data_file_names = ['Djangoh_Eplus0607.h5']
+        #data_file_names = ['test_sim.h5']
+        #data_file_names = ['toy1.h5']
         version += '_closure'
         #Keep closure data with around the same amount as the true data
-        nmax = 1500000
+        nmax = 1000000
     else:
         nmax = None
     
-    mc = TFDataset(mc_file_names,flags.data_folder,is_mc=True,rank=hvd.rank(),size=hvd.size())
+    mc = TFDataset(mc_file_names,flags.data_folder,is_mc=True,rank=hvd.rank(),size=hvd.size(),nmax=10000000)
     data = TFDataset(data_file_names,flags.data_folder,is_mc=False,rank=hvd.rank(),size=hvd.size(),nmax=nmax)
     if flags.nstrap>0:
         assert flags.closure == False, 'ERROR: bootstrapping and closure mode should not be run together!'
@@ -65,15 +66,14 @@ if __name__ == "__main__":
             print("Running booststrap with ID: {}".format(flags.nstrap))
             np.random.seed(flags.nstrap*hvd.rank())
             print(80*"#")
-        data.weight = np.random.poisson(1,data.weight.shape[0])
-        #renormalize the weights
-        data.normalize_weights()
+        data.weight = np.random.poisson(1,data.weight.shape[0])        
         
         
     K.clear_session()
     mfold = Multifold(
         version = version,
         nstrap=flags.nstrap,
+        start = flags.start,
         verbose = flags.verbose,        
     )
 
