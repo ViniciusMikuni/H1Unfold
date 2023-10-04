@@ -1,12 +1,12 @@
 {
-    'NITER': 15,
+    'NITER': 10,
     'LR': 1e-3,
     'NEVT':4,
     'NFEAT':4,
-    'BATCH_SIZE': 1024,
+    'BATCH_SIZE': 512,
     'EPOCHS': 300,
     'NPATIENCE': 20,
     'NHEADS':2,
     'NTRANSF':2,
-    'NDIM':64,
+    'NDIM':32,
 }

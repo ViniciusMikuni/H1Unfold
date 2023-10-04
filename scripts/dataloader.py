@@ -120,7 +120,7 @@ class TFDataset():
 
     def normalize_weights(self):
         #print("Total number of reco events {}".format(self.num_pass_reco))
-        self.weight= 1e6*self.weight/self.num_pass_reco
+        self.weight= (1e6*self.weight/self.num_pass_reco).astype(np.float32)
 
         
     def preprocess(self,data):
