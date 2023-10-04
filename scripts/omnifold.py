@@ -2,13 +2,13 @@ import numpy as np
 import tensorflow as tf
 import tensorflow.keras
 from tensorflow.keras.layers import  Input, Dropout
-from tensorflow.keras.models import Model
+from tensorflow.keras import Model
 from tensorflow.keras.callbacks import EarlyStopping,ModelCheckpoint, ReduceLROnPlateau
 import os, gc
 import horovod.tensorflow.keras as hvd
 from sklearn.model_selection import train_test_split
 import logging
-from architecture import DeepSetsAtt, weighted_binary_crossentropy
+from architecture import Classifier,weighted_binary_crossentropy
 import utils
 
 def label_smoothing(y_true,alpha=0):
@@ -51,18 +51,18 @@ class Multifold():
                                         
         self.weights_pull = np.ones(self.mc.weight.shape[0])
         if self.start>0:
-            print("Loading step 2 weights from iteration {}".format(self.start))
-            model_name = '{}/Omnifold_{}_iter{}_step2.h5'.format(self.weights_folder,self.version,self.start)
-            self.model2.load_weights(model_name)
-            self.weights_push = self.reweight(self.mc.gen,self.model2,batch_size=1000)
+            print("Loading step 2 weights from iteration {}".format(self.start-1))
+            model_name = '{}/Omnifold_{}_iter{}_step2/checkpoint'.format(self.weights_folder,self.version,self.start-1)
+            self.model2.load_weights(model_name).expect_partial()
+            self.weights_push = self.reweight(self.mc.gen,self.model2_ema,batch_size=1000)
             #Also load model 1 to have a better starting point
-            model_name = '{}/Omnifold_{}_iter{}_step1.h5'.format(self.weights_folder,self.version,self.start)
-            self.model1.load_weights(model_name)
+            model_name = '{}/Omnifold_{}_iter{}_step1/checkpoint'.format(self.weights_folder,self.version,self.start-1)
+            self.model1.load_weights(model_name).expect_partial()
         else:
             self.weights_push = np.ones(self.mc.weight.shape[0])
             
         for i in range(self.start,self.niter):
-            if hvd.rank()==0:print("ITERATION: {}".format(i + 1))            
+            if hvd.rank()==0:print("ITERATION: {}".format(i + 1))
             self.RunStep1(i)        
             self.RunStep2(i)            
             self.CompileModel(float(self.opt['LR'])*np.sqrt(hvd.size()))
@@ -85,7 +85,7 @@ class Multifold():
         )
 
 
-        new_weights=self.reweight(self.tf_data1.batch(self.BATCH_SIZE),self.model1)[:self.mc.pass_reco.shape[0]]
+        new_weights=self.reweight(self.tf_data1.batch(self.BATCH_SIZE),self.model1_ema)[:self.mc.pass_reco.shape[0]]
         
         new_weights[self.mc.pass_reco==0]=1.0 #Don't update weights where there's no reco events
         self.weights_pull = self.weights_push *new_weights
@@ -102,7 +102,7 @@ class Multifold():
             NTRAIN = (self.mc.nmax + self.mc.nmax)//hvd.size(),
             cached = i>self.start #after first training cache the training data
         )
-        new_weights=self.reweight(self.tf_data2.batch(self.BATCH_SIZE),self.model2)[:self.mc.pass_reco.shape[0]]
+        new_weights=self.reweight(self.tf_data2.batch(self.BATCH_SIZE),self.model2_ema)[:self.mc.pass_reco.shape[0]]
         self.weights_push = new_weights
         # self.weights_push = self.weights_push/np.average(self.weights_push)
 
@@ -141,16 +141,17 @@ class Multifold():
         if hvd.rank() ==0:
             if self.nstrap>0:                
                 callbacks.append(
-                    ModelCheckpoint('{}/{}_{}_iter{}_step{}_strap{}.h5'.format(self.weights_folder,base_name,self.version,iteration,stepn,self.nstrap),
+                    ModelCheckpoint('{}/{}_{}_iter{}_step{}_strap{}/checkpoint'.format(
+                        self.weights_folder,base_name,self.version,iteration,stepn,self.nstrap),
                                     save_best_only=True,mode='auto',period=1,save_weights_only=True))
             else:
                 callbacks.append(
-                    ModelCheckpoint('{}/{}_{}_iter{}_step{}.h5'.format(self.weights_folder,base_name,self.version,iteration,stepn),
+                    ModelCheckpoint('{}/{}_{}_iter{}_step{}/checkpoint'.format(
+                        self.weights_folder,base_name,self.version,iteration,stepn),
                                     save_best_only=True,mode='auto',period=1,save_weights_only=True))
                 
         _ =  model.fit(
             train_data,
-            #[train_part,train_evt,train_labels,train_weights],
             epochs=self.EPOCHS,
             #batch_size = self.BATCH_SIZE,
             steps_per_epoch=int(0.8*NTRAIN/self.BATCH_SIZE),
@@ -226,10 +227,12 @@ class Multifold():
         opt2 = tensorflow.keras.optimizers.legacy.Adam(learning_rate=lr)
         opt2 = hvd.DistributedOptimizer(opt2)
 
-        self.model1.compile(loss=weighted_binary_crossentropy,weighted_metrics=[],
+        self.model1.compile(weighted_metrics=[],                            
+                            #run_eagerly=True,
                             optimizer=opt1,experimental_run_tf_function=False)
 
-        self.model2.compile(loss=weighted_binary_crossentropy,weighted_metrics=[],
+        self.model2.compile(weighted_metrics=[],                            
+                            #run_eagerly=True,
                             optimizer=opt2,experimental_run_tf_function=False)
 
 
@@ -248,28 +251,26 @@ class Multifold():
         #Will assume same number of features for simplicity
         if self.verbose:            
             self.log_string("Preparing model architecture with: {} particle features and {} event features".format(self.num_feat,self.num_event))
-
-
-        input_part1,input_evt1,outputs1 = DeepSetsAtt(self.num_feat,
-                                                      self.num_event,
-                                                      num_heads=self.opt['NHEADS'],
-                                                      num_transformer= self.opt['NTRANSF'],
-                                                      projection_dim= self.opt['NDIM'],
-                                                   )
-
-        input_part2,input_evt2,outputs2 = DeepSetsAtt(self.num_feat,
-                                                      self.num_event,
-                                                      num_heads=self.opt['NHEADS'],
-                                                      num_transformer= self.opt['NTRANSF'],
-                                                      projection_dim= self.opt['NDIM'],
-                                                   )
+        self.model1 = Classifier(self.num_feat,
+                                 self.num_event,
+                                 num_heads=self.opt['NHEADS'],
+                                 num_transformer= self.opt['NTRANSF'],
+                                 projection_dim= self.opt['NDIM'],
+                                 )
+        
+        self.model2 = Classifier(self.num_feat,
+                                 self.num_event,
+                                 num_heads=self.opt['NHEADS'],
+                                 num_transformer= self.opt['NTRANSF'],
+                                 projection_dim= self.opt['NDIM'],
+                                 )
 
         
-        self.model1 = Model(inputs=[input_part1,input_evt1], outputs=outputs1)
-        self.model2 = Model(inputs=[input_part2,input_evt2], outputs=outputs2)
+        self.model1_ema = self.model1.model_ema
+        self.model2_ema = self.model2.model_ema
         
         if self.verbose:
-            print(self.model2.summary())
+            print(self.model2.classifier.summary())
 
 
     def reweight(self,events,model,batch_size=None):

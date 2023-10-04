@@ -10,8 +10,8 @@ import tensorflow as tf
 import tensorflow.keras.backend as K
 import utils
 from dataloader import TFDataset
-# tf.random.set_seed(1234)
-# np.random.seed(1234)
+tf.random.set_seed(1234)
+np.random.seed(1234)
 
 if __name__ == "__main__":
     hvd.init()

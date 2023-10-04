@@ -17,7 +17,7 @@ parser.add_argument('--data_folder', default='/pscratch/sd/v/vmikuni/H1v2/h5', h
 parser.add_argument('--weights', default='../weights', help='Folder to store trained weights')
 parser.add_argument('--config', default='config_general.json', help='Basic config file containing general options')
 parser.add_argument('--plot_folder', default='../plots', help='Folder to store plots')
-
+parser.add_argument('--reco', action='store_true', default=False,help='Plot reco level  results')
 parser.add_argument('--closure', action='store_true', default=False,help='Plot closure results')
 parser.add_argument('--niter', type=int, default=1, help='Omnifold iteration to load')
 parser.add_argument('--img_fmt', default='pdf', help='Format of the output figures')
@@ -36,31 +36,42 @@ mc_file_names = {
 dataloaders = {}
 for mc in mc_file_names:
     dataloaders[mc] = TFDataset([mc_file_names[mc]],flags.data_folder,is_mc=True,nmax=1000000)
-    del dataloaders[mc].reco #free a bit of memory
+    if flags.reco:
+        del dataloaders[mc].gen #free a bit of memory
+        dataloaders[mc].evts = dataloaders[mc].reco
+        dataloaders[mc].pass_evts = dataloaders[mc].pass_reco
+    else:
+        del dataloaders[mc].reco #free a bit of memory
+        dataloaders[mc].evts = dataloaders[mc].gen
+        dataloaders[mc].pass_evts = dataloaders[mc].pass_gen
     gc.collect()
 
 #Load the trained model
 version = opt['NAME']
 if flags.closure:
     version  +='_closure'
-model_name = '{}/Omnifold_{}_iter{}_step2.h5'.format(flags.weights,version,flags.niter)
+if flags.reco:
+    model_name = '{}/Omnifold_{}_iter{}_step1/checkpoint'.format(flags.weights,version,flags.niter)
+    print("Loading model {}".format(model_name))
+else:
+    model_name = '{}/Omnifold_{}_iter{}_step2/checkpoint'.format(flags.weights,version,flags.niter)
 print("Loading model {}".format(model_name))
 mfold = Multifold(version = version)
 mfold.PrepareModel()
-mfold.model2.load_weights(model_name)
-unfolded_weights = mfold.reweight(dataloaders['Rapgap'].gen,mfold.model2,batch_size=1000)
+mfold.model2.load_weights(model_name).expect_partial()
+unfolded_weights = mfold.reweight(dataloaders['Rapgap'].evts,mfold.model2_ema,batch_size=1000)
 print(unfolded_weights)
 #Event level observables
 for feature in range(mfold.num_event):
     feed_dict = {
-        'data': dataloaders['Rapgap'].gen[1][:,feature][dataloaders['Rapgap'].pass_gen],
-        'Rapgap': dataloaders['Rapgap'].gen[1][:,feature][dataloaders['Rapgap'].pass_gen],
-        'Djangoh': dataloaders['Djangoh'].gen[1][:,feature][dataloaders['Djangoh'].pass_gen],
+        'data': dataloaders['Rapgap'].evts[1][:,feature][dataloaders['Rapgap'].pass_evts],
+        'Rapgap': dataloaders['Rapgap'].evts[1][:,feature][dataloaders['Rapgap'].pass_evts],
+        'Djangoh': dataloaders['Djangoh'].evts[1][:,feature][dataloaders['Djangoh'].pass_evts],
     }
     weights = {
-        'data':(dataloaders['Rapgap'].weight*unfolded_weights)[dataloaders['Rapgap'].pass_gen],
-        'Rapgap': dataloaders['Rapgap'].weight[dataloaders['Rapgap'].pass_gen],
-        'Djangoh': dataloaders['Djangoh'].weight[dataloaders['Djangoh'].pass_gen],
+        'data':(dataloaders['Rapgap'].weight*unfolded_weights)[dataloaders['Rapgap'].pass_evts],
+        'Rapgap': dataloaders['Rapgap'].weight[dataloaders['Rapgap'].pass_evts],
+        'Djangoh': dataloaders['Djangoh'].weight[dataloaders['Djangoh'].pass_evts],
     }
     fig,ax = utils.HistRoutine(feed_dict,
                                xlabel=utils.event_names[str(feature)],
@@ -72,15 +83,15 @@ for feature in range(mfold.num_event):
 #Particle level observables
 for feature in range(mfold.num_feat):
     feed_dict = {
-        'data': dataloaders['Rapgap'].gen[0][:,:,feature][dataloaders['Rapgap'].pass_gen],
-        'Rapgap': dataloaders['Rapgap'].gen[0][:,:,feature][dataloaders['Rapgap'].pass_gen],
-        'Djangoh': dataloaders['Djangoh'].gen[0][:,:,feature][dataloaders['Djangoh'].pass_gen],
+        'data': dataloaders['Rapgap'].evts[0][:,:,feature][dataloaders['Rapgap'].pass_evts],
+        'Rapgap': dataloaders['Rapgap'].evts[0][:,:,feature][dataloaders['Rapgap'].pass_evts],
+        'Djangoh': dataloaders['Djangoh'].evts[0][:,:,feature][dataloaders['Djangoh'].pass_evts],
     }
                 
     weights = {
-        'data':(dataloaders['Rapgap'].weight*unfolded_weights)[dataloaders['Rapgap'].pass_gen],
-        'Rapgap': dataloaders['Rapgap'].weight[dataloaders['Rapgap'].pass_gen],
-        'Djangoh': dataloaders['Djangoh'].weight[dataloaders['Djangoh'].pass_gen],
+        'data':(dataloaders['Rapgap'].weight*unfolded_weights)[dataloaders['Rapgap'].pass_evts],
+        'Rapgap': dataloaders['Rapgap'].weight[dataloaders['Rapgap'].pass_evts],
+        'Djangoh': dataloaders['Djangoh'].weight[dataloaders['Djangoh'].pass_evts],
     }
 
     
