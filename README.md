@@ -1,9 +1,9 @@
 # H1 OmniFold
 
 ## Using shifter on Perlmutter
-All the libraries required to run the code in the repo can be acessed through the docker image ```vmikuni/tensorflow:ngc-23.04-tf2-v1```. You can test it locally by doing:
+All the libraries required to run the code in the repo can be acessed through the docker image ```vmikuni/tensorflow:ngc-23.12-tf2-v1```. You can test it locally by doing:
 ```bash
-shifter --image=vmikuni/tensorflow:ngc-23.04-tf2-v1 --module=gpu,nccl-2.15
+shifter --image=vmikuni/tensorflow:ngc-23.12-tf2-v1 --module=gpu,nccl-2.18
 python test_dataloader.py
 ```
 
