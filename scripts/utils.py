@@ -4,7 +4,7 @@ from matplotlib import gridspec
 from matplotlib.collections import PatchCollection
 from matplotlib.patches import Rectangle
 import matplotlib.ticker as mtick
-import uproot3 as uproot
+import uproot
 import os
 import json,yaml
 import options
@@ -27,11 +27,21 @@ event_names = {
     '3': r'1 + $e_{pz}$/Q',
     }
 particle_names = {
-    '0': 'log(1.0+ pt/Q)',
-    '1': r'$\eta_e + \eta_p$',
-    '2': r'$\phi_e - \phi_p$',
-    '3': 'Charge',
+    '0': r'$\eta_e + \eta_p$',
+    '1': r'$\phi_e - \phi_p$',
+    '2': 'log(pt/Q)',
+    '3': 'log(pt)',
+    '4':r'$\sqrt{(\eta_e + \eta_p)^2 + (\phi_e - \phi_p)^2}$ -1.0',
+    '5': 'Charge',
     }
+
+#Normalization for weights based on pass_reco flags
+
+norm_factors = {
+    'Rapgap_Eplus0607.h5':0.0112*1e6,
+    'data.h5':0.6039*1e6,
+    'Djangoh_Eplus0607.h5':0.0100*1e6,
+}
 
 class ScalarFormatterClass(mtick.ScalarFormatter):
     #https://www.tutorialspoint.com/show-decimal-places-and-scientific-notation-on-the-axis-of-a-matplotlib-plot
@@ -78,9 +88,9 @@ def SetStyle():
     mpl.rcParams.update({'legend.frameon': False}) 
     
     import matplotlib.pyplot as plt
-    import mplhep as hep
-    hep.set_style(hep.style.CMS)
-    hep.style.use("CMS") 
+    # import mplhep as hep
+    # hep.set_style(hep.style.CMS)
+    # hep.style.use("CMS") 
 
 # def SetGrid(npanels=2):
 #     fig = plt.figure(figsize=(9, 9))

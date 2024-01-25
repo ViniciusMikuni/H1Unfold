@@ -21,6 +21,8 @@ class Multifold():
                  nstrap=0,
                  version = 'Closure',
                  config_file='config_omnifold.json',
+                 pretrain = False,
+                 load_pretrain = False,
                  verbose=1,
                  start = 0,
                  ):
@@ -30,10 +32,17 @@ class Multifold():
         self.log_file =  open('log_{}.txt'.format(self.version),'w')
         self.opt = utils.LoadJson(config_file)
         self.start = start
-        self.niter = self.opt['NITER']
+        self.niter = self.opt['NITER']        
         self.num_feat = self.opt['NFEAT'] 
         self.num_event = self.opt['NEVT']
         self.nstrap=nstrap
+        self.pretrain = pretrain
+        self.load_pretrain = load_pretrain
+        if self.load_pretrain:
+            self.opt['LR'] = 1e-5 #Override the learning rate
+            self.opt['NPATIENCE'] = 5 #pretrained model converges quicker
+        if self.pretrain:
+            self.niter = 1 #Skip iterative procedure when pretraining the model
 
         self.mc = None
         self.data=None
@@ -47,25 +56,33 @@ class Multifold():
     def Unfold(self):
         self.BATCH_SIZE=self.opt['BATCH_SIZE']
         self.EPOCHS=self.opt['EPOCHS']
-        self.CompileModel(float(self.opt['LR'])*np.sqrt(hvd.size()))
                                         
         self.weights_pull = np.ones(self.mc.weight.shape[0])
         if self.start>0:
-            print("Loading step 2 weights from iteration {}".format(self.start-1))
-            model_name = '{}/Omnifold_{}_iter{}_step2/checkpoint'.format(self.weights_folder,self.version,self.start-1)
+            if hvd.rank()==0:
+                print("Loading step 2 weights from iteration {}".format(self.start-1))
+            model_name = '{}/OmniFold_{}_iter{}_step2/checkpoint'.format(self.weights_folder,self.version,self.start-1)
             self.model2.load_weights(model_name).expect_partial()
             self.weights_push = self.reweight(self.mc.gen,self.model2_ema,batch_size=1000)
             #Also load model 1 to have a better starting point
-            model_name = '{}/Omnifold_{}_iter{}_step1/checkpoint'.format(self.weights_folder,self.version,self.start-1)
+            model_name = '{}/OmniFold_{}_iter{}_step1/checkpoint'.format(self.weights_folder,self.version,self.start-1)
             self.model1.load_weights(model_name).expect_partial()
         else:
             self.weights_push = np.ones(self.mc.weight.shape[0])
+            if self.load_pretrain:
+                if hvd.rank()==0:
+                    print("Loading pretrained weights")                
+                model_name = '{}/OmniFold_pretrained_step1/checkpoint'.format(self.weights_folder)
+                self.model1.load_weights(model_name).expect_partial()
+                model_name = '{}/OmniFold_pretrained_step1/checkpoint'.format(self.weights_folder)
+                self.model2.load_weights(model_name).expect_partial()
             
         for i in range(self.start,self.niter):
             if hvd.rank()==0:print("ITERATION: {}".format(i + 1))
+            self.CompileModel(float(self.opt['LR'])*np.sqrt(hvd.size()))
             self.RunStep1(i)        
             self.RunStep2(i)            
-            self.CompileModel(float(self.opt['LR'])*np.sqrt(hvd.size()))
+            
 
     def RunStep1(self,i):
         '''Data versus reco MC reweighting'''
@@ -77,19 +94,20 @@ class Multifold():
 
         
         self.RunModel(
-            np.concatenate((self.labels_mc, self.labels_data)),
-            np.concatenate((self.weights_push*self.mc.weight*self.mc.pass_reco,self.data.weight*self.data.pass_reco)),
+            np.concatenate((self.labels_mc[self.mc.pass_reco], self.labels_data[self.data.pass_reco])),
+            np.concatenate((self.weights_push[self.mc.pass_reco]*self.mc.weight[self.mc.pass_reco],self.data.weight[self.data.pass_reco])),
             i,self.model1,stepn=1,
-            NTRAIN = (self.mc.nmax + self.data.nmax)//hvd.size(),
+            NTRAIN = int(0.7*(self.mc.nmax + self.data.nmax))//hvd.size(),
             cached = i>self.start #after first training cache the training data
         )
 
-
-        new_weights=self.reweight(self.tf_data1.batch(self.BATCH_SIZE),self.model1_ema)[:self.mc.pass_reco.shape[0]]
+        #Don't update weights where there's no reco events
+        new_weights = np.ones_like(self.weights_pull)
+        new_weights[self.mc.pass_reco] = self.reweight(self.tf_data1.batch(self.BATCH_SIZE),
+                                                       self.model1_ema)[:np.sum(self.mc.pass_reco)]
         
-        new_weights[self.mc.pass_reco==0]=1.0 #Don't update weights where there's no reco events
+        #new_weights[self.mc.pass_reco==0]=1.0 
         self.weights_pull = self.weights_push *new_weights
-        # self.weights_pull = self.weights_pull/np.average(self.weights_pull)
 
     def RunStep2(self,i):
         '''Gen to Gen reweighing'''        
@@ -104,7 +122,6 @@ class Multifold():
         )
         new_weights=self.reweight(self.tf_data2.batch(self.BATCH_SIZE),self.model2_ema)[:self.mc.pass_reco.shape[0]]
         self.weights_push = new_weights
-        # self.weights_push = self.weights_push/np.average(self.weights_push)
 
     def RunModel(self,
                  labels,
@@ -118,7 +135,6 @@ class Multifold():
 
         NTEST = int(0.2*NTRAIN)
         train_data, test_data = self.cache(labels,weights,stepn,cached,NTRAIN-NTEST)
-        #train_part,test_part,train_evt,test_evt,train_labels,test_labels,train_weights,test_weights = train_test_split(part,evt,labels,weights,test_size=NTEST)
         
         if self.verbose and hvd.rank()==0:
             print(80*'#')
@@ -130,33 +146,35 @@ class Multifold():
         callbacks = [
             hvd.callbacks.BroadcastGlobalVariablesCallback(0),
             hvd.callbacks.MetricAverageCallback(),
-            ReduceLROnPlateau(patience=self.opt['NPATIENCE']//2, min_lr=1e-5,
+            
+            ReduceLROnPlateau(patience=self.opt['NPATIENCE']//2, min_lr=1e-6,
                               verbose=verbose,monitor="val_loss"),
             EarlyStopping(patience=self.opt['NPATIENCE'],restore_best_weights=True,
-                          monitor="val_loss")
+                          monitor="val_loss"),
+            hvd.callbacks.LearningRateWarmupCallback(initial_lr=float(self.opt['LR'])*np.sqrt(hvd.size()),
+                                                     warmup_epochs=3, verbose=1),
         ]
         
-        base_name = "Omnifold"
         
         if hvd.rank() ==0:
-            if self.nstrap>0:                
-                callbacks.append(
-                    ModelCheckpoint('{}/{}_{}_iter{}_step{}_strap{}/checkpoint'.format(
-                        self.weights_folder,base_name,self.version,iteration,stepn,self.nstrap),
-                                    save_best_only=True,mode='auto',period=1,save_weights_only=True))
+            if self.nstrap>0:
+                model_name = '{}/OmniFold_{}_iter{}_step{}_strap{}/checkpoint'.format(
+                    self.weights_folder,self.version,iteration,stepn,self.nstrap)
             else:
-                callbacks.append(
-                    ModelCheckpoint('{}/{}_{}_iter{}_step{}/checkpoint'.format(
-                        self.weights_folder,base_name,self.version,iteration,stepn),
-                                    save_best_only=True,mode='auto',period=1,save_weights_only=True))
-                
+                if self.pretrain:
+                    model_name = '{}/OmniFold_pretrained_step{}/checkpoint'.format(
+                        self.weights_folder,stepn)
+                else:
+                    model_name = '{}/OmniFold_{}_iter{}_step{}/checkpoint'.format(
+                        self.weights_folder,self.version,iteration,stepn)
+            callbacks.append(ModelCheckpoint(model_name,save_best_only=True,
+                                             mode='auto',period=1,save_weights_only=True))
+                    
         _ =  model.fit(
             train_data,
             epochs=self.EPOCHS,
-            #batch_size = self.BATCH_SIZE,
             steps_per_epoch=int(0.8*NTRAIN/self.BATCH_SIZE),
             validation_data= test_data,
-            #validation_data=([[test_part,test_evt,test_labels,test_weights]]),
             validation_steps=int(NTEST/self.BATCH_SIZE),
             verbose=verbose,
             callbacks=callbacks)
@@ -178,14 +196,20 @@ class Multifold():
                     
             if stepn ==1:
                 self.tf_data1 = tf.data.Dataset.from_tensor_slices(
-                    {'input_1':np.concatenate((self.mc.reco[0], self.data.reco[0])),
-                     'input_2':np.concatenate((self.mc.reco[1], self.data.reco[1]))}).cache()
+                    {'inputs_particle_1':np.concatenate((self.mc.reco[0][self.mc.pass_reco], self.data.reco[0][self.data.pass_reco])),
+                     'inputs_event_1':np.concatenate((self.mc.reco[1][self.mc.pass_reco], self.data.reco[1][self.data.pass_reco])),
+                     'inputs_point_1':np.concatenate((self.mc.reco[2][self.mc.pass_reco], self.data.reco[2][self.data.pass_reco])),
+                     'inputs_mask_1':np.concatenate((self.mc.reco[3][self.mc.pass_reco], self.data.reco[3][self.data.pass_reco])),
+                     }).cache()
                 del self.mc.reco, self.data.reco
                 gc.collect()
             elif stepn ==2:
                 self.tf_data2 = tf.data.Dataset.from_tensor_slices(
-                    {'input_3':np.concatenate((self.mc.gen[0], self.mc.gen[0])),
-                     'input_4':np.concatenate((self.mc.gen[1], self.mc.gen[1]))}).cache()
+                    {'inputs_particle_2':np.concatenate((self.mc.gen[0], self.mc.gen[0])),
+                     'inputs_event_2':np.concatenate((self.mc.gen[1], self.mc.gen[1])),
+                     'inputs_point_2':np.concatenate((self.mc.gen[2], self.mc.gen[2])),
+                     'inputs_mask_2':np.concatenate((self.mc.gen[3], self.mc.gen[3])),
+                     }).cache()
                 del self.mc.gen, self.data.gen
                 gc.collect()
 
@@ -199,8 +223,8 @@ class Multifold():
             logging.error("ERROR: STEPN not recognized")
 
                 
-        train_data = data.take(NTRAIN).repeat().batch(self.BATCH_SIZE).prefetch(buffer_size=tf.data.AUTOTUNE)
-        test_data = data.skip(NTRAIN).repeat().batch(self.BATCH_SIZE).prefetch(buffer_size=tf.data.AUTOTUNE)
+        train_data = data.take(NTRAIN).shuffle(50*self.BATCH_SIZE).repeat().batch(self.BATCH_SIZE).prefetch(buffer_size=tf.data.AUTOTUNE)
+        test_data = data.skip(NTRAIN).shuffle(50*self.BATCH_SIZE).repeat().batch(self.BATCH_SIZE).prefetch(buffer_size=tf.data.AUTOTUNE)
         
         return train_data, test_data
 
@@ -210,29 +234,19 @@ class Multifold():
 
 
     def CompileModel(self,lr):
-        lr_schedule1 = tf.keras.experimental.CosineDecay(
-            initial_learning_rate=lr,
-            decay_steps=self.EPOCHS*int(0.8*(self.mc.nmax + self.data.nmax)/hvd.size()/self.BATCH_SIZE)
-        )
-
-        lr_schedule2 = tf.keras.experimental.CosineDecay(
-            initial_learning_rate=lr,
-            decay_steps=self.EPOCHS*int(0.8*(self.mc.nmax + self.mc.nmax)/hvd.size()/self.BATCH_SIZE)
-        )
-
-        #opt1 = tf.keras.optimizers.legacy.Adamax(learning_rate=lr_schedule1)
-        opt1 = tensorflow.keras.optimizers.legacy.Adam(learning_rate=lr)
+        opt1 = tf.keras.optimizers.AdamW(learning_rate=lr,weight_decay=1e-2)
         opt1 = hvd.DistributedOptimizer(opt1)
-        #opt2 = tf.keras.optimizers.legacy.Adamax(learning_rate=lr_schedule2)
-        opt2 = tensorflow.keras.optimizers.legacy.Adam(learning_rate=lr)
+        opt2 = tf.keras.optimizers.AdamW(learning_rate=lr,weight_decay=1e-2)
         opt2 = hvd.DistributedOptimizer(opt2)
 
-        self.model1.compile(weighted_metrics=[],                            
+        self.model1.compile(weighted_metrics=[],
                             #run_eagerly=True,
+                            metrics=['accuracy'],
                             optimizer=opt1,experimental_run_tf_function=False)
 
         self.model2.compile(weighted_metrics=[],                            
                             #run_eagerly=True,
+                            metrics=['accuracy'],
                             optimizer=opt2,experimental_run_tf_function=False)
 
 
@@ -256,6 +270,7 @@ class Multifold():
                                  num_heads=self.opt['NHEADS'],
                                  num_transformer= self.opt['NTRANSF'],
                                  projection_dim= self.opt['NDIM'],
+                                 step=1,
                                  )
         
         self.model2 = Classifier(self.num_feat,
@@ -263,6 +278,7 @@ class Multifold():
                                  num_heads=self.opt['NHEADS'],
                                  num_transformer= self.opt['NTRANSF'],
                                  projection_dim= self.opt['NDIM'],
+                                 step=2,
                                  )
 
         
