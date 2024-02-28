@@ -7,9 +7,11 @@ from tensorflow.keras.callbacks import EarlyStopping,ModelCheckpoint, ReduceLROn
 import os, gc
 import horovod.tensorflow.keras as hvd
 from sklearn.model_selection import train_test_split
+from scipy.special import expit
 import logging
-from architecture import Classifier,weighted_binary_crossentropy
+from architecture import Classifier,weighted_binary_crossentropy, reset_weights
 import utils
+import pickle
 
 def label_smoothing(y_true,alpha=0):
     '''Regularization through binary label smoothing'''
@@ -38,12 +40,13 @@ class Multifold():
         self.nstrap=nstrap
         self.pretrain = pretrain
         self.load_pretrain = load_pretrain
-        if self.load_pretrain:
-            self.opt['LR'] = 1e-5 #Override the learning rate
-            self.opt['NPATIENCE'] = 5 #pretrained model converges quicker
         if self.pretrain:
             self.niter = 1 #Skip iterative procedure when pretraining the model
-
+        if self.load_pretrain:
+            self.version += '_pretrained'
+            self.lr_factor = 1
+        else:
+            self.lr_factor = 1
         self.mc = None
         self.data=None
 
@@ -74,12 +77,18 @@ class Multifold():
                     print("Loading pretrained weights")                
                 model_name = '{}/OmniFold_pretrained_step1/checkpoint'.format(self.weights_folder)
                 self.model1.load_weights(model_name).expect_partial()
-                model_name = '{}/OmniFold_pretrained_step1/checkpoint'.format(self.weights_folder)
+                #model_name = '{}/OmniFold_pretrained_step2/checkpoint'.format(self.weights_folder)
                 self.model2.load_weights(model_name).expect_partial()
+
+                # self.model1.body.trainable=False
+                # reset_weights(self.model1.head)
+                # self.model2.body.trainable=False
+                # reset_weights(self.model2.head)
+
             
         for i in range(self.start,self.niter):
             if hvd.rank()==0:print("ITERATION: {}".format(i + 1))
-            self.CompileModel(float(self.opt['LR'])*np.sqrt(hvd.size()))
+            self.CompileModel(float(self.opt['LR'])*np.sqrt(hvd.size())/self.lr_factor)
             self.RunStep1(i)        
             self.RunStep2(i)            
             
@@ -151,8 +160,9 @@ class Multifold():
                               verbose=verbose,monitor="val_loss"),
             EarlyStopping(patience=self.opt['NPATIENCE'],restore_best_weights=True,
                           monitor="val_loss"),
-            hvd.callbacks.LearningRateWarmupCallback(initial_lr=float(self.opt['LR'])*np.sqrt(hvd.size()),
-                                                     warmup_epochs=3, verbose=1),
+            hvd.callbacks.LearningRateWarmupCallback(
+                initial_lr=float(self.opt['LR'])*np.sqrt(hvd.size())/self.lr_factor,
+                warmup_epochs=3, verbose=1),
         ]
         
         
@@ -170,14 +180,19 @@ class Multifold():
             callbacks.append(ModelCheckpoint(model_name,save_best_only=True,
                                              mode='auto',period=1,save_weights_only=True))
                     
-        _ =  model.fit(
+        hist =  model.fit(
             train_data,
             epochs=self.EPOCHS,
             steps_per_epoch=int(0.8*NTRAIN/self.BATCH_SIZE),
             validation_data= test_data,
             validation_steps=int(NTEST/self.BATCH_SIZE),
-            verbose=verbose,
+            verbose= verbose,
             callbacks=callbacks)
+        
+        if hvd.rank() ==0:
+            with open(model_name.replace("/checkpoint",".pkl"),"wb") as f:
+                pickle.dump(hist.history, f)
+        
         del train_data, test_data
         gc.collect()
 
@@ -224,7 +239,7 @@ class Multifold():
 
                 
         train_data = data.take(NTRAIN).shuffle(50*self.BATCH_SIZE).repeat().batch(self.BATCH_SIZE).prefetch(buffer_size=tf.data.AUTOTUNE)
-        test_data = data.skip(NTRAIN).shuffle(50*self.BATCH_SIZE).repeat().batch(self.BATCH_SIZE).prefetch(buffer_size=tf.data.AUTOTUNE)
+        test_data  = data.skip(NTRAIN).shuffle(50*self.BATCH_SIZE).repeat().batch(self.BATCH_SIZE).prefetch(buffer_size=tf.data.AUTOTUNE)
         
         return train_data, test_data
 
@@ -234,11 +249,14 @@ class Multifold():
 
 
     def CompileModel(self,lr):
-        opt1 = tf.keras.optimizers.AdamW(learning_rate=lr,weight_decay=1e-2)
+        
+        opt1 = tf.keras.optimizers.AdamW(learning_rate=lr,weight_decay=5e-2)
         opt1 = hvd.DistributedOptimizer(opt1)
-        opt2 = tf.keras.optimizers.AdamW(learning_rate=lr,weight_decay=1e-2)
+        opt2 = tf.keras.optimizers.AdamW(learning_rate=lr,weight_decay=5e-2)
         opt2 = hvd.DistributedOptimizer(opt2)
 
+
+        
         self.model1.compile(weighted_metrics=[],
                             #run_eagerly=True,
                             metrics=['accuracy'],
@@ -255,10 +273,10 @@ class Multifold():
         self.labels_data = np.ones(len(self.data.pass_reco),dtype=np.float32)
         self.labels_gen = np.ones(len(self.mc.pass_gen),dtype=np.float32)
 
-        # Label smoothing to avoid overtraining, experimental feature
-        # self.labels_mc = label_smoothing(np.zeros(len(self.mc_reco)),0.01)
-        # self.labels_data = label_smoothing(np.ones(len(self.data)),0.01)
-        # self.labels_gen = label_smoothing(np.ones(len(self.mc_gen)),0.01)
+        # # Label smoothing to avoid overtraining, experimental feature
+        # self.labels_mc = label_smoothing(np.zeros(len(self.mc.pass_reco)),0.1)
+        # self.labels_data = label_smoothing(np.ones(len(self.data.pass_reco)),0.1)
+        # self.labels_gen = label_smoothing(np.ones(len(self.mc.pass_gen)),0.1)
 
 
     def PrepareModel(self):
@@ -292,11 +310,10 @@ class Multifold():
     def reweight(self,events,model,batch_size=None):
         if batch_size is None:
            batch_size =  self.BATCH_SIZE
-        f = np.nan_to_num(model.predict(events, batch_size=batch_size
-                                        ,verbose=self.verbose)
+           
+        f = np.nan_to_num(expit(model.predict(events,batch_size=batch_size,verbose=self.verbose)[0])
                           ,posinf=1,neginf=0)
         weights = f / (1. - f)
-        #weights = np.clip(weights,0,10)
         weights = weights[:,0]
         return np.squeeze(np.nan_to_num(weights,posinf=1))
 

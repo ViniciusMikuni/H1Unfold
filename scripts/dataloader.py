@@ -32,6 +32,7 @@ def convert_to_np(file_list,base_path,name,is_data = False,
         if 'Data' not in name:            
             gen_dict['event_features'].append(np.stack([tmp_file['gen_'+feat].array()[:nevts] for feat in var_list if 'wgt' not in feat],-1))
             mask_gen = tmp_file['gen_y'].array()[:nevts]
+            #Keep only Q2>100 GeV^2
             mask_evt = (gen_dict['event_features'][ifile][:,0] > 100)
             reco_dict['particle_features'][ifile] = reco_dict['particle_features'][ifile][mask_evt]
             reco_dict['event_features'][ifile] = reco_dict['event_features'][ifile][mask_evt]
@@ -64,11 +65,11 @@ def convert_to_np(file_list,base_path,name,is_data = False,
             # 0.2 < y < 0.7 and Q2 > 150
             pass_gen = (mask_gen > 0.2) & (mask_gen < 0.7) & (gen_dict['event_features'][ifile][:,0] > 150)
             gen_dict['event_features'][ifile] = np.concatenate((gen_dict['event_features'][ifile],pass_gen[:,None]),-1)
-            # part pT > 0.5 GeV, -1.5 < part eta < 2.75            
+            # part pT > 0.1 GeV, -1.5 < part eta < 2.75            
             mask_part = (gen_dict['particle_features'][ifile][:,:,0] > 0.1) & (gen_dict['particle_features'][ifile][:,:,1] > -1.5) & (gen_dict['particle_features'][ifile][:,:,1] < 2.75)
             gen_dict['particle_features'][ifile] = gen_dict['particle_features'][ifile]*mask_part[:,:,None]
             
-            #Keep only Q2>100 GeV^2
+            #Reject events in case there's no particle left
             mask_evt_gen = (np.sum(gen_dict['particle_features'][ifile][:,:,0],1) > 0) 
             mask_evt*=mask_evt_gen
 
@@ -159,7 +160,7 @@ class Dataset():
                           e[:,2]/np.sqrt(e[:,0]),
                           1.0+e[:,3]/np.sqrt(e[:,0])],-1)
 
-        points = new_p[:,:,:2]
+        points = np.concatenate([new_p[:,:,:2],p[:,:,:1]],-1)
         
         return (new_p,new_e,points,mask)
 

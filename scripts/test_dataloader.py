@@ -7,26 +7,30 @@ utils.SetStyle()
 
 if __name__ == "__main__":
     #base_path = '/global/cfs/cdirs/m3246/vmikuni/H1v2/h5/'
-    base_path = '/pscratch/sd/v/vmikuni/H1v2/h5'
-    #file_mc = ['Rapgap_Eminus06.h5']
+    #base_path = '/pscratch/sd/v/vmikuni/H1v2/h5'
+    file_mc = ['Rapgap_Eminus06.h5']
     #file_mc = ['Rapgap_Eplus0607.h5']
     
     #file_data = ['Data.h5']
     file_mc = ['test_sim.h5']
-    file_data = ['test_data.h5']
+    file_data = ['data.h5']
     # file_mc = ['toy1.h5']
     # file_data = ['toy2.h5']
     dataloader_mc = Dataset(file_mc,base_path,is_mc=True)
-    dataloader_data = Dataset(file_data,base_path,is_mc=False)
+    dataloader_data = Dataset(file_data,base_path,is_mc=False,norm=dataloader_mc.nmax)
+    print("Loaded {} data events".format(dataloader_data.reco[0].shape[0]))
     if not os.path.exists('../plots'):
         os.makedirs('../plots')
         
     #Let's make some plots
     particles_mc, events_mc,_,_ = dataloader_mc.reco
-    particles_gen, events_gen,_,_ = dataloader_mc.reco
+    particles_gen, events_gen,_,_ = dataloader_mc.gen
+
+
     print("Using {} particles for reco mc".format(particles_mc.shape[1]))
     print("Using {} particles for gen mc".format(particles_gen.shape[1]))
     pass_reco_mc = dataloader_mc.pass_reco
+    print("Sum of weights MC: {}".format(np.sum(dataloader_mc.weight[pass_reco_mc])))
     print("Pass reco MC: {}".format(1.0*np.sum(pass_reco_mc)/pass_reco_mc.shape[0]))
     print("Pass gen fid MC: {}".format(1.0*np.sum(dataloader_mc.pass_gen)/pass_reco_mc.shape[0]))
     print("Pass fid but not pass reco {}".format(1.0*np.sum(dataloader_mc.pass_gen[pass_reco_mc==0])/np.sum(dataloader_mc.pass_gen)))
@@ -42,6 +46,8 @@ if __name__ == "__main__":
     particles_data,events_data,_,_  = dataloader_data.reco
     print("Using {} particles for data".format(particles_data.shape[1]))
     pass_reco_data = dataloader_data.pass_reco
+    print("Sum of weights data: {}".format(np.sum(dataloader_data.weight[pass_reco_data])))
+    print("Total data: {}".format(pass_reco_data.shape[0]))
     print("Pass reco data: {}".format(1.0*np.sum(pass_reco_data)/pass_reco_data.shape[0]))
     particles_data = particles_data[pass_reco_data]
     events_data = events_data[pass_reco_data]

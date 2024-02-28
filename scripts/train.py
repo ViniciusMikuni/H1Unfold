@@ -49,8 +49,8 @@ if __name__ == "__main__":
     if flags.closure or flags.pretrain:
         #use djangoh as pseudo data
         data_file_names = ['Djangoh_Eplus0607.h5']
-        if flags.pretrain:
-            data_file_names.append('Djangoh_Eminus06.h5')
+        # if flags.pretrain:
+        #     data_file_names.append('Djangoh_Eminus06.h5')
         #data_file_names = ['test_sim.h5']
         #data_file_names = ['toy1.h5']
         version += '_closure'
@@ -59,12 +59,11 @@ if __name__ == "__main__":
     else:
         nmax = None
 
-
-    mc = Dataset(mc_file_names,flags.data_folder,is_mc=True,
-                 rank=hvd.rank(),size=hvd.size(),nmax=None)
-
     data = Dataset(data_file_names,flags.data_folder,is_mc=False,
-                   rank=hvd.rank(),size=hvd.size(),nmax=nmax,norm = mc.nmax) #match the normalization from MC files
+                   rank=hvd.rank(),size=hvd.size(),nmax=nmax) #match the normalization from MC files
+    mc = Dataset(mc_file_names,flags.data_folder,is_mc=True,
+                 rank=hvd.rank(),size=hvd.size(),nmax=10000000, norm = data.nmax)
+
 
     
     if flags.nstrap>0:

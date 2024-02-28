@@ -10,11 +10,15 @@ import json,yaml
 import options
 
 line_style = {
+    'Baseline':'dotted',
+    'Pre-trained':'-',
     'data':'dotted',
-    'mc':'-',    
+    'mc':'-',
 }
 
 colors = {
+    'Baseline':'black',
+    'Pre-trained':'black',    
     'data':'black',
     'mc':'#7570b3',
 }
@@ -35,13 +39,6 @@ particle_names = {
     '5': 'Charge',
     }
 
-#Normalization for weights based on pass_reco flags
-
-norm_factors = {
-    'Rapgap_Eplus0607.h5':0.0112*1e6,
-    'data.h5':0.6039*1e6,
-    'Djangoh_Eplus0607.h5':0.0100*1e6,
-}
 
 class ScalarFormatterClass(mtick.ScalarFormatter):
     #https://www.tutorialspoint.com/show-decimal-places-and-scientific-notation-on-the-axis-of-a-matplotlib-plot
@@ -124,8 +121,8 @@ def FormatFig(xlabel,ylabel,ax0,xpos=0.9,ypos=0.9):
     ax0.set_ylabel(ylabel)
         
 
-    text = r'$\bf{H1}$'
-    WriteText(xpos,ypos,text,ax0)
+    # text = r'$\bf{H1}$'
+    # WriteText(xpos,ypos,text,ax0)
 
 
 def WriteText(xpos,ypos,text,ax0):
@@ -160,6 +157,36 @@ def make_error_boxes(ax, xdata, ydata, xerror, yerror, facecolor='r',
     artists = ax.errorbar(xdata, ydata, xerr=xerror, yerr=yerror,
                           fmt='None', ecolor='k')
 
+def PlotRoutine(feed_dict,xlabel='',ylabel='',reference_name='gen',plot_ratio = False):
+    if plot_ratio:
+        assert reference_name in feed_dict.keys(), "ERROR: Don't know the reference distribution"
+    
+    fig,gs = SetGrid(ratio=plot_ratio) 
+    ax0 = plt.subplot(gs[0])
+    if plot_ratio:
+        plt.xticks(fontsize=0)
+        ax1 = plt.subplot(gs[1],sharex=ax0)
+
+    for ip,plot in enumerate(feed_dict.keys()):
+        ax0.plot(feed_dict[plot],label=plot,linewidth=2,linestyle=line_style[plot],color=colors[plot])
+        if reference_name!=plot and plot_ratio:
+            ratio = 100*np.divide(feed_dict[reference_name] -feed_dict[plot],feed_dict[reference_name])
+            ax1.plot(ratio,color=colors[plot],linewidth=2,linestyle=line_style[plot])
+
+    ax0.legend(loc='best',fontsize=16,ncol=1)            
+    if plot_ratio:        
+        FormatFig(xlabel = "", ylabel = ylabel,ax0=ax0)
+        plt.ylabel('Difference. (%)')
+        plt.xlabel(xlabel)
+        plt.axhline(y=0.0, color='r', linestyle='--',linewidth=1)
+        plt.axhline(y=10, color='r', linestyle='--',linewidth=1)
+        plt.axhline(y=-10, color='r', linestyle='--',linewidth=1)
+        plt.ylim([-100,100])
+
+    else:
+        FormatFig(xlabel = xlabel, ylabel = ylabel,ax0=ax0)    
+        
+    return fig,ax0
 
 
 def HistRoutine(feed_dict,
@@ -185,7 +212,7 @@ def HistRoutine(feed_dict,
 
     
     if binning is None:
-        binning = np.linspace(np.quantile(feed_dict[reference_name],0.0),np.quantile(feed_dict[reference_name],1),30)
+        binning = np.linspace(np.quantile(feed_dict[reference_name],0.01),np.quantile(feed_dict[reference_name],0.99),30)
         
     xaxis = [(binning[i] + binning[i+1])/2.0 for i in range(len(binning)-1)]
 
@@ -228,7 +255,7 @@ def HistRoutine(feed_dict,
         FormatFig(xlabel = "", ylabel = ylabel,ax0=ax0) 
         plt.ylabel('Ratio to Truth')
         plt.axhline(y=1.0, color='r', linestyle='-',linewidth=1)
-        plt.ylim([0.8,1.2])
+        plt.ylim([0.85,1.15])
         plt.xlabel(xlabel)
     else:
         FormatFig(xlabel = xlabel, ylabel = ylabel,ax0=ax0) 
