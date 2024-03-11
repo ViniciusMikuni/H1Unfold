@@ -7,8 +7,8 @@ utils.SetStyle()
 
 if __name__ == "__main__":
     #base_path = '/global/cfs/cdirs/m3246/vmikuni/H1v2/h5/'
-    #base_path = '/pscratch/sd/v/vmikuni/H1v2/h5'
-    file_mc = ['Rapgap_Eminus06.h5']
+    base_path = '/pscratch/sd/v/vmikuni/H1v2/h5'
+    #file_mc = ['Rapgap_Eminus06.h5']
     #file_mc = ['Rapgap_Eplus0607.h5']
     
     #file_data = ['Data.h5']

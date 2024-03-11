@@ -26,9 +26,10 @@ colors = {
 
 event_names = {
     '0': 'log(Q)/5 -1',
-    '1': r'$e_{px}$/Q',
-    '2': r'$e_{py}$/Q',
-    '3': r'1 + $e_{pz}$/Q',
+    '1': 'y',
+    '2': r'$e_{px}$/Q',
+    '3': r'$e_{py}$/Q',
+    '4': r'1 + $e_{pz}$/Q',
     }
 particle_names = {
     '0': r'$\eta_e + \eta_p$',
@@ -212,7 +213,7 @@ def HistRoutine(feed_dict,
 
     
     if binning is None:
-        binning = np.linspace(np.quantile(feed_dict[reference_name],0.01),np.quantile(feed_dict[reference_name],0.99),30)
+        binning = np.linspace(np.quantile(feed_dict[reference_name],0.01),np.quantile(feed_dict[reference_name],0.99),50)
         
     xaxis = [(binning[i] + binning[i+1])/2.0 for i in range(len(binning)-1)]
 

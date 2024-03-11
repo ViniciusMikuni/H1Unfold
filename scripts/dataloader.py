@@ -6,8 +6,8 @@ import h5py as h5
 import gc
 
 def convert_to_np(file_list,base_path,name,is_data = False,
-                  max_part = 191,
-                  max_nonzero=132,
+                  max_part = 191, #Overall maximum
+                  max_nonzero=132,#Maximum number after applying the per-particle selection
                   nevts=30000000):
     reco_dict = {
         'event_features':[],
@@ -17,7 +17,7 @@ def convert_to_np(file_list,base_path,name,is_data = False,
             'event_features':[],
             'particle_features':[],
         }
-    var_list = ['Q2','e_px','e_py','e_pz','wgt']
+    var_list = ['Q2','y','e_px','e_py','e_pz','wgt']
     mask_list = ['y','ptmiss','Empz'] #Variables used only to determine the selection but not used during unfolding
     particle_list = ['part_pt','part_eta','part_phi','part_charge']
     
@@ -156,9 +156,10 @@ class Dataset():
 
         log_q = np.ma.log(e[:,0]).filled(0)/5.0 -1.0
         new_e = np.stack([log_q,
-                          e[:,1]/np.sqrt(e[:,0]),
+                          e[:,1],
                           e[:,2]/np.sqrt(e[:,0]),
-                          1.0+e[:,3]/np.sqrt(e[:,0])],-1)
+                          e[:,3]/np.sqrt(e[:,0]),
+                          1.0+e[:,4]/np.sqrt(e[:,0])],-1)
 
         points = np.concatenate([new_p[:,:,:2],p[:,:,:1]],-1)
         
@@ -317,8 +318,10 @@ if __name__ == "__main__":
     #     dset = fh5.create_dataset('reco_event_features', data=data['event_features'])
 
     
-    # print("Processing Data")
-    # file_list = ['out_ep0607/Data_Eplus0607.root','out_em06/Data_Eminus06.root']
+    #print("Processing Data")
+
+    # file_list = ['out_ep0607/Data_Eplus0607.root','out_em06/Data_Eminus06_0.nominal.root',
+    #              'out_em06/Data_Eminus06_1.nominal.root']
     # data,_ = convert_to_np(file_list,flags.data_input,name='Data')
     # with h5.File(os.path.join(flags.data_output,"data.h5"),'w') as fh5:
     #     dset = fh5.create_dataset('reco_particle_features', data=data['particle_features'])
@@ -327,42 +330,40 @@ if __name__ == "__main__":
     
     # print("Processing Rapgap")
     # file_list = find_files_with_string(flags.data_input+'/out_ep0607', 'Rapgap_Eplus0607_')
-    # #file_list = ['out_em06/Rapgap_Eminus06_122.nominal.root'] #quick testing
     # reco,gen = convert_to_np(file_list,flags.data_input+'/out_ep0607',name='Rapgap')
     # with h5.File(os.path.join(flags.data_output,"Rapgap_Eplus0607.h5"),'w') as fh5:
-    # #with h5.File(os.path.join(flags.data_output,"test_sim.h5"),'w') as fh5:
     #     dset = fh5.create_dataset('reco_particle_features', data=reco['particle_features'])
     #     dset = fh5.create_dataset('reco_event_features', data=reco['event_features'])
     #     dset = fh5.create_dataset('gen_particle_features', data=gen['particle_features'])
     #     dset = fh5.create_dataset('gen_event_features', data=gen['event_features'])
     
-    # print("Processing Djangoh")
-    # file_list = find_files_with_string(flags.data_input+'/out_ep0607', 'Django_Eplus0607_')
-    # reco,gen = convert_to_np(file_list,flags.data_input,name='Django')
-    # with h5.File(os.path.join(flags.data_output,"Djangoh_Eplus0607.h5"),'w') as fh5:
-    #     dset = fh5.create_dataset('reco_particle_features', data=reco['particle_features'])
-    #     dset = fh5.create_dataset('reco_event_features', data=reco['event_features'])
-    #     dset = fh5.create_dataset('gen_particle_features', data=gen['particle_features'])
-    #     dset = fh5.create_dataset('gen_event_features', data=gen['event_features'])
-
-
     print("Processing Djangoh")
-    file_list = find_files_with_string(flags.data_input+'/out_em06', 'Django_Eminus06_')
-    reco,gen = convert_to_np(file_list,flags.data_input+'/out_em06',name='Django')
-    with h5.File(os.path.join(flags.data_output,"Djangoh_Eminus06.h5"),'w') as fh5:
+    file_list = find_files_with_string(flags.data_input+'/out_ep0607', 'Django_Eplus0607_')
+    reco,gen = convert_to_np(file_list,flags.data_input+'/out_ep0607',name='Django')
+    with h5.File(os.path.join(flags.data_output,"Djangoh_Eplus0607.h5"),'w') as fh5:
         dset = fh5.create_dataset('reco_particle_features', data=reco['particle_features'])
         dset = fh5.create_dataset('reco_event_features', data=reco['event_features'])
         dset = fh5.create_dataset('gen_particle_features', data=gen['particle_features'])
         dset = fh5.create_dataset('gen_event_features', data=gen['event_features'])
 
 
+    # print("Processing Djangoh")
+    # file_list = find_files_with_string(flags.data_input+'/out_em06', 'Django_Eminus06_')
+    # reco,gen = convert_to_np(file_list,flags.data_input+'/out_em06',name='Django')
+    # with h5.File(os.path.join(flags.data_output,"Djangoh_Eminus06.h5"),'w') as fh5:
+    #     dset = fh5.create_dataset('reco_particle_features', data=reco['particle_features'])
+    #     dset = fh5.create_dataset('reco_event_features', data=reco['event_features'])
+    #     dset = fh5.create_dataset('gen_particle_features', data=gen['particle_features'])
+    #     dset = fh5.create_dataset('gen_event_features', data=gen['event_features'])
+
+
 
     # print("Processing Rapgap")    
     # file_list = find_files_with_string(flags.data_input+'/out_em06', 'Rapgap_Eminus06_')
-    # #file_list = ['out_em06/Rapgap_Eminus06_122.nominal.root'] #quick testing
+    # ###file_list = ['Rapgap_Eminus06_122.nominal.root'] #quick testing
     # reco,gen = convert_to_np(file_list,flags.data_input+'/out_em06',name='Rapgap')
     # with h5.File(os.path.join(flags.data_output,"Rapgap_Eminus06.h5"),'w') as fh5:
-    # #with h5.File(os.path.join(flags.data_output,"test_sim.h5"),'w') as fh5:
+    # ###with h5.File(os.path.join(flags.data_output,"test_sim.h5"),'w') as fh5:
     #     dset = fh5.create_dataset('reco_particle_features', data=reco['particle_features'])
     #     dset = fh5.create_dataset('reco_event_features', data=reco['event_features'])
     #     dset = fh5.create_dataset('gen_particle_features', data=gen['particle_features'])

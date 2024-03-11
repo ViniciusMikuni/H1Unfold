@@ -5,7 +5,6 @@ import tensorflow.keras.backend as K
 import numpy as np
 from tensorflow import keras
 from layers import StochasticDepth, TalkingHeadAttention, LayerScale,SimpleHeadAttention
-import horovod.tensorflow.keras as hvd
 from tensorflow.keras.initializers import GlorotUniform
 from tensorflow.keras.losses import mse
 
@@ -45,7 +44,7 @@ def weighted_binary_crossentropy(y_true, y_pred):
     #entropy term
     probs = tf.nn.sigmoid(y_pred)
     entropy = -weights*(probs * tf.math.log(probs + 1e-6))
-    
+    return K.mean(t_loss)
     return K.mean(t_loss - 0.1*entropy)
 
 
@@ -115,6 +114,8 @@ class Classifier(keras.Model):
             loss_evt = mse(x['inputs_event_{}'.format(self.step)],y_evt)
             loss = loss_pred+loss_evt
         trainable_vars = self.classifier.trainable_variables
+
+
         self.optimizer.minimize(loss,trainable_vars,tape=tape)
 
             
