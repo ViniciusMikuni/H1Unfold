@@ -17,15 +17,19 @@ if __name__ == "__main__":
     # file_mc = ['toy1.h5']
     # file_data = ['toy2.h5']
     dataloader_mc = Dataset(file_mc,base_path,is_mc=True)
+    
     dataloader_data = Dataset(file_data,base_path,is_mc=False,norm=dataloader_mc.nmax)
     print("Loaded {} data events".format(dataloader_data.reco[0].shape[0]))
     if not os.path.exists('../plots'):
         os.makedirs('../plots')
         
     #Let's make some plots
-    particles_mc, events_mc,_,_ = dataloader_mc.reco
+    particles_mc, events_mc,_,_ = dataloader_mc.reco    
     particles_gen, events_gen,_,_ = dataloader_mc.gen
+    #Undo the preprocessing
+    particles_mc, events_mc = dataloader_mc.revert_standardize(particles_mc, events_mc)
 
+    
 
     print("Using {} particles for reco mc".format(particles_mc.shape[1]))
     print("Using {} particles for gen mc".format(particles_gen.shape[1]))
@@ -44,6 +48,8 @@ if __name__ == "__main__":
     wgt = dataloader_mc.weight
 
     particles_data,events_data,_,_  = dataloader_data.reco
+    particles_data, events_data = dataloader_data.revert_standardize(particles_data, events_data)
+    
     print("Using {} particles for data".format(particles_data.shape[1]))
     pass_reco_data = dataloader_data.pass_reco
     print("Sum of weights data: {}".format(np.sum(dataloader_data.weight[pass_reco_data])))

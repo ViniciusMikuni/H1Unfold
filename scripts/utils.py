@@ -25,19 +25,21 @@ colors = {
 
 
 event_names = {
-    '0': 'log(Q)/5 -1',
+    '0': 'log(Q)',
     '1': 'y',
-    '2': r'$e_{px}$/Q',
-    '3': r'$e_{py}$/Q',
-    '4': r'1 + $e_{pz}$/Q',
+    '2': r'$e_{pT}$/Q',
+    '3': r'$e_{\eta}$',
+    '4': r'$e_{\phi}$',
     }
 particle_names = {
-    '0': r'$\eta_e + \eta_p$',
-    '1': r'$\phi_e - \phi_p$',
-    '2': 'log(pt/Q)',
-    '3': 'log(pt)',
-    '4':r'$\sqrt{(\eta_e + \eta_p)^2 + (\phi_e - \phi_p)^2}$ -1.0',
-    '5': 'Charge',
+    '0': r'$\eta_e - \eta_p$',
+    '1': r'$\phi_e - \phi_p - \pi$',
+    '2': r'$log(p_{T}/Q)$',
+    '3': r'$log(p_{T})$',
+    '4': 'log(E/Q)',
+    '5': 'log(E)',
+    '6':r'$\sqrt{(\eta_e - \eta_p)^2 + (\phi_e - \phi_p)^2}$',
+    '7': 'Charge',
     }
 
 
