@@ -38,7 +38,9 @@ def convert_to_np(file_list,base_path,name,is_data = False,
             reco_dict['event_features'][ifile] = reco_dict['event_features'][ifile][mask_evt]
             
             gen_dict['particle_features'].append(np.stack([tmp_file['gen_'+feat].array()[:nevts].pad(max_part).fillna(0).regular() for feat in particle_list],-1))
-            
+
+            #Set charge to 0 for gen particles outside the tracker acceptance
+            gen_dict['particle_features'][-1][:,:,-1] = gen_dict['particle_features'][-1][:,:,-1]* np.abs(gen_dict['particle_features'][-1][:,:,1])<2.0
             #print("Removing events")
             #Remove events not passing Q2> 100
             gen_dict['particle_features'][ifile] = gen_dict['particle_features'][ifile][mask_evt]
@@ -122,6 +124,8 @@ class Dataset():
                  is_mc = False,
                  nmax = None,
                  norm = None,
+                 pass_fiducial=False,
+                 pass_reco = False,
                  ):
         
         self.rank = rank
@@ -132,16 +136,17 @@ class Dataset():
 
         #Preprocessing parameters
 
-        self.mean_part = [1.2278552, 0.018632581, -0.761949, -3.663438,
-                          -2.8690917, 0.03239748, 2.5402036, 0.0]
-        self.std_part =  [1.7260202, 1.8028731, 1.0133458, 1.03931,
-                          1.0040112, 0.98908925, 1.1335075, 1.0] 
+        #2.1070838
+        self.mean_part = [0.0 , 0.0, -0.761949, -3.663438,
+                          -2.8690917,0.03239748, 3.9436243, 0.0]
+        self.std_part =  [1.0, 1.0, 1.0133458, 1.03931,
+                          1.0040112, 0.98908925, 1.2256976, 1.0] 
 
-        self.mean_event =  [ 5.6898093,   0.25653735,  0.7613578,  -0.02389565,  0.04193436]
-        self.std_event  = [0.693022, 0.20227, 0.38411, 1.425356, 1.8303,]
+        self.mean_event =  [ 6.4188385 ,  0.3331013 ,  0.8914633 , -0.8352072,  -0.07296985]
+        self.std_event  = [0.97656405, 0.1895471 , 0.14934653, 0.4191545 , 1.734126]
         
 
-        self.prepare_dataset(file_names)
+        self.prepare_dataset(file_names,pass_fiducial,pass_reco)
         self.normalize_weights(self.nmax if norm is None else norm)
 
 
@@ -149,55 +154,17 @@ class Dataset():
         #print("Total number of reco events {}".format(self.num_pass_reco))
         self.weight= (norm*self.weight/self.num_pass_reco).astype(np.float32)
 
-        
-    def preprocess(self,data):
-        p,e = data
-        #return (p,e)
-        mask = p[:,:,0]!=0
-        
-                
-        #use log(pt/Q), delta_eta, delta_phi        
-        log_pt_rel = np.ma.log(np.ma.divide(p[:,:,0],np.sqrt(e[:,None,0])).filled(0)).filled(0)
-        log_pt = np.ma.log(p[:,:,0]).filled(0)
-        log_e_rel = np.ma.log(np.ma.divide(p[:,:,0]*np.cosh(p[:,:,1]),
-                                           np.sqrt(e[:,None,0])).filled(0)).filled(0)
-        log_e = np.ma.log(p[:,:,0]*np.cosh(p[:,:,1])).filled(0)
-                                          
-        delta_eta = p[:,:,1] - np.ma.arctanh(e[:,None,3]/np.sqrt(e[:,None,1]**2 + e[:,None,2]**2+ e[:,None,3]**2)).filled(0)        
-        delta_phi = p[:,:,2] - np.pi - np.arctan2(e[:,None,2],e[:,None,3])
-        delta_phi[delta_phi>np.pi] -= 2*np.pi
-        delta_phi[delta_phi<-np.pi] += 2*np.pi
-        delta_r = np.hypot(delta_eta,delta_phi)
-        new_p = np.stack([delta_eta,
-                          delta_phi,
-                          log_pt,
-                          log_pt_rel,
-                          log_e_rel,
-                          log_e,
-                          delta_r,
-                          p[:,:,3]],-1)*mask[:,:,None]
-
-        log_q = np.ma.log(e[:,0]).filled(0)
-        new_e = np.stack([log_q,
-                          e[:,1],
-                          np.sqrt(e[:,2]**2 + e[:,2]**2)/np.sqrt(e[:,0]),
-                          np.ma.arctanh(e[:,3]/np.sqrt(e[:,1]**2 + e[:,2]**2+ e[:,3]**2)).filled(0),
-                          np.arctan2(e[:,2],e[:,3])],-1)
-        
-
-        points = np.stack([new_p[:,:,0],new_p[:,:,1]],-1)
-        new_p,new_e = self.standardize(new_p,new_e)        
-        return (new_p,new_e,points,mask)
-
-    def standardize(self,new_p,new_e):
-        p = (new_p-self.mean_part)/self.std_part
+    def standardize(self,data):
+        new_p,new_e = data
+        mask = new_p[:,:,2]!=0
+        p = mask[:,:,None]*(new_p-self.mean_part)/self.std_part
         e = (new_e-self.mean_event)/self.std_event
-        return p,e
+        return p,e, mask
 
-    def revert_standardize(self,new_p,new_e):
+    def revert_standardize(self,new_p,new_e,mask):
         p = new_p*self.std_part + self.mean_part
         e = new_e*self.std_event + self.mean_event
-        return p,e
+        return p*mask[:,:,None],e
     
     def concatenate(self,data_list):
         data_part1 = [item[0] for item in data_list]  # Extracting all (M, P, Q) arrays
@@ -210,7 +177,7 @@ class Dataset():
         gc.collect()
         return concatenated_part1, concatenated_part2
             
-    def prepare_dataset(self,file_names):
+    def prepare_dataset(self,file_names,pass_fiducial,pass_reco):
         ''' Load h5 files containing the data. The structure of the h5 file should be
             reco_particle_features: p_pt,p_eta,p_phi,p_charge (B,N,4)
             reco_event_features   : Q2, e_px, e_py, e_pz, wgt, pass_reco (B,6)
@@ -237,9 +204,14 @@ class Dataset():
             
             reco_p =  h5.File(os.path.join(self.base_path,f),'r')['reco_particle_features'][self.rank:self.nmax:self.size].astype(np.float32)
             reco_e = h5.File(os.path.join(self.base_path,f),'r')['reco_event_features'][self.rank:self.nmax:self.size].astype(np.float32)
-
+            
             self.weight.append(reco_e[:,-2].astype(np.float32))
             self.pass_reco.append(reco_e[:,-1] ==1)
+            if pass_reco:
+                reco_p = reco_p[self.pass_reco[-1]]
+                reco_e = reco_e[self.pass_reco[-1]]
+                self.weight[-1] = self.weight[-1][self.pass_reco[-1]]
+                self.pass_reco[-1] = self.pass_reco[-1][self.pass_reco[-1]]
             reco.append((reco_p,reco_e[:,:-2]))
                 
             if self.is_mc:
@@ -247,6 +219,12 @@ class Dataset():
                 gen_e = h5.File(os.path.join(self.base_path,f),'r')['gen_event_features'][self.rank:self.nmax:self.size].astype(np.float32)
 
                 self.pass_gen.append(gen_e[:,-1] ==1)
+                if pass_fiducial:
+                    gen_p = gen_p[self.pass_gen[-1]]
+                    gen_e = gen_e[self.pass_gen[-1]]
+                    self.weight[-1] = self.weight[-1][self.pass_gen[-1]]
+                    self.pass_gen[-1] = self.pass_gen[-1][self.pass_gen[-1]]
+                
                 gen.append((gen_p,gen_e[:,:-1]))
             else:
                 self.pass_gen = None
@@ -254,14 +232,20 @@ class Dataset():
         self.weight = np.concatenate(self.weight)
         self.pass_reco = np.concatenate(self.pass_reco)
 
-        self.reco = self.preprocess(self.concatenate(reco))
+        #self.reco = self.preprocess(self.concatenate(reco))
+        self.reco = self.standardize(self.concatenate(reco))
+        del reco
+        gc.collect()
         assert np.any(np.isnan(self.reco[0])) == False, "ERROR: NAN in particle dataset"
         assert np.any(np.isnan(self.reco[1])) == False, "ERROR: NAN in event dataset"
 
         #self.reco =  self.return_dataset(reco)
         if self.is_mc:
             self.pass_gen = np.concatenate(self.pass_gen)
-            self.gen = self.preprocess(self.concatenate(gen))
+            #self.gen = self.preprocess(self.concatenate(gen))
+            self.gen = self.standardize(self.concatenate(gen))
+            del gen
+            gc.collect()
             assert np.any(np.isnan(self.gen[0])) == False, "ERROR: NAN in particle dataset"
             assert np.any(np.isnan(self.gen[1])) == False, "ERROR: NAN in event dataset"
         else:                
@@ -347,10 +331,11 @@ if __name__ == "__main__":
     
 
     if flags.sample == 'data':
-        print("Processing Data")
-        
-        file_list = ['out_ep0607/Data_Eplus0607.root','out_em06/Data_Eminus06_0.nominal.root',
-                     'out_em06/Data_Eminus06_1.nominal.root']
+        print("Processing Data")        
+        file_list = ['out_ep0607/Data_Eplus0607.root',
+                     #'out_em06/Data_Eminus06_0.nominal.root',
+                     #'out_em06/Data_Eminus06_1.nominal.root'
+                     ]
         data,_ = convert_to_np(file_list,flags.data_input,name='Data')
         with h5.File(os.path.join(flags.data_output,"data.h5"),'w') as fh5:
             dset = fh5.create_dataset('reco_particle_features', data=data['particle_features'])

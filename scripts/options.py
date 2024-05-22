@@ -20,6 +20,8 @@ colors = {
     'Sherpa2Lund':'#006837',
     'Sherpa2Cluster':'#addd8e',
     'Sherpa3NLO':'#31a354',
+    'Rapgap reco':'#7570b3',
+    'Rapgap gen':'darkorange',
 }
 
 
@@ -39,6 +41,9 @@ markers = {
     'Sherpa2Cluster':'o',
     'Sherpa2Lund':'o',
     'Sherpa3NLO':'o',
+
+    'Rapgap reco':'X',
+    'Rapgap gen':'o',
 }
 
 #Shift in x-axis for visualization

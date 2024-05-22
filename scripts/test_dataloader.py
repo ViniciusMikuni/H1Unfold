@@ -24,10 +24,10 @@ if __name__ == "__main__":
         os.makedirs('../plots')
         
     #Let's make some plots
-    particles_mc, events_mc,_,_ = dataloader_mc.reco    
+    particles_mc, events_mc,_,mask_mc = dataloader_mc.reco    
     particles_gen, events_gen,_,_ = dataloader_mc.gen
     #Undo the preprocessing
-    particles_mc, events_mc = dataloader_mc.revert_standardize(particles_mc, events_mc)
+    particles_mc, events_mc = dataloader_mc.revert_standardize(particles_mc, events_mc,mask_mc)
 
     
 
@@ -45,10 +45,10 @@ if __name__ == "__main__":
     particles_mc = particles_mc[pass_reco_mc]
     events_mc = events_mc[pass_reco_mc]
     
-    wgt = dataloader_mc.weight
+    wgt = dataloader_mc.weight[pass_reco_mc]
 
-    particles_data,events_data,_,_  = dataloader_data.reco
-    particles_data, events_data = dataloader_data.revert_standardize(particles_data, events_data)
+    particles_data,events_data,_,mask_data  = dataloader_data.reco
+    particles_data, events_data = dataloader_data.revert_standardize(particles_data, events_data,mask_data)
     
     print("Using {} particles for data".format(particles_data.shape[1]))
     pass_reco_data = dataloader_data.pass_reco
@@ -62,11 +62,13 @@ if __name__ == "__main__":
     for feature in range(events_data.shape[-1]):
         feed_dict = {
             'data': events_data[:,feature],
-            'mc': events_mc[:,feature],            
+            'Rapgap reco': events_mc[:,feature],
+            #'Rapgap gen': events_gen[:,feature],            
         }
         weights = {
             'data':np.ones(events_data.shape[0]),
-            'mc': np.array(wgt)[pass_reco_mc],
+            'Rapgap reco': wgt,
+            #'Rapgap gen': np.array(wgt),
             }
         fig,ax = utils.HistRoutine(feed_dict,
                                    xlabel=utils.event_names[str(feature)],
@@ -77,15 +79,25 @@ if __name__ == "__main__":
     #Flatten for plotting
     particles_data = particles_data.reshape((-1,particles_data.shape[-1]))
     particles_data = particles_data[particles_data[:,0]!=0]
-    
+
+    wgt = np.tile(wgt[:,None],(1,particles_mc.shape[1]))
+    wgt = wgt.reshape(-1,1)
     particles_mc = particles_mc.reshape((-1,particles_mc.shape[-1]))
-    particles_mc = particles_mc[particles_mc[:,0]!=0]
-    
+    mask_zero = particles_mc[:,0]!=0
+    particles_mc = particles_mc[mask_zero]
+    wgt = wgt[mask_zero]
     for feature in range(particles_data.shape[-1]):
         feed_dict = {
             'data': particles_data[:,feature],
-            'mc': particles_mc[:,feature],            
+            'Rapgap reco': particles_mc[:,feature],            
         }
+
+        weights = {
+            'data':np.ones(particles_data.shape[0]),
+            'Rapgap reco': wgt,
+            #'Rapgap gen': np.array(wgt),
+        }
+        
         fig,ax = utils.HistRoutine(feed_dict,
                                    xlabel=utils.particle_names[str(feature)],
                                    label_loc='upper left',

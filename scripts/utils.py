@@ -8,19 +8,22 @@ import uproot
 import os
 import json,yaml
 import options
+import tensorflow as tf
 
 line_style = {
     'Baseline':'dotted',
     'Pre-trained':'-',
     'data':'dotted',
-    'mc':'-',
+    'Rapgap reco':'-',
+    'Rapgap gen':'-',
 }
 
 colors = {
     'Baseline':'black',
     'Pre-trained':'black',    
     'data':'black',
-    'mc':'#7570b3',
+    'Rapgap reco':'#7570b3',
+    'Rapgap gen':'darkorange',
 }
 
 
@@ -34,8 +37,8 @@ event_names = {
 particle_names = {
     '0': r'$\eta_e - \eta_p$',
     '1': r'$\phi_e - \phi_p - \pi$',
-    '2': r'$log(p_{T}/Q)$',
-    '3': r'$log(p_{T})$',
+    '2': r'$log(p_{T})$',
+    '3': r'$log(p_{T}/Q)$',
     '4': 'log(E/Q)',
     '5': 'log(E)',
     '6':r'$\sqrt{(\eta_e - \eta_p)^2 + (\phi_e - \phi_p)^2}$',
@@ -256,11 +259,19 @@ def HistRoutine(feed_dict,
     ax0.legend(loc=label_loc,fontsize=16,ncol=2)
     if plot_ratio:
         FormatFig(xlabel = "", ylabel = ylabel,ax0=ax0) 
-        plt.ylabel('Ratio to Truth')
+        plt.ylabel('Ratio to Data')
         plt.axhline(y=1.0, color='r', linestyle='-',linewidth=1)
-        plt.ylim([0.85,1.15])
+        plt.ylim([0.7,1.3])
         plt.xlabel(xlabel)
     else:
         FormatFig(xlabel = xlabel, ylabel = ylabel,ax0=ax0) 
         
     return fig,ax0
+
+
+def setup_gpus(local_rank):
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    for gpu in gpus:
+        tf.config.experimental.set_memory_growth(gpu, True)
+    if gpus:
+        tf.config.experimental.set_visible_devices(gpus[local_rank], 'GPU')

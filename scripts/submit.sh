@@ -1,7 +1,7 @@
 #!/bin/sh
 #SBATCH -C gpu
 #SBATCH -q regular
-#SBATCH -n 16
+#SBATCH -n 64
 #SBATCH --ntasks-per-node 4
 #SBATCH --gpus-per-task 1
 #SBATCH -t 07:00:00
@@ -13,13 +13,13 @@
 export TF_CPP_MIN_LOG_LEVEL=2
 
 #pretraining
-# echo srun --mpi=pmi2 shifter python train.py --pretrain
-# srun --mpi=pmi2 shifter python train.py --pretrain
+echo srun --mpi=pmi2 shifter python train.py --pretrain
+srun --mpi=pmi2 shifter python train.py --pretrain
 
 #closure
 # echo srun --mpi=pmi2 shifter python train.py --load_pretrain --closure
 # srun --mpi=pmi2 shifter python train.py --load_pretrain --closure
 
 #standard
-echo srun --mpi=pmi2 shifter python train.py --load_pretrain 
-srun --mpi=pmi2 shifter python train.py --load_pretrain 
+# echo srun --mpi=pmi2 shifter python train.py
+# srun --mpi=pmi2 shifter python train.py

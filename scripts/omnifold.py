@@ -1,6 +1,6 @@
 import numpy as np
 import tensorflow as tf
-import tensorflow.keras
+from tensorflow import keras
 from tensorflow.keras.layers import  Input, Dropout
 from tensorflow.keras import Model
 from tensorflow.keras.callbacks import EarlyStopping,ModelCheckpoint, ReduceLROnPlateau
@@ -9,7 +9,7 @@ import horovod.tensorflow.keras as hvd
 from sklearn.model_selection import train_test_split
 from scipy.special import expit
 import logging
-from architecture import Classifier,weighted_binary_crossentropy, reset_weights
+from architecture import Classifier,weighted_binary_crossentropy
 import utils
 import pickle
 
@@ -34,19 +34,26 @@ class Multifold():
         self.log_file =  open('log_{}.txt'.format(self.version),'w')
         self.opt = utils.LoadJson(config_file)
         self.start = start
+        self.train_frac = 0.8
         self.niter = self.opt['NITER']        
         self.num_feat = self.opt['NFEAT'] 
         self.num_event = self.opt['NEVT']
+        self.lr = float(self.opt['LR'])
+        self.size = hvd.size()
         self.nstrap=nstrap
         self.pretrain = pretrain
-        self.load_pretrain = load_pretrain
+        self.load_pretrain = load_pretrain        
+        
         if self.pretrain:
             self.niter = 1 #Skip iterative procedure when pretraining the model
         if self.load_pretrain:
             self.version += '_pretrained'
-            self.lr_factor = 1
+            self.lr_factor = 5.
         else:
-            self.lr_factor = 1
+            self.lr_factor = 1.
+
+        self.num_steps_reco = None
+        self.num_steps_gen = None
         self.mc = None
         self.data=None
 
@@ -80,19 +87,13 @@ class Multifold():
                 model_name = '{}/OmniFold_pretrained_step2/checkpoint'.format(self.weights_folder)
                 self.model2.load_weights(model_name).expect_partial()
 
-                # self.model1.body.trainable=False
-                # reset_weights(self.model1.head)
-                # self.model2.body.trainable=False
-                # reset_weights(self.model2.head)
-
-            
+        self.CompileModel(self.lr)
         for i in range(self.start,self.niter):
             if hvd.rank()==0:print("ITERATION: {}".format(i + 1))
-            self.CompileModel(float(self.opt['LR'])*np.sqrt(hvd.size())/self.lr_factor)
             self.RunStep1(i)        
-            self.RunStep2(i)            
+            self.RunStep2(i)
+            self.CompileModel(self.lr,fixed=True)
             
-
     def RunStep1(self,i):
         '''Data versus reco MC reweighting'''
         if hvd.rank()==0:print("RUNNING STEP 1")
@@ -106,16 +107,14 @@ class Multifold():
             np.concatenate((self.labels_mc[self.mc.pass_reco], self.labels_data[self.data.pass_reco])),
             np.concatenate((self.weights_push[self.mc.pass_reco]*self.mc.weight[self.mc.pass_reco],self.data.weight[self.data.pass_reco])),
             i,self.model1,stepn=1,
-            NTRAIN = int(0.7*(self.mc.nmax + self.data.nmax))//hvd.size(),
+            NTRAIN = self.num_steps_reco*self.BATCH_SIZE,
             cached = i>self.start #after first training cache the training data
         )
 
         #Don't update weights where there's no reco events
         new_weights = np.ones_like(self.weights_pull)
-        new_weights[self.mc.pass_reco] = self.reweight(self.tf_data1.batch(self.BATCH_SIZE),
-                                                       self.model1_ema)[:np.sum(self.mc.pass_reco)]
+        new_weights[self.mc.pass_reco] = self.reweight(self.mc.reco,self.model1_ema,batch_size=1000)[self.mc.pass_reco]
         
-        #new_weights[self.mc.pass_reco==0]=1.0 
         self.weights_pull = self.weights_push *new_weights
 
     def RunStep2(self,i):
@@ -126,10 +125,10 @@ class Multifold():
             np.concatenate((self.labels_mc, self.labels_gen)),
             np.concatenate((self.mc.weight, self.mc.weight*self.weights_pull)),
             i,self.model2,stepn=2,
-            NTRAIN = (self.mc.nmax + self.mc.nmax)//hvd.size(),
+            NTRAIN = self.num_steps_gen*self.BATCH_SIZE,
             cached = i>self.start #after first training cache the training data
         )
-        new_weights=self.reweight(self.tf_data2.batch(self.BATCH_SIZE),self.model2_ema)[:self.mc.pass_reco.shape[0]]
+        new_weights=self.reweight(self.mc.gen,self.model2_ema)
         self.weights_push = new_weights
 
     def RunModel(self,
@@ -142,7 +141,8 @@ class Multifold():
                  cached = False,
                  ):
 
-        NTEST = int(0.2*NTRAIN)
+        test_frac = 1.-self.train_frac
+        NTEST = int(test_frac*NTRAIN)
         train_data, test_data = self.cache(labels,weights,stepn,cached,NTRAIN-NTEST)
         
         if self.verbose and hvd.rank()==0:
@@ -156,13 +156,10 @@ class Multifold():
             hvd.callbacks.BroadcastGlobalVariablesCallback(0),
             hvd.callbacks.MetricAverageCallback(),
             
-            ReduceLROnPlateau(patience=self.opt['NPATIENCE']//2, min_lr=1e-6,
+            ReduceLROnPlateau(patience=1000, min_lr=1e-7,
                               verbose=verbose,monitor="val_loss"),
             EarlyStopping(patience=self.opt['NPATIENCE'],restore_best_weights=True,
                           monitor="val_loss"),
-            hvd.callbacks.LearningRateWarmupCallback(
-                initial_lr=float(self.opt['LR'])*np.sqrt(hvd.size())/self.lr_factor,
-                warmup_epochs=3, verbose=1),
         ]
         
         
@@ -183,9 +180,9 @@ class Multifold():
         hist =  model.fit(
             train_data,
             epochs=self.EPOCHS,
-            steps_per_epoch=int(0.8*NTRAIN/self.BATCH_SIZE),
+            steps_per_epoch=int(self.train_frac*NTRAIN//self.BATCH_SIZE),
             validation_data= test_data,
-            validation_steps=int(NTEST/self.BATCH_SIZE),
+            validation_steps=NTEST//self.BATCH_SIZE,
             verbose= verbose,
             callbacks=callbacks)
         
@@ -195,6 +192,7 @@ class Multifold():
         
         del train_data, test_data
         gc.collect()
+
 
     def cache(self,
               label,
@@ -210,37 +208,46 @@ class Multifold():
                 self.log_string("Creating cached data from step {}".format(stepn))
                     
             if stepn ==1:
-                self.tf_data1 = tf.data.Dataset.from_tensor_slices(
-                    {'inputs_particle_1':np.concatenate((self.mc.reco[0][self.mc.pass_reco], self.data.reco[0][self.data.pass_reco])),
-                     'inputs_event_1':np.concatenate((self.mc.reco[1][self.mc.pass_reco], self.data.reco[1][self.data.pass_reco])),
-                     'inputs_point_1':np.concatenate((self.mc.reco[2][self.mc.pass_reco], self.data.reco[2][self.data.pass_reco])),
-                     'inputs_mask_1':np.concatenate((self.mc.reco[3][self.mc.pass_reco], self.data.reco[3][self.data.pass_reco])),
-                     }).cache()
-                del self.mc.reco, self.data.reco
-                gc.collect()
-            elif stepn ==2:
-                self.tf_data2 = tf.data.Dataset.from_tensor_slices(
-                    {'inputs_particle_2':np.concatenate((self.mc.gen[0], self.mc.gen[0])),
-                     'inputs_event_2':np.concatenate((self.mc.gen[1], self.mc.gen[1])),
-                     'inputs_point_2':np.concatenate((self.mc.gen[2], self.mc.gen[2])),
-                     'inputs_mask_2':np.concatenate((self.mc.gen[3], self.mc.gen[3])),
-                     }).cache()
-                del self.mc.gen, self.data.gen
-                gc.collect()
+                self.idx_1 = np.arange(label.shape[0])
+                np.random.shuffle(self.idx_1)
 
-        labels = tf.data.Dataset.from_tensor_slices(np.stack((label,weights),axis=1))
-            
+                self.tf_data1 = tf.data.Dataset.from_tensor_slices(
+                    {'inputs_particle_1':np.concatenate((self.mc.reco[0][self.mc.pass_reco], self.data.reco[0][self.data.pass_reco]))[self.idx_1],
+                     'inputs_event_1':np.concatenate((self.mc.reco[1][self.mc.pass_reco], self.data.reco[1][self.data.pass_reco]))[self.idx_1],
+                     'inputs_mask_1':np.concatenate((self.mc.reco[2][self.mc.pass_reco], self.data.reco[2][self.data.pass_reco]))[self.idx_1],
+                     })
+                #del self.mc.reco, self.data.reco
+                #gc.collect()
+            elif stepn ==2:
+                self.idx_2 = np.arange(label.shape[0])
+                np.random.shuffle(self.idx_2)
+                self.tf_data2 = tf.data.Dataset.from_tensor_slices(
+                    {'inputs_particle_2':np.concatenate((self.mc.gen[0], self.mc.gen[0]))[self.idx_2],
+                     'inputs_event_2':np.concatenate((self.mc.gen[1], self.mc.gen[1]))[self.idx_2],
+                     'inputs_mask_2':np.concatenate((self.mc.gen[2], self.mc.gen[2]))[self.idx_2],
+                     })
+                #del self.mc.gen, self.data.gen
+                #gc.collect()
+
+        idx = self.idx_1 if stepn==1 else self.idx_2
+
+        if hvd.rank()==0:
+            print(label[idx])
+            print(NTRAIN,idx.shape[0])
+        labels = tf.data.Dataset.from_tensor_slices(np.stack((label[idx],weights[idx]),axis=1))
+        
         if stepn ==1:
-            data = tf.data.Dataset.zip((self.tf_data1,labels)).shuffle(label.shape[0])
+            data = tf.data.Dataset.zip((self.tf_data1,labels))
         elif stepn==2:
-            data = tf.data.Dataset.zip((self.tf_data2,labels)).shuffle(label.shape[0])
+            data = tf.data.Dataset.zip((self.tf_data2,labels))
         else:
             logging.error("ERROR: STEPN not recognized")
 
                 
-        train_data = data.take(NTRAIN).shuffle(50*self.BATCH_SIZE).repeat().batch(self.BATCH_SIZE).prefetch(buffer_size=tf.data.AUTOTUNE)
-        test_data  = data.skip(NTRAIN).shuffle(50*self.BATCH_SIZE).repeat().batch(self.BATCH_SIZE).prefetch(buffer_size=tf.data.AUTOTUNE)
-        
+        train_data = data.take(NTRAIN).shuffle(NTRAIN).repeat().batch(self.BATCH_SIZE).prefetch(buffer_size=tf.data.AUTOTUNE)
+        test_data  = data.skip(NTRAIN).repeat().batch(self.BATCH_SIZE).prefetch(buffer_size=tf.data.AUTOTUNE)
+        del data
+        gc.collect()
         return train_data, test_data
 
     def Preprocessing(self):
@@ -248,24 +255,88 @@ class Multifold():
         self.PrepareModel()
 
 
-    def CompileModel(self,lr):
-        
-        opt1 = tf.keras.optimizers.Lion(learning_rate=lr,weight_decay=1e-4, beta_1 = 0.95)
-        opt1 = hvd.DistributedOptimizer(opt1)
-        opt2 = tf.keras.optimizers.Lion(learning_rate=lr,weight_decay=1e-4, beta_1 = 0.95)
-        opt2 = hvd.DistributedOptimizer(opt2)
+    def CompileModel(self,lr,fixed=False):
+
+        if self.num_steps_reco ==None:
+            self.num_steps_reco = int(0.7*(self.mc.nmax + self.data.nmax))//hvd.size()//self.BATCH_SIZE
+            self.num_steps_gen = 2*self.mc.nmax//hvd.size()//self.BATCH_SIZE
+            if hvd.rank()==0:print(self.num_steps_reco,self.num_steps_gen)
 
 
         
-        self.model1.compile(weighted_metrics=[],
-                            #run_eagerly=True,
-                            metrics=['accuracy'],
-                            optimizer=opt1,experimental_run_tf_function=False)
+        lr_schedule_body_reco = keras.optimizers.schedules.CosineDecay(
+            initial_learning_rate=lr/self.lr_factor,
+            warmup_target = lr*np.sqrt(self.size)/self.lr_factor,
+            warmup_steps= 3*int(self.train_frac*self.num_steps_reco),
+            decay_steps= self.EPOCHS*int(self.train_frac*self.num_steps_reco),
+            alpha = 1e-2,
+        )
 
-        self.model2.compile(weighted_metrics=[],                            
-                            #run_eagerly=True,
-                            metrics=['accuracy'],
-                            optimizer=opt2,experimental_run_tf_function=False)
+
+        lr_schedule_head_reco = keras.optimizers.schedules.CosineDecay(
+            initial_learning_rate=lr,
+            warmup_target = lr*np.sqrt(self.size),
+            warmup_steps= 3*int(self.train_frac*(self.num_steps_reco)),
+            decay_steps= self.EPOCHS*int(self.train_frac*self.num_steps_reco),
+            alpha = 1e-2,
+        )
+
+
+        lr_schedule_body_gen = keras.optimizers.schedules.CosineDecay(
+            initial_learning_rate=lr/self.lr_factor,
+            warmup_target = lr*np.sqrt(self.size)/self.lr_factor,
+            warmup_steps= 3*int(self.train_frac*self.num_steps_gen),
+            decay_steps= self.EPOCHS*int(self.train_frac*self.num_steps_reco),
+            alpha = 1e-2,
+        )
+
+
+        lr_schedule_head_gen = keras.optimizers.schedules.CosineDecay(
+            initial_learning_rate=lr,
+            warmup_target = lr*np.sqrt(self.size),
+            warmup_steps= 3*int(self.train_frac*self.num_steps_gen),
+            decay_steps= self.EPOCHS*int(self.train_frac*self.num_steps_reco),
+            alpha = 1e-2,
+        )
+
+
+        min_learning_rate = 5e-6
+        opt_head1 = tf.keras.optimizers.Lion(
+            learning_rate=min_learning_rate if fixed else lr_schedule_head_reco,
+            weight_decay=1e-5,
+            beta_1=0.95,
+            beta_2=0.99)
+        
+        opt_head1 = hvd.DistributedOptimizer(opt_head1)
+        
+        opt_body1 = tf.keras.optimizers.Lion(
+            learning_rate=min_learning_rate if fixed else lr_schedule_body_reco,
+            weight_decay=1e-5,
+            beta_1=0.95,
+            beta_2=0.99)
+        
+        opt_body1 = hvd.DistributedOptimizer(opt_body1)
+
+
+        opt_head2 = tf.keras.optimizers.Lion(
+            learning_rate=min_learning_rate if fixed else lr_schedule_head_gen,
+            weight_decay=1e-5,
+            beta_1=0.95,
+            beta_2=0.99)
+        
+        opt_head2 = hvd.DistributedOptimizer(opt_head2)
+        
+        opt_body2 = tf.keras.optimizers.Lion(
+            learning_rate=min_learning_rate if fixed else lr_schedule_body_gen,
+            weight_decay=1e-5,
+            beta_1=0.95,
+            beta_2=0.99)
+        
+        opt_body2 = hvd.DistributedOptimizer(opt_body2)
+
+
+        self.model1.compile(opt_body1,opt_head1)
+        self.model2.compile(opt_body2,opt_head2)
 
 
     def PrepareInputs(self):
@@ -303,8 +374,8 @@ class Multifold():
         self.model1_ema = self.model1.model_ema
         self.model2_ema = self.model2.model_ema
         
-        if self.verbose:
-            print(self.model2.classifier.summary())
+        # if self.verbose:
+        #     print(self.model2.classifier.summary())
 
 
     def reweight(self,events,model,batch_size=None):

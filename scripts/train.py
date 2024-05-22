@@ -45,24 +45,23 @@ if __name__ == "__main__":
     version = opt['NAME']
 
     mc_file_names = opt['MC_NAMES']
-    data_file_names = ['data.h5']
+    data_file_names = ['data_prep.h5']
     if flags.closure or flags.pretrain:
         #use djangoh as pseudo data
-        data_file_names = ['Djangoh_Eplus0607.h5']
-        # if flags.pretrain:
-        #     data_file_names.append('Djangoh_Eminus06.h5')
+        data_file_names = ['Djangoh_Eplus0607_prep.h5']
         #data_file_names = ['test_sim.h5']
         #data_file_names = ['toy1.h5']
         version += '_closure'
         #Keep closure data with around the same amount as the true data
-        nmax = 500000 if flags.closure else None        
+        nmax = 350000 if flags.closure else None        
     else:
         nmax = None
 
     data = Dataset(data_file_names,flags.data_folder,is_mc=False,
                    rank=hvd.rank(),size=hvd.size(),nmax=nmax) #match the normalization from MC files
+
     mc = Dataset(mc_file_names,flags.data_folder,is_mc=True,
-                 rank=hvd.rank(),size=hvd.size(),nmax=10000000, norm = data.nmax)
+                 rank=hvd.rank(),size=hvd.size(),nmax=5_000_000, norm = data.nmax)
 
 
     
