@@ -35,6 +35,7 @@ def parse_arguments():
     parser.add_argument('--load', action='store_true', default=False,help='Load unfolded weights')
     parser.add_argument('--closure', action='store_true', default=False,help='Plot closure results')
     parser.add_argument('--niter', type=int, default=0, help='Omnifold iteration to load')
+    parser.add_argument('--nmax', type=int, default=1000000, help='Maximum number of events to load')
     parser.add_argument('--img_fmt', default='pdf', help='Format of the output figures')
     
     flags = parser.parse_args()
@@ -50,20 +51,17 @@ def get_dataloaders(flags):
     for mc in mc_file_names:
         if flags.reco:
             dataloaders[mc] = Dataset([mc_file_names[mc]],flags.data_folder,is_mc=True,
-                                      rank=hvd.rank(),size=hvd.size(),nmax=1000000,pass_reco=True)
+                                      rank=hvd.rank(),size=hvd.size(),nmax=flags.nmax,pass_reco=True)
 
             del dataloaders[mc].gen #free a bit of memory
             dataloaders[mc].evts = dataloaders[mc].reco
         else:
             dataloaders[mc] = Dataset([mc_file_names[mc]],flags.data_folder,is_mc=True,
-                                      rank=hvd.rank(),size=hvd.size(),nmax=5000000,pass_fiducial=True)
+                                      rank=hvd.rank(),size=hvd.size(),nmax=flags.nmax,pass_fiducial=True)
 
             del dataloaders[mc].reco #free a bit of memory
             dataloaders[mc].evts = dataloaders[mc].gen
 
-        # dataloaders[mc].evts[0] = dataloaders[mc].evts[0][dataloaders[mc].pass_evts]
-        # dataloaders[mc].evts[1] = dataloaders[mc].evts[1][dataloaders[mc].pass_evts]
-        # dataloaders[mc].weight = dataloaders[mc].weight[dataloaders[mc].pass_evts]
         gc.collect()
 
     if flags.reco:
@@ -174,7 +172,7 @@ def plot_particles(flags,dataloaders,reference_name,version,num_part):
 
 def gather_data(dataloaders):
     for dataloader in dataloaders:
-        mask = np.reshape(dataloaders[dataloader].part[:,:,0]!= 0 , (-1))
+        mask = np.reshape(dataloaders[dataloader].part[:,:,2]!= 0 , (-1))
         dataloaders[dataloader].part = hvd.allgather(tf.constant(dataloaders[dataloader].part.reshape((-1,dataloaders[dataloader].part.shape[-1]))[mask])).numpy()
         dataloaders[dataloader].event = hvd.allgather(tf.constant(dataloaders[dataloader].event)).numpy()
         dataloaders[dataloader].weight = hvd.allgather(tf.constant(dataloaders[dataloader].weight)).numpy()
