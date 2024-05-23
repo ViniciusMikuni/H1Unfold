@@ -10,7 +10,7 @@ Besides the tensorflow module, we only require a few additional packages that yo
 
 ```bash
 module load tensorflow
-pip install uproot
+pip install uproot awkward fastjet
 ```
 
 ### Using shifter on Perlmutter
