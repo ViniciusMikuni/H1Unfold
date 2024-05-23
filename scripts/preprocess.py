@@ -8,7 +8,6 @@ def preprocess(data):
     #return (p,e)
     mask = p[:,:,0]!=0
     
-    
     #use log(pt/Q), delta_eta, delta_phi        
     log_pt_rel = np.ma.log(np.ma.divide(p[:,:,0],np.sqrt(e[:,None,0])).filled(0)).filled(0)
     log_pt = np.ma.log(p[:,:,0]).filled(0)
