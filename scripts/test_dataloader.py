@@ -12,10 +12,8 @@ if __name__ == "__main__":
     #file_mc = ['Rapgap_Eplus0607.h5']
     
     #file_data = ['Data.h5']
-    file_mc = ['test_sim.h5']
-    file_data = ['data.h5']
-    # file_mc = ['toy1.h5']
-    # file_data = ['toy2.h5']
+    file_mc = ['test_prep.h5']
+    file_data = ['data_prep.h5']
     dataloader_mc = Dataset(file_mc,base_path,is_mc=True)
     
     dataloader_data = Dataset(file_data,base_path,is_mc=False,norm=dataloader_mc.nmax)
@@ -24,8 +22,9 @@ if __name__ == "__main__":
         os.makedirs('../plots')
         
     #Let's make some plots
-    particles_mc, events_mc,_,mask_mc = dataloader_mc.reco    
-    particles_gen, events_gen,_,_ = dataloader_mc.gen
+    particles_mc, events_mc,mask_mc = dataloader_mc.reco    
+    particles_gen, events_gen,_ = dataloader_mc.gen
+    print(np.unique(particles_gen[:,:,-1]))
     #Undo the preprocessing
     particles_mc, events_mc = dataloader_mc.revert_standardize(particles_mc, events_mc,mask_mc)
 
@@ -47,7 +46,7 @@ if __name__ == "__main__":
     
     wgt = dataloader_mc.weight[pass_reco_mc]
 
-    particles_data,events_data,_,mask_data  = dataloader_data.reco
+    particles_data,events_data,mask_data  = dataloader_data.reco
     particles_data, events_data = dataloader_data.revert_standardize(particles_data, events_data,mask_data)
     
     print("Using {} particles for data".format(particles_data.shape[1]))
@@ -68,7 +67,6 @@ if __name__ == "__main__":
         weights = {
             'data':np.ones(events_data.shape[0]),
             'Rapgap reco': wgt,
-            #'Rapgap gen': np.array(wgt),
             }
         fig,ax = utils.HistRoutine(feed_dict,
                                    xlabel=utils.event_names[str(feature)],
@@ -83,7 +81,7 @@ if __name__ == "__main__":
     wgt = np.tile(wgt[:,None],(1,particles_mc.shape[1]))
     wgt = wgt.reshape(-1,1)
     particles_mc = particles_mc.reshape((-1,particles_mc.shape[-1]))
-    mask_zero = particles_mc[:,0]!=0
+    mask_zero = particles_mc[:,2]!=0
     particles_mc = particles_mc[mask_zero]
     wgt = wgt[mask_zero]
     for feature in range(particles_data.shape[-1]):
@@ -95,7 +93,6 @@ if __name__ == "__main__":
         weights = {
             'data':np.ones(particles_data.shape[0]),
             'Rapgap reco': wgt,
-            #'Rapgap gen': np.array(wgt),
         }
         
         fig,ax = utils.HistRoutine(feed_dict,
