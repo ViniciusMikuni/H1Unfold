@@ -38,9 +38,10 @@ def convert_to_np(file_list,base_path,name,is_data = False,
             reco_dict['event_features'][ifile] = reco_dict['event_features'][ifile][mask_evt]
             
             gen_dict['particle_features'].append(np.stack([tmp_file['gen_'+feat].array()[:nevts].pad(max_part).fillna(0).regular() for feat in particle_list],-1))
-
+            
             #Set charge to 0 for gen particles outside the tracker acceptance
-            gen_dict['particle_features'][-1][:,:,-1] = gen_dict['particle_features'][-1][:,:,-1]* np.abs(gen_dict['particle_features'][-1][:,:,1])<2.0
+
+            gen_dict['particle_features'][-1][:,:,-1] *= np.abs(gen_dict['particle_features'][-1][:,:,1])<2.0
             #print("Removing events")
             #Remove events not passing Q2> 100
             gen_dict['particle_features'][ifile] = gen_dict['particle_features'][ifile][mask_evt]
@@ -242,7 +243,6 @@ class Dataset():
         #self.reco =  self.return_dataset(reco)
         if self.is_mc:
             self.pass_gen = np.concatenate(self.pass_gen)
-            #self.gen = self.preprocess(self.concatenate(gen))
             self.gen = self.standardize(self.concatenate(gen))
             del gen
             gc.collect()
@@ -317,6 +317,7 @@ def create_toy(data_output):
 if __name__ == "__main__":
     import argparse
     import logging
+    #import uproot
     import uproot3 as uproot
     #Convert root files to h5 inputs that are easier to load when training OmniFold
     
@@ -344,6 +345,7 @@ if __name__ == "__main__":
     elif flags.sample == 'RapgapEp':
         print("Processing Rapgap")
         file_list = find_files_with_string(flags.data_input+'/out_ep0607', 'Rapgap_Eplus0607_')
+        #file_list = ["/global/cfs/cdirs/m3246/vmikuni/H1v2/root/out_ep0607/Rapgap_Eplus0607_4.nominal.root"]
         reco,gen = convert_to_np(file_list,flags.data_input+'/out_ep0607',name='Rapgap')
         with h5.File(os.path.join(flags.data_output,"Rapgap_Eplus0607.h5"),'w') as fh5:
             dset = fh5.create_dataset('reco_particle_features', data=reco['particle_features'])
