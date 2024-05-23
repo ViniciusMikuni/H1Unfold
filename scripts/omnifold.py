@@ -48,7 +48,7 @@ class Multifold():
             self.niter = 1 #Skip iterative procedure when pretraining the model
         if self.load_pretrain:
             self.version += '_pretrained'
-            self.lr_factor = 5.
+            self.lr_factor = 2.
         else:
             self.lr_factor = 1.
 
@@ -84,7 +84,7 @@ class Multifold():
                     print("Loading pretrained weights")                
                 model_name = '{}/OmniFold_pretrained_step1/checkpoint'.format(self.weights_folder)
                 self.model1.load_weights(model_name).expect_partial()
-                model_name = '{}/OmniFold_pretrained_step2/checkpoint'.format(self.weights_folder)
+                model_name = '{}/OmniFold_pretrained_step1/checkpoint'.format(self.weights_folder)
                 self.model2.load_weights(model_name).expect_partial()
 
         self.CompileModel(self.lr)
@@ -300,7 +300,7 @@ class Multifold():
         )
 
 
-        min_learning_rate = 5e-6
+        min_learning_rate = 3e-6
         opt_head1 = tf.keras.optimizers.Lion(
             learning_rate=min_learning_rate if fixed else lr_schedule_head_reco,
             weight_decay=1e-5,
@@ -381,12 +381,10 @@ class Multifold():
     def reweight(self,events,model,batch_size=None):
         if batch_size is None:
            batch_size =  self.BATCH_SIZE
-           
-        f = np.nan_to_num(expit(model.predict(events,batch_size=batch_size,verbose=self.verbose)[0])
-                          ,posinf=1,neginf=0)
+
+        f = expit(model.predict(events,batch_size=batch_size,verbose=self.verbose)[0])            
         weights = f / (1. - f)
-        weights = weights[:,0]
-        return np.squeeze(np.nan_to_num(weights,posinf=1))
+        return np.nan_to_num(weights[:,0],posinf=1)
 
     def CompareDistance(self,patience,min_distance,weights1,weights2):
         distance = np.mean(

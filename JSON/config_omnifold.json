@@ -1,6 +1,6 @@
 {
     'NITER': 10,
-    'LR': 1e-4,
+    'LR': 3e-5,
     'NEVT':5,
     'NFEAT':8,
     'BATCH_SIZE':256,
