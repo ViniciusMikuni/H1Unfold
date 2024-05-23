@@ -49,8 +49,6 @@ if __name__ == "__main__":
     if flags.closure or flags.pretrain:
         #use djangoh as pseudo data
         data_file_names = ['Djangoh_Eplus0607_prep.h5']
-        #data_file_names = ['test_sim.h5']
-        #data_file_names = ['toy1.h5']
         version += '_closure'
         #Keep closure data with around the same amount as the true data
         nmax = 350000 if flags.closure else None        

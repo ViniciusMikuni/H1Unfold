@@ -200,6 +200,7 @@ def HistRoutine(feed_dict,
                 ylabel='',
                 reference_name='data',
                 logy=False,
+                logx = False,
                 binning=None,
                 label_loc='best',
                 plot_ratio=True,
@@ -252,16 +253,20 @@ def HistRoutine(feed_dict,
                                          uncertainty[ibin],-uncertainty[ibin], alpha=0.3,color='k')    
     if logy:
         ax0.set_yscale('log')
-        ax0.set_ylim(1e-3,10*maxy)
+        ax0.set_ylim(1e-5,10*maxy)
     else:
         ax0.set_ylim(0,1.3*maxy)
+
+    if logx:
+        #ax0.set_xscale('log')
+        ax1.set_xscale('log')
 
     ax0.legend(loc=label_loc,fontsize=16,ncol=2)
     if plot_ratio:
         FormatFig(xlabel = "", ylabel = ylabel,ax0=ax0) 
         plt.ylabel('Ratio to Data')
         plt.axhline(y=1.0, color='r', linestyle='-',linewidth=1)
-        plt.ylim([0.7,1.3])
+        plt.ylim([0.5,1.5])
         plt.xlabel(xlabel)
     else:
         FormatFig(xlabel = xlabel, ylabel = ylabel,ax0=ax0) 
