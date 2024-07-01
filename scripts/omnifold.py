@@ -48,7 +48,7 @@ class Multifold():
             self.niter = 1 #Skip iterative procedure when pretraining the model
         if self.load_pretrain:
             self.version += '_pretrained'
-            self.lr_factor = 2.
+            self.lr_factor = 5.
         else:
             self.lr_factor = 1.
 
@@ -300,7 +300,7 @@ class Multifold():
         )
 
 
-        min_learning_rate = 3e-6
+        min_learning_rate = 1e-5
         opt_head1 = tf.keras.optimizers.Lion(
             learning_rate=min_learning_rate if fixed else lr_schedule_head_reco,
             weight_decay=1e-5,

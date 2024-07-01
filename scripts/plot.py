@@ -318,6 +318,7 @@ def cluster_jets(dataloaders):
         jets["phi"] = np.arctan2(jets["py"],jets["px"])
         jets["eta"] = np.arcsinh(jets["pz"]/jets["pt"])
         jets=fastjet.sorted_by_pt(jets)
+        
 
         def _take_leading_jet(jets):
             jet = np.zeros((dataloaders[dataloader].event.shape[0],4))
@@ -353,7 +354,7 @@ def main():
 
     reference_name, version = get_version(flags,opt)
     if flags.load:
-        pass
+        raise ValueError("ERROR:NOT IMPLEMENTED")
     else:        
         weights  = load_model(flags,opt,version,dataloaders)
         

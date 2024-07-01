@@ -40,7 +40,17 @@ python train.py [--closure] [--nstrap N]
 Plotting can be performed using either multiple GPUs or in a single GPU. The script to run is:
 
 ```bash
-python plot.py --niter 5 [--closure] [--load_pretrain] [--reco]
+module load tensorflow
+python plot.py --niter 4 [--closure] [--load_pretrain] [--reco]
 ```
 
 The ```--reco``` flag is used to load reco level events to verify the reweighting of step 1. The ```--closure``` flag is used to load the training using the closure test. The ```--load_pretrain``` flag uses the training that starts from a pre-trained model
+
+To plot using multiple GPUs run:
+
+```bash
+salloc -C gpu -q interactive  -t 40 -n 16 --ntasks-per-node=4 --gpus-per-task=1  -A m3246  --gpu-bind None
+module load tensorflow
+[pip install --uset fastjet] #Do it only once
+srun  python plot.py --niter 5 --closure --load_pretrain --data_folder /global/cfs/cdirs/m3246/H1/h5/ --weights /global/cfs/cdirs/m3246/H1/weights/
+```
