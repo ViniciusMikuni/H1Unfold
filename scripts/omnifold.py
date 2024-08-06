@@ -21,6 +21,7 @@ def label_smoothing(y_true,alpha=0):
 class Multifold():
     def __init__(self,
                  nstrap=0,
+                 n_ensemble=1,
                  version = 'Closure',
                  config_file='config_omnifold.json',
                  pretrain = False,
@@ -41,6 +42,7 @@ class Multifold():
         self.lr = float(self.opt['LR'])
         self.size = hvd.size()
         self.nstrap=nstrap
+        self.n_ensemble=n_ensemble
         self.pretrain = pretrain
         self.load_pretrain = load_pretrain        
         
@@ -102,34 +104,59 @@ class Multifold():
             print("Estimated total number of events: {}".format(int((self.mc.nmax + self.data.nmax))//hvd.size()))
             print("Full number of events {}".format(np.concatenate((self.labels_mc[self.mc.pass_reco] , self.labels_data[self.data.pass_reco])).shape[0]))
 
-        
-        self.RunModel(
-            np.concatenate((self.labels_mc[self.mc.pass_reco], self.labels_data[self.data.pass_reco])),
-            np.concatenate((self.weights_push[self.mc.pass_reco]*self.mc.weight[self.mc.pass_reco],self.data.weight[self.data.pass_reco])),
-            i,self.model1,stepn=1,
-            NTRAIN = self.num_steps_reco*self.BATCH_SIZE,
-            cached = i>self.start #after first training cache the training data
-        )
+        ensemble_weights = []
 
-        #Don't update weights where there's no reco events
-        new_weights = np.ones_like(self.weights_pull)
-        new_weights[self.mc.pass_reco] = self.reweight(self.mc.reco,self.model1_ema,batch_size=1000)[self.mc.pass_reco]
+        for ensemble in range(self.n_ensemble):
+            if hvd.rank()==0:
+                print(f"RUNNING ENSEMBlE {ensemble} / {self.n_ensemble} \n")
+
+            self.RunModel(
+                np.concatenate((self.labels_mc[self.mc.pass_reco],
+                                self.labels_data[self.data.pass_reco])),
+                np.concatenate((self.weights_push[self.mc.pass_reco]*self.mc.weight[self.mc.pass_reco],self.data.weight[self.data.pass_reco])),
+                i,self.model1,stepn=1,
+                NTRAIN = self.num_steps_reco*self.BATCH_SIZE,
+                cached = i>self.start #after first training cache the training data
+                #FIME: cache is probably inefficient in ensemble loop...
+            )
+
+            #Don't update weights where there's no reco events
+            new_weights = np.ones_like(self.weights_pull)
+            new_weights[self.mc.pass_reco] = self.reweight(self.mc.reco,self.model1_ema,batch_size=1000)[self.mc.pass_reco]
         
-        self.weights_pull = self.weights_push *new_weights
+            ensemble_weights.append(new_weights)
+
+        ensemble_avg_w = np.mean(ensemble_weights, axis=0)
+        assert (np.shape(ensemble_avg_w) == np.shape(ensemble_weights[0]))
+
+        # self.weights_pull = self.weights_push *new_weights
+        self.weights_pull = self.weights_push *ensemble_avg_w
 
     def RunStep2(self,i):
         '''Gen to Gen reweighing'''        
         if hvd.rank()==0:print("RUNNING STEP 2")
         
-        self.RunModel(
-            np.concatenate((self.labels_mc, self.labels_gen)),
-            np.concatenate((self.mc.weight, self.mc.weight*self.weights_pull)),
-            i,self.model2,stepn=2,
-            NTRAIN = self.num_steps_gen*self.BATCH_SIZE,
-            cached = i>self.start #after first training cache the training data
-        )
-        new_weights=self.reweight(self.mc.gen,self.model2_ema)
-        self.weights_push = new_weights
+        ensemble_weights = []
+
+        for ensemble in range(self.n_ensemble):
+            if hvd.rank()==0:
+                print(f"RUNNING ENSEMBlE {ensemble} / {self.n_ensemble} \n")
+
+            self.RunModel(
+                np.concatenate((self.labels_mc, self.labels_gen)),
+                np.concatenate((self.mc.weight, self.mc.weight*self.weights_pull)),
+                i,self.model2,stepn=2,
+                NTRAIN = self.num_steps_gen*self.BATCH_SIZE,
+                cached = i>self.start #after first training cache the training data
+            )
+            new_weights=self.reweight(self.mc.gen,self.model2_ema)
+            ensemble_weights.append(new_weights)
+
+        ensemble_avg_w = np.mean(ensemble_weights, axis=0)
+        assert (np.shape(ensemble_avg_w) == np.shape(ensemble_weights[0]))
+
+        # self.weights_push = new_weights
+        self.weights_push = ensemble_avg_w
 
     def RunModel(self,
                  labels,
