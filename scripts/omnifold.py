@@ -127,8 +127,10 @@ class Multifold():
                                                            batch_size=1000)[self.mc.pass_reco]
 
             ensemble_avg_weights += new_weights/self.n_ensemble  # running average
-            self.CompileModel(self.lr,fixed=True)  #reset model
-        
+            #FIXME: may need to clear new_weights for memory, also K.clearbackend
+            tf.backend.clear_session()
+            # self.CompileModel(self.lr,fixed=True)  #reset model
+
         # self.weights_pull = self.weights_push *new_weights
         self.weights_pull = self.weights_push *ensemble_avg_weights
 
