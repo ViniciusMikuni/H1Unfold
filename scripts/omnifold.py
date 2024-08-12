@@ -127,9 +127,11 @@ class Multifold():
                                                            batch_size=1000)[self.mc.pass_reco]
 
             ensemble_avg_weights += new_weights/self.n_ensemble  # running average
-            #FIXME: may need to clear new_weights for memory, also K.clearbackend
+
             tf.backend.clear_session()
-            # self.CompileModel(self.lr,fixed=True)  #reset model
+            del new_weights
+            gc.collect()
+            # self.CompileModel(self.lr,fixed=True)
 
         # self.weights_pull = self.weights_push *new_weights
         self.weights_pull = self.weights_push *ensemble_avg_weights
@@ -153,11 +155,16 @@ class Multifold():
             )
 
             new_weights=self.reweight(self.mc.gen,self.model2_ema)
+
             ensemble_avg_weights += new_weights/self.n_ensemble  # running average
-            self.CompileModel(self.lr,fixed=True)  #reset model
+
+            tf.backend.clear_session()
+            del new_weights
+            gc.collect()
 
         # self.weights_push = new_weights
         self.weights_push = ensemble_avg_weights
+
 
     def RunModel(self,
                  labels,
