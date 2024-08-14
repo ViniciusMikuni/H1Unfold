@@ -21,7 +21,6 @@ def label_smoothing(y_true,alpha=0):
 class Multifold():
     def __init__(self,
                  nstrap=0,
-                 n_ensemble=1,
                  version = 'Closure',
                  config_file='config_omnifold.json',
                  pretrain = False,
@@ -40,9 +39,9 @@ class Multifold():
         self.num_feat = self.opt['NFEAT'] 
         self.num_event = self.opt['NEVT']
         self.lr = float(self.opt['LR'])
+        self.n_ensemble=self.opt['NENSEMBLE']
         self.size = hvd.size()
         self.nstrap=nstrap
-        self.n_ensemble=n_ensemble
         self.pretrain = pretrain
         self.load_pretrain = load_pretrain        
         
@@ -60,6 +59,7 @@ class Multifold():
         self.data=None
 
         self.weights_folder = '../weights'
+
         if self.nstrap>0:
             self.weights_folder = '../weights_strap'
         if not os.path.exists(self.weights_folder):
@@ -95,6 +95,7 @@ class Multifold():
             self.RunStep1(i)        
             self.RunStep2(i)
             self.CompileModel(self.lr,fixed=True)
+
             
     def RunStep1(self,i):
         '''Data versus reco MC reweighting'''
@@ -113,11 +114,12 @@ class Multifold():
             self.RunModel(
                 np.concatenate((self.labels_mc[self.mc.pass_reco],
                                 self.labels_data[self.data.pass_reco])),
-                np.concatenate((self.weights_push[self.mc.pass_reco]*self.mc.weight[self.mc.pass_reco],
+                np.concatenate((self.weights_push[self.mc.pass_reco]*\
+                    self.mc.weight[self.mc.pass_reco],
                                 self.data.weight[self.data.pass_reco])),
                 i,e,self.model1,stepn=1,
                 NTRAIN = self.num_steps_reco*self.BATCH_SIZE,
-                cached = i>self.start #after first training cache the training data
+                cached = (i>self.start) & (e > 0)#after first training cache the training data
                 #FIME: cache is probably inefficient in ensemble loop...
             )
 
@@ -128,7 +130,7 @@ class Multifold():
 
             ensemble_avg_weights += new_weights/self.n_ensemble  # running average
 
-            tf.backend.clear_session()
+            tf.keras.backend.clear_session()
             del new_weights
             gc.collect()
             # self.CompileModel(self.lr,fixed=True)
@@ -151,14 +153,14 @@ class Multifold():
                 np.concatenate((self.mc.weight, self.mc.weight*self.weights_pull)),
                 i,e,self.model2,stepn=2,
                 NTRAIN = self.num_steps_gen*self.BATCH_SIZE,
-                cached = i>self.start #after first training cache the training data
+                cached = (i>self.start) & (e > 0) #after first training cache the training data
             )
 
             new_weights=self.reweight(self.mc.gen,self.model2_ema)
 
             ensemble_avg_weights += new_weights/self.n_ensemble  # running average
 
-            tf.backend.clear_session()
+            tf.keras.backend.clear_session()
             del new_weights
             gc.collect()
 

@@ -31,7 +31,6 @@ if __name__ == "__main__":
     parser.add_argument('--pretrain', action='store_true', default=False,help='Pretrain the model on step 1 rapgap vs djangoh')
     parser.add_argument('--load_pretrain', action='store_true', default=False,help='Load pretrained model instead of starting from scratch')
     parser.add_argument('--nstrap', type=int,default=0, help='Unique id for bootstrapping')
-    parser.add_argument('--n_ensemble', type=int,default=1, help='number of ensembles')
     parser.add_argument('--start', type=int,default=0, help='Which omnifold iteration to start with')
     parser.add_argument('--verbose', action='store_true', default=False,help='Display additional information during training')
 
@@ -78,7 +77,6 @@ if __name__ == "__main__":
     mfold = Multifold(
         version = version,
         nstrap = flags.nstrap,
-        n_ensemble = flags.n_ensemble,
         start = flags.start,
         pretrain = flags.pretrain,
         load_pretrain = flags.load_pretrain,
