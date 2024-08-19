@@ -7,8 +7,7 @@ utils.SetStyle()
 
 if __name__ == "__main__":
     #base_path = '/global/cfs/cdirs/m3246/vmikuni/H1v2/h5/'
-    # base_path = '/pscratch/sd/v/vmikuni/H1v2/h5'
-    base_path = '/global/cfs/cdirs/m3246/H1/h5/'
+    base_path = '/pscratch/sd/v/vmikuni/H1v2/h5'
     #file_mc = ['Rapgap_Eminus06.h5']
     #file_mc = ['Rapgap_Eplus0607.h5']
     
@@ -50,7 +49,6 @@ if __name__ == "__main__":
     particles_data,events_data,mask_data  = dataloader_data.reco
     particles_data, events_data = dataloader_data.revert_standardize(particles_data, events_data,mask_data)
     
-    
     print("Using {} particles for data".format(particles_data.shape[1]))
     pass_reco_data = dataloader_data.pass_reco
     print("Sum of weights data: {}".format(np.sum(dataloader_data.weight[pass_reco_data])))
@@ -58,9 +56,9 @@ if __name__ == "__main__":
     print("Pass reco data: {}".format(1.0*np.sum(pass_reco_data)/pass_reco_data.shape[0]))
     particles_data = particles_data[pass_reco_data]
     events_data = events_data[pass_reco_data]
+
     
     for feature in range(events_data.shape[-1]):
-        print(utils.event_names[str(feature)])
         feed_dict = {
             'data': events_data[:,feature],
             'Rapgap reco': events_mc[:,feature],
@@ -87,8 +85,6 @@ if __name__ == "__main__":
     particles_mc = particles_mc[mask_zero]
     wgt = wgt[mask_zero]
     for feature in range(particles_data.shape[-1]):
-        print(particles_data.shape)
-        print(utils.particle_names[str(feature)])
         feed_dict = {
             'data': particles_data[:,feature],
             'Rapgap reco': particles_mc[:,feature],            
