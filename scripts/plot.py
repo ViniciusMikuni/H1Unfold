@@ -25,8 +25,8 @@ mc_file_names = {
 def parse_arguments():
     parser = argparse.ArgumentParser()
     
-    parser.add_argument('--data_folder', default='/pscratch/sd/v/vmikuni/H1v2/h5', help='Folder containing data and MC files')
-    #parser.add_argument('--data_folder', default='/global/cfs/cdirs/m3246/vmikuni/H1v2/h5/', help='Folder containing data and MC files')
+    # parser.add_argument('--data_folder', default='/pscratch/sd/v/vmikuni/H1v2/h5', help='Folder containing data and MC files')
+    parser.add_argument('--data_folder', default='/global/cfs/cdirs/m3246/vmikuni/H1v2/h5/', help='Folder containing data and MC files')
     parser.add_argument('--weights', default='../weights', help='Folder to store trained weights')
     parser.add_argument('--load_pretrain', action='store_true', default=False,help='Load pretrained model instead of starting from scratch')
     parser.add_argument('--config', default='config_general.json', help='Basic config file containing general options')
@@ -35,6 +35,7 @@ def parse_arguments():
     parser.add_argument('--load', action='store_true', default=False,help='Load unfolded weights')
     parser.add_argument('--closure', action='store_true', default=False,help='Plot closure results')
     parser.add_argument('--niter', type=int, default=0, help='Omnifold iteration to load')
+    parser.add_argument('--n_ens', type=int, default=0, help='which ensemble to load')
     parser.add_argument('--nmax', type=int, default=1000000, help='Maximum number of events to load')
     parser.add_argument('--img_fmt', default='pdf', help='Format of the output figures')
     
@@ -87,14 +88,18 @@ def get_version(flags,opt):
         
     return reference_name, version
 
-def load_model(flags,opt,version,dataloaders):
+def load_model(flags,opt,version,dataloaders, ens):
     #Load the trained model        
     if flags.reco:
         if flags.niter>0:
             warnings.warn('Reco level weights are only reasonable if flags.niter == 0')
         model_name = '{}/OmniFold_{}_iter{}_step1/checkpoint'.format(flags.weights,version,flags.niter)
+
     else:
-        model_name = '{}/OmniFold_{}_iter{}_step2/checkpoint'.format(flags.weights,version,flags.niter)
+        # model_name = '{}/OmniFold_{}_iter{}_step2/checkpoint'.format(flags.weights,version,flags.niter)
+        model_name = '{}/OmniFold_{}_iter{}_ens{}_step2/checkpoint'.format(
+                        flags.weights,version,flags.niter, ens)
+
     if hvd.rank()==0:
         print("Loading model {}".format(model_name))
 
@@ -117,17 +122,17 @@ def undo_standardizing(flags,dataloaders):
         dataloaders['data'].part, dataloaders['data'].event = dataloaders['data'].revert_standardize(dataloaders['data'].reco[0], dataloaders['data'].reco[1],dataloaders['data'].reco[-1])
         dataloaders['data'].mask = dataloaders['data'].reco[-1]
 
-def plot_event(flags,dataloaders,reference_name,version):
+def plot_event(flags,dataloaders,reference_name,version, axes, ens):
     #Event level observables
 
     for feature in range(dataloaders['Rapgap'].event.shape[-1]):
         feed_dict = {
-            'Rapgap_unfolded': dataloaders['Rapgap'].event[:,feature],
+            f'Rapgap_unfolded{ens}': dataloaders['Rapgap'].event[:,feature],
             'Rapgap': dataloaders['Rapgap'].event[:,feature],
             'Djangoh': dataloaders['Djangoh'].event[:,feature],
         }
         weights = {
-            'Rapgap_unfolded':dataloaders['Rapgap'].weight*dataloaders['Rapgap'].unfolded_weights,
+            f'Rapgap_unfolded{ens}':dataloaders['Rapgap'].weight*dataloaders['Rapgap'].unfolded_weights,
             'Rapgap': dataloaders['Rapgap'].weight,
             'Djangoh': dataloaders['Djangoh'].weight,
         }
@@ -140,24 +145,24 @@ def plot_event(flags,dataloaders,reference_name,version):
                                    xlabel=utils.event_names[str(feature)],
                                    weights = weights,
                                    reference_name = reference_name,
-                                   label_loc='upper left',
-                                   )
-        fig.savefig('../plots/{}_event_{}.pdf'.format(version,feature))
+                                   label_loc='upper left', axes=axes[feature])
 
-def plot_jet(flags,dataloaders,reference_name,version):
+        fig.savefig('../plots/{}_event_{}_ens_{}.pdf'.format(version,feature,ens))
+
+def plot_jet(flags,dataloaders,reference_name,version, axes, ens):
     #Jet level observables
 
     #at least 1 jet with pT above minimum cut
 
     weights = {
-        'Rapgap_unfolded':(dataloaders['Rapgap'].weight*dataloaders['Rapgap'].unfolded_weights)[dataloaders['Rapgap'].jet[:,0] > 0],
+        f'Rapgap_unfolded{ens}':(dataloaders['Rapgap'].weight*dataloaders['Rapgap'].unfolded_weights)[dataloaders['Rapgap'].jet[:,0] > 0],
         'Rapgap': dataloaders['Rapgap'].weight[dataloaders['Rapgap'].jet[:,0] > 0],
         'Djangoh': dataloaders['Djangoh'].weight[dataloaders['Djangoh'].jet[:,0] > 0],
     }
 
 
     feed_dict = {
-        'Rapgap_unfolded': dataloaders['Rapgap'].jet[:,0][dataloaders['Rapgap'].jet[:,0] > 0],
+        f'Rapgap_unfolded{ens}': dataloaders['Rapgap'].jet[:,0][dataloaders['Rapgap'].jet[:,0] > 0],
         'Rapgap': dataloaders['Rapgap'].jet[:,0][dataloaders['Rapgap'].jet[:,0] > 0],
         'Djangoh': dataloaders['Djangoh'].jet[:,0][dataloaders['Djangoh'].jet[:,0] > 0],
     }
@@ -167,7 +172,7 @@ def plot_jet(flags,dataloaders,reference_name,version):
         weights['data'] = dataloaders['data'].weight[dataloaders['data'].jet[:,0] > 0]
 
                     
-    fig,ax = utils.HistRoutine(feed_dict,
+    fig, ax = utils.HistRoutine(feed_dict,
                                xlabel=r"Jet $p_{T}$ [GeV]",
                                weights = weights,
                                binning = np.geomspace(10,100,6),
@@ -175,11 +180,12 @@ def plot_jet(flags,dataloaders,reference_name,version):
                                logx=True,
                                reference_name = reference_name,
                                label_loc='upper left',
-                               )
-    fig.savefig('../plots/{}_jet_pt.pdf'.format(version))
+                               axes=axes[0])
+
+    fig.savefig('../plots/{}_jet_pt_ens_{}.pdf'.format(version, ens))
 
     feed_dict = {
-        'Rapgap_unfolded': dataloaders['Rapgap'].jet[:,1][dataloaders['Rapgap'].jet[:,0] > 0],
+        f'Rapgap_unfolded{ens}': dataloaders['Rapgap'].jet[:,1][dataloaders['Rapgap'].jet[:,0] > 0],
         'Rapgap': dataloaders['Rapgap'].jet[:,1][dataloaders['Rapgap'].jet[:,0] > 0],
         'Djangoh': dataloaders['Djangoh'].jet[:,1][dataloaders['Djangoh'].jet[:,0] > 0],
     }
@@ -194,9 +200,9 @@ def plot_jet(flags,dataloaders,reference_name,version):
                                weights = weights,
                                binning = np.linspace(-1,2.,7),
                                reference_name = reference_name,
-                               label_loc='upper left',
+                               label_loc='upper left', axes=axes[1]
                                )
-    fig.savefig('../plots/{}_jet_eta.pdf'.format(version))
+    fig.savefig('../plots/{}_jet_eta_ens_{}.pdf'.format(version, ens))
 
     def _get_deltaphi(jet,elec):
         delta_phi = np.abs(np.pi + jet[:,2] - elec[:,4])
@@ -204,7 +210,7 @@ def plot_jet(flags,dataloaders,reference_name,version):
         return delta_phi
     
     feed_dict = {
-        'Rapgap_unfolded': _get_deltaphi(dataloaders['Rapgap'].jet,dataloaders['Rapgap'].event)[dataloaders['Rapgap'].jet[:,0] > 0],
+        f'Rapgap_unfolded{ens}': _get_deltaphi(dataloaders['Rapgap'].jet,dataloaders['Rapgap'].event)[dataloaders['Rapgap'].jet[:,0] > 0],
         'Rapgap': _get_deltaphi(dataloaders['Rapgap'].jet,dataloaders['Rapgap'].event)[dataloaders['Rapgap'].jet[:,0] > 0],
         'Djangoh': _get_deltaphi(dataloaders['Djangoh'].jet,dataloaders['Djangoh'].event)[dataloaders['Djangoh'].jet[:,0] > 0],
     }
@@ -219,11 +225,11 @@ def plot_jet(flags,dataloaders,reference_name,version):
                                logx=True,
                                binning = np.linspace(0,1,8),
                                reference_name = reference_name,
-                               label_loc='upper left',
+                               label_loc='upper left', axes=axes[2]
                                )
 
     ax.set_ylim(1e-2,50)
-    fig.savefig('../plots/{}_jet_deltaphi.pdf'.format(version))
+    fig.savefig('../plots/{}_jet_deltaphi_ens_{}.pdf'.format(version, ens))
 
 
     def _get_qtQ(jet,elec):
@@ -231,7 +237,7 @@ def plot_jet(flags,dataloaders,reference_name,version):
         return qt/np.exp(elec[:,0]/2.)
     
     feed_dict = {
-        'Rapgap_unfolded': _get_qtQ(dataloaders['Rapgap'].jet,dataloaders['Rapgap'].event)[dataloaders['Rapgap'].jet[:,0] > 0],
+        f'Rapgap_unfolded{ens}': _get_qtQ(dataloaders['Rapgap'].jet,dataloaders['Rapgap'].event)[dataloaders['Rapgap'].jet[:,0] > 0],
         'Rapgap': _get_qtQ(dataloaders['Rapgap'].jet,dataloaders['Rapgap'].event)[dataloaders['Rapgap'].jet[:,0] > 0],
         'Djangoh': _get_qtQ(dataloaders['Djangoh'].jet,dataloaders['Djangoh'].event)[dataloaders['Djangoh'].jet[:,0] > 0],
     }
@@ -246,27 +252,26 @@ def plot_jet(flags,dataloaders,reference_name,version):
                                logx=True,
                                binning = np.geomspace(1e-2,1,8),
                                reference_name = reference_name,
-                               label_loc='upper left',
+                               label_loc='upper left', axes=axes[3]
                                )
 
     ax.set_ylim(1e-2,20)
-    fig.savefig('../plots/{}_jet_qtQ.pdf'.format(version))
-
+    fig.savefig('../plots/{}_jet_qtQ_ens_{}.pdf'.format(version, ens))
 
     
 
                                                                 
-def plot_particles(flags,dataloaders,reference_name,version,num_part):    
+def plot_particles(flags,dataloaders,reference_name,version,num_part, axes, ens):    
     #Particle level observables
     for feature in range(dataloaders['Rapgap'].part.shape[-1]):
         feed_dict = {
-            'Rapgap_unfolded': dataloaders['Rapgap'].part[:,feature],
+            f'Rapgap_unfolded{ens}': dataloaders['Rapgap'].part[:,feature],
             'Rapgap': dataloaders['Rapgap'].part[:,feature],
             'Djangoh': dataloaders['Djangoh'].part[:,feature],
         }
         
         weights = {
-            'Rapgap_unfolded':(dataloaders['Rapgap'].weight*dataloaders['Rapgap'].unfolded_weights).reshape(-1,1,1).repeat(num_part,1).reshape(-1)[dataloaders['Rapgap'].mask],
+            f'Rapgap_unfolded{ens}':(dataloaders['Rapgap'].weight*dataloaders['Rapgap'].unfolded_weights).reshape(-1,1,1).repeat(num_part,1).reshape(-1)[dataloaders['Rapgap'].mask],
             'Rapgap': dataloaders['Rapgap'].weight.reshape(-1,1,1).repeat(num_part,1).reshape(-1)[dataloaders['Rapgap'].mask],
             'Djangoh': dataloaders['Djangoh'].weight.reshape(-1,1,1).repeat(num_part,1).reshape(-1)[dataloaders['Djangoh'].mask],
         }
@@ -280,9 +285,9 @@ def plot_particles(flags,dataloaders,reference_name,version,num_part):
                                    xlabel=utils.particle_names[str(feature)],
                                    weights = weights,
                                    reference_name = reference_name,
-                                   label_loc='upper left',
+                                   label_loc='upper left', axes=axes[feature]
                                    )
-        fig.savefig('../plots/{}_part_{}.pdf'.format(version,feature))
+        fig.savefig('../plots/{}_part_{}_ens_{}.pdf'.format(version,feature,ens))
 
 
 def cluster_jets(dataloaders):
@@ -350,32 +355,76 @@ def main():
     utils.setup_gpus(hvd.local_rank())
     flags = parse_arguments()
     opt=utils.LoadJson(flags.config)
-    dataloaders = get_dataloaders(flags)
 
-    reference_name, version = get_version(flags,opt)
-    if flags.load:
-        raise ValueError("ERROR:NOT IMPLEMENTED")
-    else:        
-        weights  = load_model(flags,opt,version,dataloaders)
+    #Define figure and axis for overlay
+    jet_axes = []
+    for i in range(4): #plotting four
+        fig, gs = utils.SetGrid(ratio=True) 
+        ax0 = plt.subplot(gs[0])
+        ax1 = plt.subplot(gs[1], sharex = ax0)
+        jet_axes.append([ax0,ax1,fig])
+
+    event_axes = []
+    for i in range(5):
+        fig, gs = utils.SetGrid(ratio=True) 
+        ax0 = plt.subplot(gs[0])
+        ax1 = plt.subplot(gs[1], sharex = ax0)
+        event_axes.append([ax0,ax1,fig])
+
+    part_axes = []
+    for i in range(8):
+        fig, gs = utils.SetGrid(ratio=True) 
+        ax0 = plt.subplot(gs[0])
+        ax1 = plt.subplot(gs[1], sharex = ax0)
+        part_axes.append([ax0,ax1,fig])
+
+    # for feature in range(dataloaders['Rapgap'].event.shape[-1]):
+
+
+    ensemble_avg_weights = 0
+    for e in range(flags.n_ens):
+
+        dataloaders = get_dataloaders(flags)
+        reference_name, version = get_version(flags,opt)
+
+        if flags.load:
+            raise ValueError("ERROR:NOT IMPLEMENTED")
+        else:        
+            weights = load_model(flags, opt, version, dataloaders, e)
+            if hvd.rank()==0:
+                print(weights[:5], weights[-5:])
+
+        if e ==0:
+            ensemble_avg_weights = weights/flags.n_ens
+        else:
+            ensemble_avg_weights += weights/flags.n_ens
         
-    if hvd.rank()==0:
-        print("Done with network evaluation")
-    #Important to only undo the preprocessing after the weights are derived!
-    undo_standardizing(flags,dataloaders)
-    num_part = dataloaders['Rapgap'].part.shape[1]
+        if hvd.rank()==0:
+            print("Done with network evaluation")
 
-    jet = cluster_jets(dataloaders)
-    
-    gather_data(dataloaders)
-    
-    dataloaders['Rapgap'].unfolded_weights = weights
-    plot_jet(flags,dataloaders,reference_name,version)
-    plot_event(flags,dataloaders,reference_name,version)
-    plot_particles(flags,dataloaders,reference_name,version,num_part = num_part)
+        #Important to only undo the preprocessing after the weights are derived!
+        undo_standardizing(flags,dataloaders)
+        num_part = dataloaders['Rapgap'].part.shape[1]
+
+        jet = cluster_jets(dataloaders)
+        
+        gather_data(dataloaders)
+        
+        dataloaders['Rapgap'].unfolded_weights = weights 
+        #^see line 157,this is correct
+        plot_jet(flags,dataloaders,reference_name,version, jet_axes, e)
+        plot_event(flags,dataloaders,reference_name,
+                   version, axes=event_axes, ens=e)
+        plot_particles(flags,dataloaders,reference_name,version,
+                       num_part = num_part, axes=part_axes, ens=e)
+
+    #Plot averages
+    dataloaders['Rapgap'].unfolded_weights = ensemble_avg_weights 
+    plot_jet(flags,dataloaders,reference_name,version, jet_axes, 'Avg')
+    plot_event(flags,dataloaders,reference_name,
+               version, axes=event_axes, ens='Avg')
+    plot_particles(flags,dataloaders,reference_name,version,
+                   num_part = num_part, axes=part_axes, ens='Avg')
 
 if __name__ == '__main__':
     main()
-
-
-
-    
