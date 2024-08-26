@@ -205,22 +205,32 @@ def HistRoutine(feed_dict,
                 label_loc='best',
                 plot_ratio=True,
                 weights=None,
-                uncertainty=None):
+                uncertainty=None,
+                axes=None):
+
     assert reference_name in feed_dict.keys(), "ERROR: Don't know the reference distribution"
 
     ref_plot = {'histtype':'stepfilled','alpha':0.2}
-    other_plots = {'histtype':'step','linewidth':2}
-    fig,gs = SetGrid(ratio=plot_ratio) 
-    ax0 = plt.subplot(gs[0])
+    other_plots = {'histtype':'step','linewidth':2, 'alpha':0.6}
+
+    if axes is not None:
+        ax0 = axes[0]
+        fig = axes[-1]
+    else:
+        fig,gs = SetGrid(ratio=plot_ratio)
+        ax0 = plt.subplot(gs[0])
 
     if plot_ratio:
         plt.xticks(fontsize=0)
-        ax1 = plt.subplot(gs[1],sharex=ax0)
+        if axes is not None:
+            ax1 = axes[1]
+        else:
+            ax1 = plt.subplot(gs[1],sharex=ax0)
 
-    
+
     if binning is None:
         binning = np.linspace(np.quantile(feed_dict[reference_name],0.01),np.quantile(feed_dict[reference_name],0.99),50)
-        
+
     xaxis = [(binning[i] + binning[i+1])/2.0 for i in range(len(binning)-1)]
 
     if weights is not None:
@@ -229,16 +239,28 @@ def HistRoutine(feed_dict,
         reference_hist,_ = np.histogram(feed_dict[reference_name],bins=binning,density=True)
 
     maxy = 0    
+    ens0_flag = False
     for ip,plot in enumerate(feed_dict.keys()):
+
+
+        if '0' in plot:
+            ens0_flag = True
+
+        if not ens0_flag and (plot=='Rapgap' or plot=='Djangoh'):
+            continue
+
         plot_style = ref_plot if reference_name == plot else other_plots
         if weights is not None:
-            dist,_,_=ax0.hist(feed_dict[plot],bins=binning,label=plot,color=options.colors[plot],density=True,weights=weights[plot],**plot_style)
+            dist,_,_=ax0.hist(feed_dict[plot],bins=binning,
+                              label=plot,color=options.colors[plot],
+                              density=True,weights=weights[plot],
+                              **plot_style)
         else:
             dist,_,_=ax0.hist(feed_dict[plot],bins=binning,label=plot,color=options.colors[plot],density=True,**plot_style)
 
         if np.max(dist) > maxy:
             maxy = np.max(dist)
-            
+
         if plot_ratio:
             if reference_name!=plot:
                 ratio = np.ma.divide(dist,reference_hist).filled(0)
@@ -262,15 +284,17 @@ def HistRoutine(feed_dict,
         ax1.set_xscale('log')
 
     ax0.legend(loc=label_loc,fontsize=16,ncol=2)
+
     if plot_ratio:
         FormatFig(xlabel = "", ylabel = ylabel,ax0=ax0) 
-        plt.ylabel('Ratio to Data')
-        plt.axhline(y=1.0, color='r', linestyle='-',linewidth=1)
-        plt.ylim([0.5,1.5])
-        plt.xlabel(xlabel)
+        ax1.set_ylabel('Ratio to Data')
+        ax1.axhline(y=1.0, color='r', linestyle='-',linewidth=1)
+        ax1.set_ylim([0.5,1.5])
+        ax1.set_xlabel(xlabel)
+
     else:
         FormatFig(xlabel = xlabel, ylabel = ylabel,ax0=ax0) 
-        
+
     return fig,ax0
 
 
