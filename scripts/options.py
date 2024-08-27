@@ -22,13 +22,20 @@ colors = {
     'Sherpa3NLO':'#31a354',
     'Rapgap reco':'#7570b3',
     'Rapgap gen':'darkorange',
+
+    'Rapgap_unfolded0' : '#ef476f',
+    'Rapgap_unfolded1' : '#ffd166',
+    'Rapgap_unfolded2' : '#06d6a0',
+    'Rapgap_unfolded3' : '#118ab2',
+    'Rapgap_unfolded4' : '#073b4c',
+    'Rapgap_unfoldedAvg' : 'black',
 }
 
 
 markers = {
     'Djangoh':'P',
-    'Rapgap':'X',
-    'Rapgap_unfolded':'X',
+    'Rapgap':'.',
+    'Rapgap_unfolded':'.',
     'mc':'X',    
 
     'Pythia': '^',
@@ -44,6 +51,13 @@ markers = {
 
     'Rapgap reco':'X',
     'Rapgap gen':'o',
+
+    'Rapgap_unfolded0' : '.',
+    'Rapgap_unfolded1' : '.',
+    'Rapgap_unfolded2' : '.',
+    'Rapgap_unfolded3' : '.',
+    'Rapgap_unfolded4' : '.',
+    'Rapgap_unfoldedAvg' : 'o',
 }
 
 #Shift in x-axis for visualization
