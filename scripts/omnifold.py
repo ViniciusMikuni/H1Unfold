@@ -23,6 +23,7 @@ class Multifold():
                  nstrap=0,
                  version = 'Closure',
                  config_file='config_omnifold.json',
+                 # config_file='config_quick_test.json',
                  pretrain = False,
                  load_pretrain = False,
                  verbose=1,
@@ -111,6 +112,19 @@ class Multifold():
             if hvd.rank()==0:
                 print(f"RUNNING ENSEMBlE {e} / {self.n_ensemble} \n")
 
+            # Load pre-trained model weights in ensemble loop
+            if self.load_pretrain:
+                assert self.load_pretrain != (self.start > 0), \
+                "Pretrain cannot be set if start >= 1"
+                
+                if hvd.rank()==0:
+                    print("Loading pretrained weights for step 1")                
+
+                model_name = '{}/OmniFold_pretrained_step1/checkpoint'.format(self.weights_folder)
+                self.model1.load_weights(model_name).expect_partial()
+            # else:
+                # randomly assign weights
+
             self.RunModel(
                 np.concatenate((self.labels_mc[self.mc.pass_reco],
                                 self.labels_data[self.data.pass_reco])),
@@ -119,8 +133,9 @@ class Multifold():
                                 self.data.weight[self.data.pass_reco])),
                 i,e,self.model1,stepn=1,
                 NTRAIN = self.num_steps_reco*self.BATCH_SIZE,
-                cached = (i>self.start) & (e > 0)#after first training cache the training data
-                #FIME: cache is probably inefficient in ensemble loop...
+                # cached = (i>self.start) and (e > 0)
+                cached = False
+                # ^ after first training cache the training data
             )
 
             #Don't update weights where there's no reco events
@@ -130,10 +145,10 @@ class Multifold():
 
             ensemble_avg_weights += new_weights/self.n_ensemble  # running average
 
-            tf.keras.backend.clear_session()
+            tf.keras.backend.clear_session() # double check weights are reset, random initialization
             del new_weights
             gc.collect()
-            # self.CompileModel(self.lr,fixed=True)
+            self.CompileModel(self.lr,fixed=(i>0))
 
         # self.weights_pull = self.weights_push *new_weights
         self.weights_pull = self.weights_push *ensemble_avg_weights
@@ -148,12 +163,19 @@ class Multifold():
             if hvd.rank()==0:
                 print(f"RUNNING ENSEMBlE {e} / {self.n_ensemble} \n")
 
+            if self.load_pretrain:
+                if hvd.rank()==0:
+                    print("Loading pretrained weights for Step 2")                
+                model_name = '{}/OmniFold_pretrained_step2/checkpoint'.format(self.weights_folder)
+                self.model2.load_weights(model_name).expect_partial()
+
             self.RunModel(
                 np.concatenate((self.labels_mc, self.labels_gen)),
                 np.concatenate((self.mc.weight, self.mc.weight*self.weights_pull)),
                 i,e,self.model2,stepn=2,
                 NTRAIN = self.num_steps_gen*self.BATCH_SIZE,
-                cached = (i>self.start) & (e > 0) #after first training cache the training data
+                cached = False
+                # cached = (i>self.start) and (e > 0) #after first training cache the training data
             )
 
             new_weights=self.reweight(self.mc.gen,self.model2_ema)
@@ -163,9 +185,11 @@ class Multifold():
             tf.keras.backend.clear_session()
             del new_weights
             gc.collect()
+            self.CompileModel(self.lr,fixed=(i>0))
 
         # self.weights_push = new_weights
         self.weights_push = ensemble_avg_weights
+        np.save(f'{self.weights_folder}/step2_iter{i}_ensembleAvg_EventWeights.npy', ensemble_avg_weights)
 
 
     def RunModel(self,
@@ -212,6 +236,7 @@ class Multifold():
                 else:
                     model_name = '{}/OmniFold_{}_iter{}_ens{}_step{}/checkpoint'.format(
                         self.weights_folder,self.version,iteration,ensemble,stepn)
+
             callbacks.append(ModelCheckpoint(model_name,save_best_only=True,
                                              mode='auto',period=1,save_weights_only=True))
                     
@@ -248,7 +273,6 @@ class Multifold():
             if stepn ==1:
                 self.idx_1 = np.arange(label.shape[0])
                 np.random.shuffle(self.idx_1)
-
                 self.tf_data1 = tf.data.Dataset.from_tensor_slices(
                     {'inputs_particle_1':np.concatenate((self.mc.reco[0][self.mc.pass_reco], self.data.reco[0][self.data.pass_reco]))[self.idx_1],
                      'inputs_event_1':np.concatenate((self.mc.reco[1][self.mc.pass_reco], self.data.reco[1][self.data.pass_reco]))[self.idx_1],
@@ -256,6 +280,7 @@ class Multifold():
                      })
                 #del self.mc.reco, self.data.reco
                 #gc.collect()
+
             elif stepn ==2:
                 self.idx_2 = np.arange(label.shape[0])
                 np.random.shuffle(self.idx_2)
@@ -299,7 +324,6 @@ class Multifold():
             self.num_steps_reco = int(0.7*(self.mc.nmax + self.data.nmax))//hvd.size()//self.BATCH_SIZE
             self.num_steps_gen = 2*self.mc.nmax//hvd.size()//self.BATCH_SIZE
             if hvd.rank()==0:print(self.num_steps_reco,self.num_steps_gen)
-
 
         
         lr_schedule_body_reco = keras.optimizers.schedules.CosineDecay(
