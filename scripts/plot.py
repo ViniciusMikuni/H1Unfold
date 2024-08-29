@@ -391,6 +391,7 @@ def main():
             raise ValueError("ERROR:NOT IMPLEMENTED")
         else:        
             weights = load_model(flags, opt, version, dataloaders, e)
+            np.save(f"../weights/{version}_ens{e}_weights.npy",weights) #already re-weighted, L:109
             if hvd.rank()==0:
                 print(weights[:5], weights[-5:])
 
@@ -417,6 +418,7 @@ def main():
                    version, axes=event_axes, ens=e)
         plot_particles(flags,dataloaders,reference_name,version,
                        num_part = num_part, axes=part_axes, ens=e)
+
 
     #Plot averages
     dataloaders['Rapgap'].unfolded_weights = ensemble_avg_weights 
