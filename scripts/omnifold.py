@@ -87,7 +87,7 @@ class Multifold():
                     print("Loading pretrained weights")                
                 model_name = '{}/OmniFold_pretrained_step1/checkpoint'.format(self.weights_folder)
                 self.model1.load_weights(model_name).expect_partial()
-                model_name = '{}/OmniFold_pretrained_step1/checkpoint'.format(self.weights_folder)
+                model_name = '{}/OmniFold_pretrained_step2/checkpoint'.format(self.weights_folder)
                 self.model2.load_weights(model_name).expect_partial()
 
         self.CompileModel(self.lr)
