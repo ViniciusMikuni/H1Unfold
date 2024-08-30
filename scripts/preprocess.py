@@ -30,8 +30,8 @@ def preprocess(data):
                       delta_r,
                       p[:,:,3]],-1)*mask[:,:,None]
     
-    log_q = np.ma.log(e[:,0]).filled(0)
-    new_e = np.stack([log_q,
+    log_Q2 = np.ma.log(e[:,0]).filled(0)
+    new_e = np.stack([log_Q2,
                       e[:,1],
                       np.sqrt(e[:,2]**2 + e[:,3]**2)/np.sqrt(e[:,0]),
                       np.ma.arctanh(e[:,4]/np.sqrt(e[:,2]**2 + e[:,3]**2+ e[:,4]**2)).filled(0),

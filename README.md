@@ -51,6 +51,6 @@ To plot using multiple GPUs run:
 ```bash
 salloc -C gpu -q interactive  -t 40 -n 16 --ntasks-per-node=4 --gpus-per-task=1  -A m3246  --gpu-bind None
 module load tensorflow
-[pip install --uset fastjet] #Do it only once
+[pip install --user fastjet] #Do it only once
 srun  python plot.py --niter 5 --closure --load_pretrain --data_folder /global/cfs/cdirs/m3246/H1/h5/ --weights /global/cfs/cdirs/m3246/H1/weights/
 ```
