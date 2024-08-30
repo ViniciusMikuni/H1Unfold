@@ -143,7 +143,13 @@ def WriteText(xpos,ypos,text,ax0):
 def LoadJson(file_name,base_path='../JSON'):
     JSONPATH = os.path.join(base_path,file_name)
     return yaml.safe_load(open(JSONPATH))
-    
+
+def SaveJson(data,file_name,base_path='../JSON'):
+    JSONPATH = os.path.join(base_path,file_name)
+    with open(JSONPATH, 'w') as f:
+        json.dump(data, f, indent=4)
+
+
 
 def make_error_boxes(ax, xdata, ydata, xerror, yerror, facecolor='r',
                      edgecolor='None', alpha=0.5):

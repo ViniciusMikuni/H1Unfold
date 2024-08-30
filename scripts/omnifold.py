@@ -92,7 +92,7 @@ class Multifold():
             if hvd.rank()==0:print("ITERATION: {}".format(i + 1))
             self.RunStep1(i)        
             self.RunStep2(i)
-            self.CompileModel(self.lr,fixed=True)
+            self.CompileModel(self.lr,fixed=False)
             
     def RunStep1(self,i):
         '''Data versus reco MC reweighting'''
