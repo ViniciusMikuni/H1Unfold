@@ -28,20 +28,20 @@ colors = {
 
 
 event_names = {
-    '0': 'log(Q)',
+    '0': r'$log(Q^2)$',
     '1': 'y',
     '2': r'$e_{pT}$/Q',
     '3': r'$e_{\eta}$',
     '4': r'$e_{\phi}$',
     }
 particle_names = {
-    '0': r'$\eta_e - \eta_p$',
-    '1': r'$\phi_e - \phi_p - \pi$',
+    '0': r'$\eta_p - \eta_e$',
+    '1': r'$\phi_p - \phi_e - \pi$',
     '2': r'$log(p_{T})$',
     '3': r'$log(p_{T}/Q)$',
     '4': 'log(E/Q)',
     '5': 'log(E)',
-    '6':r'$\sqrt{(\eta_e - \eta_p)^2 + (\phi_e - \phi_p)^2}$',
+    '6':r'$\sqrt{(\eta_p - \eta_e)^2 + (\phi_p - \phi_e)^2}$',
     '7': 'Charge',
     }
 
@@ -143,7 +143,13 @@ def WriteText(xpos,ypos,text,ax0):
 def LoadJson(file_name,base_path='../JSON'):
     JSONPATH = os.path.join(base_path,file_name)
     return yaml.safe_load(open(JSONPATH))
-    
+
+def SaveJson(data,file_name,base_path='../JSON'):
+    JSONPATH = os.path.join(base_path,file_name)
+    with open(JSONPATH, 'w') as f:
+        json.dump(data, f, indent=4)
+
+
 
 def make_error_boxes(ax, xdata, ydata, xerror, yerror, facecolor='r',
                      edgecolor='None', alpha=0.5):
