@@ -27,8 +27,8 @@ colors = {
     'Rapgap_unfolded1' : '#ffd166',
     'Rapgap_unfolded2' : '#06d6a0',
     'Rapgap_unfolded3' : '#118ab2',
-    'Rapgap_unfolded4' : '#CC8899',
-    'Rapgap_unfoldedAvg' : 'black',
+    'Rapgap_unfolded4' : '#7E5EDB',
+    'Rapgap_unfoldedAvg' : 'grey',
 }
 
 
@@ -57,7 +57,7 @@ markers = {
     'Rapgap_unfolded2' : '.',
     'Rapgap_unfolded3' : '.',
     'Rapgap_unfolded4' : '.',
-    'Rapgap_unfoldedAvg' : 'o',
+    'Rapgap_unfoldedAvg' : ',',
 }
 
 #Shift in x-axis for visualization

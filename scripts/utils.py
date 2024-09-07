@@ -212,7 +212,7 @@ def HistRoutine(feed_dict,
                 plot_ratio=True,
                 weights=None,
                 uncertainty=None,
-                axes=None):
+                axes=None, save_str=""):
 
     assert reference_name in feed_dict.keys(), "ERROR: Don't know the reference distribution"
 
@@ -272,13 +272,22 @@ def HistRoutine(feed_dict,
                 ratio = np.ma.divide(dist,reference_hist).filled(0)
                 ax1.plot(xaxis,ratio,color=options.colors[plot],
                          marker=options.markers[plot],ms=10,
-                         lw=0,markerfacecolor='none',markeredgewidth=3)
+                         lw=0,markerfacecolor='none',markeredgewidth=3,alpha=0.6)
                 if uncertainty is not None:
                     for ibin in range(len(binning)-1):
                         xup = binning[ibin+1]
                         xlow = binning[ibin]
                         ax1.fill_between(np.array([xlow,xup]),
                                          uncertainty[ibin],-uncertainty[ibin], alpha=0.3,color='k')    
+
+        plot_vals = np.array([xaxis, dist, ratio])
+        print(f'saving to: ../plots/{plot}{save_str}_plot_vals.npy')
+        np.save(f'../plots/{plot}{save_str}_plot_vals.npy',plot_vals)
+        # plot_dict = {} #dictionary for storing histogram, ratio, and x-values
+        # plot_dict['xvals'] = xaxis
+        # plot_dict['top_plot'] = dist
+        # plot_dict['ratio_plot'] = ratio
+
     if logy:
         ax0.set_yscale('log')
         ax0.set_ylim(1e-5,10*maxy)
@@ -289,7 +298,7 @@ def HistRoutine(feed_dict,
         #ax0.set_xscale('log')
         ax1.set_xscale('log')
 
-    ax0.legend(loc=label_loc,fontsize=16,ncol=2)
+    ax0.legend(loc=label_loc,fontsize=14,ncol=2)
 
     if plot_ratio:
         FormatFig(xlabel = "", ylabel = ylabel,ax0=ax0) 

@@ -32,7 +32,7 @@ def parse_arguments():
     parser.add_argument('--config', default='config_general.json', help='Basic config file containing general options')
     parser.add_argument('--plot_folder', default='../plots', help='Folder to store plots')
     parser.add_argument('--reco', action='store_true', default=False,help='Plot reco level  results')
-    parser.add_argument('--load', action='store_true', default=False,help='Load unfolded weights')
+    parser.add_argument('--load', action='store_true', default=False,help='Load unfolded weights (npy files in weights dir)')
     parser.add_argument('--closure', action='store_true', default=False,help='Plot closure results')
     parser.add_argument('--niter', type=int, default=0, help='Omnifold iteration to load')
     parser.add_argument('--n_ens', type=int, default=0, help='which ensemble to load')
@@ -141,11 +141,12 @@ def plot_event(flags,dataloaders,reference_name,version, axes, ens):
             feed_dict['data'] = dataloaders['data'].event[:,feature]
             weights['data'] = dataloaders['data'].weight
             
+        save_str = f"event{feature}_ens{ens}"
         fig,ax = utils.HistRoutine(feed_dict,
                                    xlabel=utils.event_names[str(feature)],
                                    weights = weights,
                                    reference_name = reference_name,
-                                   label_loc='upper left', axes=axes[feature])
+                                   label_loc='upper left', axes=axes[feature], save_str=save_str)
 
         fig.savefig('../plots/{}_event_{}_ens_{}.pdf'.format(version,feature,ens))
 
@@ -172,6 +173,7 @@ def plot_jet(flags,dataloaders,reference_name,version, axes, ens):
         weights['data'] = dataloaders['data'].weight[dataloaders['data'].jet[:,0] > 0]
 
                     
+    save_str = f"jet_pT_ens{ens}"
     fig, ax = utils.HistRoutine(feed_dict,
                                xlabel=r"Jet $p_{T}$ [GeV]",
                                weights = weights,
@@ -180,7 +182,7 @@ def plot_jet(flags,dataloaders,reference_name,version, axes, ens):
                                logx=True,
                                reference_name = reference_name,
                                label_loc='upper left',
-                               axes=axes[0])
+                               axes=axes[0], save_str=save_str)
 
     fig.savefig('../plots/{}_jet_pt_ens_{}.pdf'.format(version, ens))
 
@@ -195,12 +197,13 @@ def plot_jet(flags,dataloaders,reference_name,version, axes, ens):
         weights['data'] = dataloaders['data'].weight[dataloaders['data'].jet[:,0] > 0]
 
                     
+    save_str = f"jet_eta_ens{ens}"
     fig,ax = utils.HistRoutine(feed_dict,
                                xlabel=r"Jet $\eta$ [GeV]",
                                weights = weights,
                                binning = np.linspace(-1,2.,7),
                                reference_name = reference_name,
-                               label_loc='upper left', axes=axes[1]
+                               label_loc='upper left', axes=axes[1], save_str=save_str
                                )
     fig.savefig('../plots/{}_jet_eta_ens_{}.pdf'.format(version, ens))
 
@@ -218,6 +221,7 @@ def plot_jet(flags,dataloaders,reference_name,version, axes, ens):
     if flags.reco:
         feed_dict['data'] = _get_deltaphi(dataloaders['data'].jet,dataloaders['data'].event)[dataloaders['data'].jet[:,0] > 0]
                     
+    save_str = f"jet_phi_ens{ens}"
     fig,ax = utils.HistRoutine(feed_dict,
                                xlabel=r"$\Delta\phi^{jet}$ [rad]",
                                weights = weights,
@@ -225,7 +229,7 @@ def plot_jet(flags,dataloaders,reference_name,version, axes, ens):
                                logx=True,
                                binning = np.linspace(0,1,8),
                                reference_name = reference_name,
-                               label_loc='upper left', axes=axes[2]
+                               label_loc='upper left', axes=axes[2], save_str=save_str
                                )
 
     ax.set_ylim(1e-2,50)
@@ -245,6 +249,7 @@ def plot_jet(flags,dataloaders,reference_name,version, axes, ens):
     if flags.reco:
         feed_dict['data'] = _get_qtQ(dataloaders['data'].jet,dataloaders['data'].event)[dataloaders['data'].jet[:,0] > 0]
                     
+    save_str = f"jet_qT_ens{ens}"
     fig,ax = utils.HistRoutine(feed_dict,
                                xlabel=r"$q_{T}/Q$",
                                weights = weights,
@@ -252,7 +257,7 @@ def plot_jet(flags,dataloaders,reference_name,version, axes, ens):
                                logx=True,
                                binning = np.geomspace(1e-2,1,8),
                                reference_name = reference_name,
-                               label_loc='upper left', axes=axes[3]
+                               label_loc='upper left', axes=axes[3], save_str=save_str
                                )
 
     ax.set_ylim(1e-2,20)
@@ -281,13 +286,79 @@ def plot_particles(flags,dataloaders,reference_name,version,num_part, axes, ens)
             weights['data'] = dataloaders['data'].weight.reshape(-1,1,1).repeat(num_part,1).reshape(-1)[dataloaders['data'].mask]
                 
 
+        save_str = f"particle{feature}_ens{ens}"
         fig,ax = utils.HistRoutine(feed_dict,
                                    xlabel=utils.particle_names[str(feature)],
                                    weights = weights,
                                    reference_name = reference_name,
-                                   label_loc='upper left', axes=axes[feature]
+                                   label_loc='upper left', axes=axes[feature], save_str=save_str
                                    )
         fig.savefig('../plots/{}_part_{}_ens_{}.pdf'.format(version,feature,ens))
+
+def plot_stdv(reference_name, plot_type, axes_list):
+
+
+    for index, (ax_top, ax_ratio, _) in enumerate(axes_list):
+        if not ax_top.patches or not ax_ratio.patches:
+            print(f"No histograms found in Axis {index + 1}. Skipping this axis.")
+            continue
+        
+        # Calculate the number of bins assuming the first histogram spans all its patches
+        num_histograms = 5  # We know there are 5 histograms per axis
+        num_bins = len(ax_top.patches) // num_histograms
+        if num_bins == 0:
+            print(f"No bins detected in the histograms on Axis {index + 1}. Check the plot configuration.")
+            continue
+
+        # Prepare to collect heights for the standard deviation calculation
+        hist_heights_top = [[] for _ in range(num_histograms)]
+        hist_heights_ratio = [[] for _ in range(num_histograms)]
+
+        # Collect all heights for each histogram separately
+        for i, patch in enumerate(ax_top.patches):
+            height = patch.get_height()
+            histogram_index = i // num_bins
+            hist_heights_top[histogram_index].append(height)
+
+        for i, patch in enumerate(ax_ratio.patches):
+            height = patch.get_height()
+            histogram_index = i // num_bins
+            hist_heights_ratio[histogram_index].append(height)
+
+        # Calculate bin centers once per histogram
+        bin_centers_top = [patch.get_x() + patch.get_width() / 2 for patch in ax_top.patches[:num_bins]]
+        bin_centers_ratio = [patch.get_x() + patch.get_width() / 2 for patch in ax_ratio.patches[:num_bins]]
+
+        # Calculate standard deviations for each histogram
+        std_devs_top = [np.std(heights) for heights in hist_heights_top]
+        std_devs_ratio = [np.std(heights) for heights in hist_heights_ratio]
+
+        np.save(f"../plots/standard_deviations_{plot_type}{index}.npy",std_devs_top)
+        np.save(f"../plots/standard_deviations_ratio_{plot_type}{index}.npy",std_devs_ratio)
+
+        # Plot the standard deviations for each histogram on separate figures for top axes
+        for i, std in enumerate(std_devs_top):
+            plt.figure()
+            plt.scatter(bin_centers_top, std, label=f'Std Dev of Histogram {i+1} on Top Axis {index+1}')
+            plt.title(f'Standard Deviation Across Histogram {i+1} on Top Axis {index+1}')
+            plt.xlabel('Bin Center')
+            plt.ylabel('Standard Deviation')
+            plt.legend()
+            plt.show()
+            plt.savefig(f"../plots/standard_dev_plot_{plot_type}{i}.pdf")
+
+        # Plot the standard deviations for each histogram on separate figures for ratio axes
+        for i, std in enumerate(std_devs_ratio):
+            plt.figure()
+            plt.scatter(bin_centers_ratio, std, label=f'Std Dev of Histogram {i+1} on Ratio Axis {index+1}')
+            plt.title(f'Standard Deviation Across Histogram {i+1} on Ratio Axis {index+1}')
+            plt.xlabel('Bin Center')
+            plt.ylabel('Standard Deviation')
+            plt.legend()
+            plt.show()
+            plt.savefig(f"../plots/standard_dev_ratio_{plot_type}{i}.pdf")
+
+
 
 
 def cluster_jets(dataloaders):
@@ -380,7 +451,6 @@ def main():
 
     # for feature in range(dataloaders['Rapgap'].event.shape[-1]):
 
-
     ensemble_avg_weights = 0
     for e in range(flags.n_ens):
 
@@ -388,12 +458,14 @@ def main():
         reference_name, version = get_version(flags,opt)
 
         if flags.load:
-            raise ValueError("ERROR:NOT IMPLEMENTED")
+            # raise ValueError("ERROR:NOT IMPLEMENTED")
+            print("\n--- Loading .npy weights from ../weights/ ---\n")
+            weights = np.load(f"../weights/{version}_ens{e}_weights.npy")
         else:        
             weights = load_model(flags, opt, version, dataloaders, e)
             np.save(f"../weights/{version}_ens{e}_weights.npy",weights) #already re-weighted, L:109
-            if hvd.rank()==0:
-                print(weights[:5], weights[-5:])
+        if hvd.rank()==0:
+            print(weights[:5], weights[-5:])
 
         if e ==0:
             ensemble_avg_weights = weights/flags.n_ens
@@ -412,7 +484,8 @@ def main():
         gather_data(dataloaders)
         
         dataloaders['Rapgap'].unfolded_weights = weights 
-        #^see line 157,this is correct
+        #^see line 157, don't need to spec. ensemble
+
         plot_jet(flags,dataloaders,reference_name,version, jet_axes, e)
         plot_event(flags,dataloaders,reference_name,
                    version, axes=event_axes, ens=e)
@@ -427,6 +500,8 @@ def main():
                version, axes=event_axes, ens='Avg')
     plot_particles(flags,dataloaders,reference_name,version,
                    num_part = num_part, axes=part_axes, ens='Avg')
+
+    # plot_stdv(reference_name, 'jets', jet_axes)
 
 if __name__ == '__main__':
     main()
