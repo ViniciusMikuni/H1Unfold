@@ -263,6 +263,38 @@ def plot_jet(flags,dataloaders,reference_name,version, axes, ens):
     ax.set_ylim(1e-2,20)
     fig.savefig('../plots/{}_jet_qtQ_ens_{}.pdf'.format(version, ens))
 
+    
+
+                                                                
+def plot_particles(flags,dataloaders,reference_name,version,num_part, axes, ens):    
+    #Particle level observables
+    for feature in range(dataloaders['Rapgap'].part.shape[-1]):
+        feed_dict = {
+            f'Rapgap_unfolded{ens}': dataloaders['Rapgap'].part[:,feature],
+            'Rapgap': dataloaders['Rapgap'].part[:,feature],
+            'Djangoh': dataloaders['Djangoh'].part[:,feature],
+        }
+        
+        weights = {
+            f'Rapgap_unfolded{ens}':(dataloaders['Rapgap'].weight*dataloaders['Rapgap'].unfolded_weights).reshape(-1,1,1).repeat(num_part,1).reshape(-1)[dataloaders['Rapgap'].mask],
+            'Rapgap': dataloaders['Rapgap'].weight.reshape(-1,1,1).repeat(num_part,1).reshape(-1)[dataloaders['Rapgap'].mask],
+            'Djangoh': dataloaders['Djangoh'].weight.reshape(-1,1,1).repeat(num_part,1).reshape(-1)[dataloaders['Djangoh'].mask],
+        }
+        
+        if flags.reco:
+            feed_dict['data'] = dataloaders['data'].part[:,feature]
+            weights['data'] = dataloaders['data'].weight.reshape(-1,1,1).repeat(num_part,1).reshape(-1)[dataloaders['data'].mask]
+                
+
+        save_str = f"particle{feature}_ens{ens}"
+        fig,ax = utils.HistRoutine(feed_dict,
+                                   xlabel=utils.particle_names[str(feature)],
+                                   weights = weights,
+                                   reference_name = reference_name,
+                                   label_loc='upper left', axes=axes[feature], save_str=save_str
+                                   )
+        fig.savefig('../plots/{}_part_{}_ens_{}.pdf'.format(version,feature,ens))
+
 
 def cluster_jets(dataloaders):
     import fastjet
