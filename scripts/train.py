@@ -28,6 +28,7 @@ if __name__ == "__main__":
     parser.add_argument('--data_folder', default='/global/cfs/cdirs/m3246/vmikuni/H1v2/h5/', help='Folder containing data and MC files')
     parser.add_argument('--config', default='config_general.json', help='Basic config file containing general options')
     parser.add_argument('--config_omnifold', default='config_omnifold.json', help='Basic config file containing general options')
+    # parser.add_argument('--config_omnifold', default='config_quick_test.json', help='Basic config file containing general options')
     parser.add_argument('--closure', action='store_true', default=False,help='Train omnifold for a closure test using simulation')
     parser.add_argument('--pretrain', action='store_true', default=False,help='Pretrain the model on step 1 rapgap vs djangoh')
     parser.add_argument('--load_pretrain', action='store_true', default=False,help='Load pretrained model instead of starting from scratch')

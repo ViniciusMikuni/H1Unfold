@@ -18,12 +18,24 @@ def label_smoothing(y_true,alpha=0):
     new_label = y_true*(1-alpha) + (1-y_true)*alpha
     return new_label
 
+
+def assign_random_weights(model):
+
+    for layer in model.layers:
+        if isinstance(layer, tf.keras.layers.Layer) and layer.weights:
+            for weight in layer.weights:
+
+                weight_shape = weight.shape 
+                random_weights = tf.random.normal(weight_shape)
+
+                layer.set_weights([random_weights if w.shape == random_weights.shape else w 
+                                   for w in layer.get_weights()])
+
 class Multifold():
     def __init__(self,
                  nstrap=0,
                  version = 'Closure',
                  config_file='config_omnifold.json',
-                 # config_file='config_quick_test.json',
                  pretrain = False,
                  load_pretrain = False,
                  verbose=1,
@@ -122,8 +134,12 @@ class Multifold():
 
                 model_name = '{}/OmniFold_pretrained_step1/checkpoint'.format(self.weights_folder)
                 self.model1.load_weights(model_name).expect_partial()
-            # else:
-                # randomly assign weights
+
+            # Assign Random weights, if not loading pre-trained weights
+            else:
+                if hvd.rank()==0:
+                    print("Randomly Assigning Random weights for step 1")
+                assign_random_weights(self.model1)
 
             self.RunModel(
                 np.concatenate((self.labels_mc[self.mc.pass_reco],
@@ -168,6 +184,11 @@ class Multifold():
                     print("Loading pretrained weights for Step 2")                
                 model_name = '{}/OmniFold_pretrained_step2/checkpoint'.format(self.weights_folder)
                 self.model2.load_weights(model_name).expect_partial()
+
+            else:
+                if hvd.rank()==0:
+                    print("Randomly Assigning Random weights for step 2")
+                assign_random_weights(self.model2)
 
             self.RunModel(
                 np.concatenate((self.labels_mc, self.labels_gen)),

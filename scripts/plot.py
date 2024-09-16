@@ -141,7 +141,7 @@ def plot_event(flags,dataloaders,reference_name,version, axes, ens):
             feed_dict['data'] = dataloaders['data'].event[:,feature]
             weights['data'] = dataloaders['data'].weight
             
-        save_str = f"event{feature}_ens{ens}"
+        save_str = f"_{version}_event{feature}_ens{ens}"
         fig,ax = utils.HistRoutine(feed_dict,
                                    xlabel=utils.event_names[str(feature)],
                                    weights = weights,
@@ -173,7 +173,7 @@ def plot_jet(flags,dataloaders,reference_name,version, axes, ens):
         weights['data'] = dataloaders['data'].weight[dataloaders['data'].jet[:,0] > 0]
 
                     
-    save_str = f"jet_pT_ens{ens}"
+    save_str = f"_{version}_jet_pT_ens{ens}"
     fig, ax = utils.HistRoutine(feed_dict,
                                xlabel=r"Jet $p_{T}$ [GeV]",
                                weights = weights,
@@ -197,7 +197,7 @@ def plot_jet(flags,dataloaders,reference_name,version, axes, ens):
         weights['data'] = dataloaders['data'].weight[dataloaders['data'].jet[:,0] > 0]
 
                     
-    save_str = f"jet_eta_ens{ens}"
+    save_str = f"_{version}_jet_eta_ens{ens}"
     fig,ax = utils.HistRoutine(feed_dict,
                                xlabel=r"Jet $\eta$ [GeV]",
                                weights = weights,
@@ -221,7 +221,7 @@ def plot_jet(flags,dataloaders,reference_name,version, axes, ens):
     if flags.reco:
         feed_dict['data'] = _get_deltaphi(dataloaders['data'].jet,dataloaders['data'].event)[dataloaders['data'].jet[:,0] > 0]
                     
-    save_str = f"jet_phi_ens{ens}"
+    save_str = f"_{version}_jet_phi_ens{ens}"
     fig,ax = utils.HistRoutine(feed_dict,
                                xlabel=r"$\Delta\phi^{jet}$ [rad]",
                                weights = weights,
@@ -249,7 +249,7 @@ def plot_jet(flags,dataloaders,reference_name,version, axes, ens):
     if flags.reco:
         feed_dict['data'] = _get_qtQ(dataloaders['data'].jet,dataloaders['data'].event)[dataloaders['data'].jet[:,0] > 0]
                     
-    save_str = f"jet_qT_ens{ens}"
+    save_str = f"_{version}_jet_qT_ens{ens}"
     fig,ax = utils.HistRoutine(feed_dict,
                                xlabel=r"$q_{T}/Q$",
                                weights = weights,
@@ -286,7 +286,7 @@ def plot_particles(flags,dataloaders,reference_name,version,num_part, axes, ens)
             weights['data'] = dataloaders['data'].weight.reshape(-1,1,1).repeat(num_part,1).reshape(-1)[dataloaders['data'].mask]
                 
 
-        save_str = f"particle{feature}_ens{ens}"
+        save_str = f"_{version}_particle{feature}_ens{ens}"
         fig,ax = utils.HistRoutine(feed_dict,
                                    xlabel=utils.particle_names[str(feature)],
                                    weights = weights,
@@ -294,7 +294,6 @@ def plot_particles(flags,dataloaders,reference_name,version,num_part, axes, ens)
                                    label_loc='upper left', axes=axes[feature], save_str=save_str
                                    )
         fig.savefig('../plots/{}_part_{}_ens_{}.pdf'.format(version,feature,ens))
-
 
 def cluster_jets(dataloaders):
     import fastjet
