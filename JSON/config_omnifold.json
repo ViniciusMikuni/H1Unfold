@@ -5,7 +5,7 @@
     'NEVT':5,
     'NFEAT':8,
     'BATCH_SIZE':256,
-    'EPOCHS': 10,
+    'EPOCHS': 20,
     'NPATIENCE': 3,
     'NHEADS':4,
     'NTRANSF':4,

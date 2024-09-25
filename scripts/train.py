@@ -32,6 +32,7 @@ if __name__ == "__main__":
     parser.add_argument('--closure', action='store_true', default=False,help='Train omnifold for a closure test using simulation')
     parser.add_argument('--pretrain', action='store_true', default=False,help='Pretrain the model on step 1 rapgap vs djangoh')
     parser.add_argument('--load_pretrain', action='store_true', default=False,help='Load pretrained model instead of starting from scratch')
+    parser.add_argument('--fine_tune', action='store_true', default=False,help='Load pretrained model, but fine-tune the HEAD component')
     parser.add_argument('--nstrap', type=int,default=0, help='Unique id for bootstrapping')
     parser.add_argument('--start', type=int,default=0, help='Which omnifold iteration to start with')
     parser.add_argument('--verbose', action='store_true', default=False,help='Display additional information during training')
@@ -83,6 +84,7 @@ if __name__ == "__main__":
         start = flags.start,
         pretrain = flags.pretrain,
         load_pretrain = flags.load_pretrain,
+        fine_tune = flags.fine_tune,
         verbose = flags.verbose,        
     )
 

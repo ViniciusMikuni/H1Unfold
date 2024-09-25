@@ -49,6 +49,7 @@ class Multifold():
                  config_file='config_omnifold.json',
                  pretrain = False,
                  load_pretrain = False,
+                 fine_tune = False,
                  verbose=1,
                  start = 0,
                  ):
@@ -68,11 +69,15 @@ class Multifold():
         self.nstrap=nstrap
         self.pretrain = pretrain
         self.load_pretrain = load_pretrain        
+        self.fine_tune = fine_tune        
         
         if self.pretrain:
             self.niter = 1 #Skip iterative procedure when pretraining the model
         if self.load_pretrain:
             self.version += '_pretrained'
+            self.lr_factor = 5.
+        if self.fine_tune:
+            self.version += '_finetuned'
             self.lr_factor = 5.
         else:
             self.lr_factor = 1.
@@ -88,6 +93,9 @@ class Multifold():
             self.weights_folder = '../weights_strap'
         if not os.path.exists(self.weights_folder):
             os.makedirs(self.weights_folder)
+
+        self.pre_train_name1 = '{}/OmniFold_pretrained_step1/checkpoint'.format(self.weights_folder)
+        self.pre_train_name2 = '{}/OmniFold_pretrained_step2/checkpoint'.format(self.weights_folder)
             
     def Unfold(self):
         self.BATCH_SIZE=self.opt['BATCH_SIZE']
@@ -99,22 +107,25 @@ class Multifold():
             if hvd.rank()==0:
                 print("Loading step 2 weights from iteration {}".format(self.start-1))
 
-            # model_name = '{}/OmniFold_{}_iter{}_step2/checkpoint'.format(self.weights_folder,self.version,self.start-1)
-            model_name = '{}/OmniFold_{}_iter{}_step1/checkpoint'.format(self.weights_folder,self.version,self.start-1)
-            self.model2.load_weights(model_name).expect_partial()
-            self.weights_push = self.reweight(self.mc.gen,self.model2_ema,batch_size=1000)
-            #Also load model 1 to have a better starting point
+            # Load step1 starting point
             model_name = '{}/OmniFold_{}_iter{}_step1/checkpoint'.format(self.weights_folder,self.version,self.start-1)
             self.model1.load_weights(model_name).expect_partial()
+
+            #Also load step1 starting point for model2
+            # model_name = '{}/OmniFold_{}_iter{}_step2/checkpoint'.format(self.weights_folder,self.version,self.start-1)
+            self.model2.load_weights(model_name).expect_partial()
+
+            self.weights_push = self.reweight(self.mc.gen,self.model2_ema,batch_size=1000)
+
         else:
             self.weights_push = np.ones(self.mc.weight.shape[0])
             if self.load_pretrain:
                 if hvd.rank()==0:
-                    print("Loading pretrained weights")                
-                model_name = '{}/OmniFold_pretrained_step1/checkpoint'.format(self.weights_folder)
-                self.model1.load_weights(model_name).expect_partial()
-                # model_name = '{}/OmniFold_pretrained_step2/checkpoint'.format(self.weights_folder)
-                self.model2.load_weights(model_name).expect_partial()
+                    print(f"Loading pretrained weights from {self.pre_train_name1}")                
+                self.model1.load_weights(self.pre_train_name1).expect_partial()
+                self.model2.load_weights(self.pre_train_name1).expect_partial()
+                # model2 loads pre_train1 b/c closure is often run, 
+                # and pre-train/closure use same rapgap + django for step 2
 
         self.CompileModel(self.lr)
 
@@ -147,13 +158,17 @@ class Multifold():
                 "Pretrain cannot be set if start >= 1"
 
                 if hvd.rank()==0:
-                    print("Loading pretrained weights for step 1")                
+                    print(f"Loading pretrained weights for Step 1 from {self.pre_train_name1}")                
+                self.model1.load_weights(self.pre_train_name1).expect_partial()
 
-                model_name = '{}/OmniFold_pretrained_step1/checkpoint'.format(self.weights_folder)
-                self.model1.load_weights(model_name).expect_partial()
+            elif self.fine_tune:
+                if hvd.rank()==0:
+                    print(f"Loading pretrained weights for Step 1 from {self.pre_train_name1}")                
+                    print(f"And resetting Classifier HEAD")
+                self.model1.load_weights(self.pre_train_name1).expect_partial()
+                reset_weights(self.model1.head)
 
-            # Assign Random weights, if not loading pre-trained weights
-            else:
+            else: # from scratch, reset weights
                 if hvd.rank()==0:
                     print("Resetting Weights")
                 reset_weights(self.model1)
@@ -199,9 +214,17 @@ class Multifold():
 
             if self.load_pretrain:
                 if hvd.rank()==0:
-                    print("Loading pretrained weights for Step 2")                
-                model_name = '{}/OmniFold_pretrained_step1/checkpoint'.format(self.weights_folder)
-                self.model2.load_weights(model_name).expect_partial()
+                    print(f"Loading pretrained weights for Step 2 from {self.pre_train_name1}")                
+                self.model2.load_weights(self.pre_train_name1).expect_partial()
+                # model2 loads pre_train1 b/c closure is often run, 
+                # and pre-train/closure use same rapgap + django for step 2
+
+            if self.fine_tune:
+                if hvd.rank()==0:
+                    print(f"Loading pretrained weights for Step 2 from {self.pre_train_name1}")                
+                    print(f"And resetting Classifier HEAD")
+                self.model2.load_weights(self.pre_train_name1).expect_partial()
+                reset_weights(self.model2.head)
 
             else:
                 if hvd.rank()==0:
