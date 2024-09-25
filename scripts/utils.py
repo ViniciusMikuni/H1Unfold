@@ -13,6 +13,16 @@ import tensorflow as tf
 line_style = {
     'Baseline':'dotted',
     'Pre-trained':'-',
+    'Baseline_Ens0':'dotted',
+    'Baseline_Ens1':'dotted',
+    'Baseline_Ens2':'dotted',
+    'Baseline_Ens3':'dotted',
+    'Baseline_Ens4':'dotted',
+    'Pre-trained_Ens0':'-',
+    'Pre-trained_Ens1':'-',
+    'Pre-trained_Ens2':'-',
+    'Pre-trained_Ens3':'-',
+    'Pre-trained_Ens4':'-',
     'data':'dotted',
     'Rapgap reco':'-',
     'Rapgap gen':'-',
@@ -21,6 +31,16 @@ line_style = {
 colors = {
     'Baseline':'black',
     'Pre-trained':'black',    
+    'Baseline_Ens0':'#0000FF',
+    'Baseline_Ens1':'#0040DF',
+    'Baseline_Ens2':'#0080BF',
+    'Baseline_Ens3':'#00BF9F',
+    'Baseline_Ens4':'#00FF80',
+    'Pre-trained_Ens0':'#FFCC00',
+    'Pre-trained_Ens1':'#FF9900',
+    'Pre-trained_Ens2':'#FF6600',
+    'Pre-trained_Ens3':'#FF3300',
+    'Pre-trained_Ens4':'#FF0000',
     'data':'black',
     'Rapgap reco':'#7570b3',
     'Rapgap gen':'darkorange',
@@ -169,15 +189,23 @@ def make_error_boxes(ax, xdata, ydata, xerror, yerror, facecolor='r',
     artists = ax.errorbar(xdata, ydata, xerr=xerror, yerr=yerror,
                           fmt='None', ecolor='k')
 
-def PlotRoutine(feed_dict,xlabel='',ylabel='',reference_name='gen',plot_ratio = False):
+def PlotRoutine(feed_dict,xlabel='',ylabel='',reference_name='gen',plot_ratio=False,axes=None):
     if plot_ratio:
         assert reference_name in feed_dict.keys(), "ERROR: Don't know the reference distribution"
     
-    fig,gs = SetGrid(ratio=plot_ratio) 
-    ax0 = plt.subplot(gs[0])
+    if axes is not None:
+        ax0 = axes[0]
+        fig = axes[-1]
+    else:
+        fig,gs = SetGrid(ratio=plot_ratio)
+        ax0 = plt.subplot(gs[0])
+
     if plot_ratio:
         plt.xticks(fontsize=0)
-        ax1 = plt.subplot(gs[1],sharex=ax0)
+        if axes is not None:
+            ax1 = axes[1]
+        else:
+            ax1 = plt.subplot(gs[1],sharex=ax0)
 
     for ip,plot in enumerate(feed_dict.keys()):
         ax0.plot(feed_dict[plot],label=plot,linewidth=2,linestyle=line_style[plot],color=colors[plot])

@@ -18,18 +18,29 @@ def label_smoothing(y_true,alpha=0):
     new_label = y_true*(1-alpha) + (1-y_true)*alpha
     return new_label
 
-
-def assign_random_weights(model):
-
+def reset_weights(model):
     for layer in model.layers:
-        if isinstance(layer, tf.keras.layers.Layer) and layer.weights:
-            for weight in layer.weights:
+        if isinstance(layer, tf.keras.Model):
+            reset_weights(layer)  #sorry for the recursion, works well here
+            continue
 
-                weight_shape = weight.shape 
-                random_weights = tf.random.normal(weight_shape)
+        # Get the layer's configuration
+        config = layer.get_config()
 
-                layer.set_weights([random_weights if w.shape == random_weights.shape else w 
-                                   for w in layer.get_weights()])
+        # Reinitialize weights
+        if hasattr(layer, 'kernel') and layer.kernel is not None:
+            initializer = tf.keras.initializers.get(config.get('kernel_initializer',
+                                                               'glorot_uniform'))
+            layer.kernel.assign(initializer(shape=layer.kernel.shape,
+                                            dtype=layer.kernel.dtype))
+
+        # Reinitialize biases
+        if hasattr(layer, 'bias') and layer.bias is not None:
+            initializer = tf.keras.initializers.get(config.get('bias_initializer',
+                                                               'zeros'))
+            layer.bias.assign(initializer(shape=layer.bias.shape,
+                                          dtype=layer.bias.dtype))
+
 
 class Multifold():
     def __init__(self,
@@ -84,9 +95,12 @@ class Multifold():
                                         
         self.weights_pull = np.ones(self.mc.weight.shape[0])
         if self.start>0:
+
             if hvd.rank()==0:
                 print("Loading step 2 weights from iteration {}".format(self.start-1))
-            model_name = '{}/OmniFold_{}_iter{}_step2/checkpoint'.format(self.weights_folder,self.version,self.start-1)
+
+            # model_name = '{}/OmniFold_{}_iter{}_step2/checkpoint'.format(self.weights_folder,self.version,self.start-1)
+            model_name = '{}/OmniFold_{}_iter{}_step1/checkpoint'.format(self.weights_folder,self.version,self.start-1)
             self.model2.load_weights(model_name).expect_partial()
             self.weights_push = self.reweight(self.mc.gen,self.model2_ema,batch_size=1000)
             #Also load model 1 to have a better starting point
@@ -99,10 +113,11 @@ class Multifold():
                     print("Loading pretrained weights")                
                 model_name = '{}/OmniFold_pretrained_step1/checkpoint'.format(self.weights_folder)
                 self.model1.load_weights(model_name).expect_partial()
-                model_name = '{}/OmniFold_pretrained_step2/checkpoint'.format(self.weights_folder)
+                # model_name = '{}/OmniFold_pretrained_step2/checkpoint'.format(self.weights_folder)
                 self.model2.load_weights(model_name).expect_partial()
 
         self.CompileModel(self.lr)
+
         for i in range(self.start,self.niter):
             if hvd.rank()==0:print(f"ITERATION: {i} / {self.niter-self.start}")
             self.RunStep1(i)        
@@ -120,6 +135,8 @@ class Multifold():
 
         ensemble_avg_weights = np.zeros_like(self.weights_pull)
 
+        initial_model_weights1 = self.model1.get_weights()
+
         for e in range(self.n_ensemble):
             if hvd.rank()==0:
                 print(f"RUNNING ENSEMBlE {e} / {self.n_ensemble} \n")
@@ -128,7 +145,7 @@ class Multifold():
             if self.load_pretrain:
                 assert self.load_pretrain != (self.start > 0), \
                 "Pretrain cannot be set if start >= 1"
-                
+
                 if hvd.rank()==0:
                     print("Loading pretrained weights for step 1")                
 
@@ -138,8 +155,8 @@ class Multifold():
             # Assign Random weights, if not loading pre-trained weights
             else:
                 if hvd.rank()==0:
-                    print("Randomly Assigning Random weights for step 1")
-                assign_random_weights(self.model1)
+                    print("Resetting Weights")
+                reset_weights(self.model1)
 
             self.RunModel(
                 np.concatenate((self.labels_mc[self.mc.pass_reco],
@@ -172,9 +189,10 @@ class Multifold():
     def RunStep2(self,i):
         '''Gen to Gen reweighing'''        
         if hvd.rank()==0:print("RUNNING STEP 2")
-        
+
         ensemble_avg_weights = np.zeros_like(self.weights_pull)
 
+        initial_model_weights2 = self.model2.get_weights()
         for e in range(self.n_ensemble):
             if hvd.rank()==0:
                 print(f"RUNNING ENSEMBlE {e} / {self.n_ensemble} \n")
@@ -182,13 +200,14 @@ class Multifold():
             if self.load_pretrain:
                 if hvd.rank()==0:
                     print("Loading pretrained weights for Step 2")                
-                model_name = '{}/OmniFold_pretrained_step2/checkpoint'.format(self.weights_folder)
+                model_name = '{}/OmniFold_pretrained_step1/checkpoint'.format(self.weights_folder)
                 self.model2.load_weights(model_name).expect_partial()
 
             else:
                 if hvd.rank()==0:
-                    print("Randomly Assigning Random weights for step 2")
-                assign_random_weights(self.model2)
+                    print("Resetting Weights")
+                # self.model2.set_weights(initial_model_weights2)
+                reset_weights(self.model2)
 
             self.RunModel(
                 np.concatenate((self.labels_mc, self.labels_gen)),

@@ -21,7 +21,7 @@ if __name__ == "__main__":
         tf.config.experimental.set_memory_growth(gpu, True)
         if gpus:
             tf.config.experimental.set_visible_devices(gpus[hvd.local_rank()], 'GPU')
-    
+
     parser = argparse.ArgumentParser()
 
     # parser.add_argument('--data_folder', default='/pscratch/sd/v/vmikuni/H1v2/h5', help='Folder containing data and MC files')
