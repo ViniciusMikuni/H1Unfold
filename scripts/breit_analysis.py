@@ -41,7 +41,7 @@ def boost_particles(final_states, scattered_electron):
     # Getting the effictive lepton beam momentum
     particle_sigma_tot = np.asarray(particle_sigma_tot)
     vectorize_func = np.vectorize(vector.obj, otypes=[object])
-    beam_electron_momentum = vectorize_func(px=0, py=0, pz=particle_sigma_tot/2., energy=particle_sigma_tot/2.)
+    beam_electron_momentum = vectorize_func(px=0, py=0, pz=-particle_sigma_tot/2., energy=particle_sigma_tot/2.)
 
     # Boosting the particles to the Breit frame
     boosted_vectors = []
@@ -49,10 +49,17 @@ def boost_particles(final_states, scattered_electron):
         # Calculating boost vector
         # Calculation taken from https://doi.org/10.1140/epjc/s10052-024-13003-1
         z_hat = vector.obj(px=0, py=0, pz=1, energy=1)
-        q = beam_e - scattered_e
-        boost_vector = q - q.dot(q)/q.dot(z_hat)*z_hat
-        boost_three_vector = vector.obj(x=boost_vector.x/boost_vector.energy, y=boost_vector.y/boost_vector.energy, z=boost_vector.z/boost_vector.energy)
-        boosted_vectors.append([vec.boost(boost_three_vector) for vec in event_particles])
+        photon = beam_e - scattered_e
+        Q = np.sqrt(-1*photon.dot(photon))
+        Sigma = photon.energy - photon.pz
+        boostvector = photon - Q*Q/Sigma*(-1*z_hat)
+        xBoost = vector.obj(px = photon.px/photon.pt, py = photon.py/photon.pt, pz = photon.pt/Sigma, energy = photon.pt/Sigma)
+        yBoost = vector.obj(px = -photon.py/photon.pt, py = photon.px/photon.pt, pz = 0, energy = 0)
+        boosted_event_vectors = []
+        for vec in event_particles:
+            breit_vec = vector.obj(px = xBoost.dot(vec), py = yBoost.dot(vec), pz = photon.dot(vec)/Q, energy = boostvector.dot(vec)/Q)
+            boosted_event_vectors.append(breit_vec)
+        boosted_vectors.append(boosted_event_vectors)
     return boosted_vectors
 
 if __name__ == "__main__":
@@ -66,9 +73,9 @@ if __name__ == "__main__":
     particles_data,events_data,mask_data  = dataloader_data.reco
     particles_data, events_data = dataloader_data.revert_standardize(particles_data, events_data, mask_data)
     pass_reco_data = dataloader_data.pass_reco
-    particles_data = particles_data[pass_reco_data][:5000]
-    events_data = events_data[pass_reco_data][:5000]
-    mask_data = mask_data[pass_reco_data][:5000]
+    particles_data = particles_data[pass_reco_data]
+    events_data = events_data[pass_reco_data]
+    mask_data = mask_data[pass_reco_data]
 
     # Getting the four vectors of our hadronic final states and scattered electron
     data_cartesian = _convert_kinematics(particles_data, events_data, mask_data)
