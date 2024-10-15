@@ -37,6 +37,9 @@ int main()
     std::vector<Double_t> jet_py;
     std::vector<Double_t> jet_pz;
     std::vector<Double_t> jet_E;
+    std::vector<Double_t> jet_phi;
+    std::vector<Double_t> jet_pt;
+    
 
     TFile* file = TFile::Open("centauro_jets.root", "RECREATE");
     TTree* tree = new TTree("jets", "");
@@ -46,6 +49,8 @@ int main()
     tree->Branch("py", &jet_py);
     tree->Branch("pz", &jet_pz);
     tree->Branch("E", &jet_E);
+    tree->Branch("pT", &jet_pt);
+    tree->Branch("phi", &jet_phi);
 
     while (particle_tree.Next()) 
     {
@@ -67,6 +72,8 @@ int main()
         jet_py.clear();
         jet_pz.clear();
         jet_E.clear();
+        jet_pt.clear();
+        jet_phi.clear();
         
         h_mult->Fill(sortedJets.size());
         for (unsigned int i=0; i<sortedJets.size(); i++){
@@ -76,6 +83,8 @@ int main()
             jet_py.push_back(jet.py());
             jet_pz.push_back(jet.pz());
             jet_E.push_back(jet.E());
+            jet_pt.push_back(jet.pt());
+            jet_phi.push_back(jet.phi());
 
             h_eta->Fill(jet.pseudorapidity());
             h_pt->Fill(jet.pt());

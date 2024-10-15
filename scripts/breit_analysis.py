@@ -10,6 +10,8 @@ import subprocess
 def _convert_kinematics(part, event, mask):
     #return particles in cartesian coordinates
     new_particles = np.zeros((part.shape[0],part.shape[1],4))
+    # part[:,:,i] = [eta_part-eta_e, phi_part-phi_e-pi, log(pT), log(pT/Q), log(E/Q), log(E), sqrt(eta_part - eta_e)^2 + (phi_part - phi_e)^2), charge]
+    # event[:,i,None] = [log(Q^2), y, pT_e/Q, eta_e, phi_e]
     new_particles[:,:,0] = np.ma.exp(part[:,:,2])*np.cos((np.pi + part[:,:,1] + event[:,4,None]))
     new_particles[:,:,1] = np.ma.exp(part[:,:,2])*np.sin((np.pi + part[:,:,1] + event[:,4,None]))
     new_particles[:,:,2] = np.ma.exp(part[:,:,2])*np.sinh((part[:,:,0] + event[:,3,None]))
@@ -64,22 +66,20 @@ def boost_particles(final_states, scattered_electron):
 
 if __name__ == "__main__":
     base_path = '/global/cfs/cdirs/m3246/H1/h5/'
-    file_data = ['data_prep.h5']
-    dataloader_data = Dataset(file_data, base_path, is_mc=False)
+    file_data = ['Rapgap_Eplus0607_prep.h5']
+    # Taking all MC events, not just the ones that pass fiduucial cuts
+    dataloader_MC = Dataset(file_data, base_path, is_mc=True, pass_fiducial=False, nmax=50000)
 
-    print("Loaded {} data events".format(dataloader_data.reco[0].shape[0]))
+    print("Loaded {} data events".format(dataloader_MC.gen[0].shape[0]))
         
     #Undo the preprocessing
-    particles_data,events_data,mask_data  = dataloader_data.reco
-    particles_data, events_data = dataloader_data.revert_standardize(particles_data, events_data, mask_data)
-    pass_reco_data = dataloader_data.pass_reco
-    particles_data = particles_data[pass_reco_data]
-    events_data = events_data[pass_reco_data]
-    mask_data = mask_data[pass_reco_data]
+    particles_MC, events_MC, mask_MC  = dataloader_MC.gen
+    particles_MC, events_MC = dataloader_MC.revert_standardize(particles_MC, events_MC, mask_MC)
+    MC_weight = dataloader_MC.weight # These weights are calibration constants that should be applied
 
     # Getting the four vectors of our hadronic final states and scattered electron
-    data_cartesian = _convert_kinematics(particles_data, events_data, mask_data)
-    data_electron_momentum = _convert_electron_kinematics(events_data)
+    data_cartesian = _convert_kinematics(particles_MC, events_MC, mask_MC)
+    data_electron_momentum = _convert_electron_kinematics(events_MC)
     # Boosting particles to Breit frame
     boosted_vectors = boost_particles(data_cartesian, data_electron_momentum)
 
@@ -100,9 +100,9 @@ if __name__ == "__main__":
         file["particles"] = {"px": boosted_px, "py": boosted_py, "pz": boosted_pz, "energy": boosted_E}
     subprocess.run(["./run_centauro.sh"], shell=True)
     with uproot.open("{file}:jets".format(file="./centauro_jets.root")) as out:
-        jets = out.arrays(["eta", "px", "py", "pz", "E"])
+        jets = out.arrays(["eta", "px", "py", "pz", "E", "pT", "phi"])
     
     # Saving clustered jets and event kinematics
     with uproot.recreate("./breit_output.root") as file:
-        file["jets"] = {"eta": jets["eta"], "px": jets["px"], "py": jets["py"], "pz": jets["pz"], "E": jets["E"]}
-        file["event"] = {"Q2": np.exp(events_data[:, 0])}
+        file["jets"] = {"eta": jets["eta"], "px": jets["px"], "py": jets["py"], "pz": jets["pz"], "E": jets["E"], "pT": jets["pT"], "phi": jets["phi"]}
+        file["event"] = {"Q2": np.exp(events_MC[:, 0]), "weight":MC_weight}
