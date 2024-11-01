@@ -75,10 +75,10 @@ class Multifold():
             self.niter = 1 #Skip iterative procedure when pretraining the model
         if self.load_pretrain:
             self.version += '_pretrained'
-            self.lr_factor = 5.
+            self.lr_factor = 1.
         if self.fine_tune:
             self.version += '_finetuned'
-            self.lr_factor = 5.
+            self.lr_factor = 1.
         else:
             self.lr_factor = 1.
 
@@ -96,6 +96,11 @@ class Multifold():
 
         self.pre_train_name1 = '{}/OmniFold_pretrained_step1/checkpoint'.format(self.weights_folder)
         self.pre_train_name2 = '{}/OmniFold_pretrained_step2/checkpoint'.format(self.weights_folder)
+
+        # list of models, used in unfolding. Added to support
+        # ensembling. Will deep-copy self.model1 or self.model2
+        self.step1_models = []
+        self.step2_models = []
             
     def Unfold(self):
         self.BATCH_SIZE=self.opt['BATCH_SIZE']
@@ -112,10 +117,9 @@ class Multifold():
             self.model1.load_weights(model_name).expect_partial()
 
             #Also load step1 starting point for model2
-            # model_name = '{}/OmniFold_{}_iter{}_step2/checkpoint'.format(self.weights_folder,self.version,self.start-1)
             self.model2.load_weights(model_name).expect_partial()
 
-            self.weights_push = self.reweight(self.mc.gen,self.model2_ema,batch_size=1000)
+            self.weights_push = self.reweight(self.mc.gen, self.model2, batch_size=1000)
 
         else:
             self.weights_push = np.ones(self.mc.weight.shape[0])
@@ -127,13 +131,13 @@ class Multifold():
                 # model2 loads pre_train1 b/c closure is often run, 
                 # and pre-train/closure use same rapgap + django for step 2
 
-        self.CompileModel(self.lr)
+        self.CompileModels(self.lr)
 
         for i in range(self.start,self.niter):
             if hvd.rank()==0:print(f"ITERATION: {i} / {self.niter-self.start}")
             self.RunStep1(i)        
             self.RunStep2(i)
-            self.CompileModel(self.lr,fixed=True)
+            self.CompileModels(self.lr,fixed=True)
 
             
     def RunStep1(self,i):
@@ -141,125 +145,91 @@ class Multifold():
         if hvd.rank()==0:print("RUNNING STEP 1")
 
         if self.verbose:
-            print("Estimated total number of events: {}".format(int((self.mc.nmax + self.data.nmax))//hvd.size()))
-            print("Full number of events {}".format(np.concatenate((self.labels_mc[self.mc.pass_reco] , self.labels_data[self.data.pass_reco])).shape[0]))
-
-        ensemble_avg_weights = np.zeros_like(self.weights_pull)
-
-        initial_model_weights1 = self.model1.get_weights()
-
-        for e in range(self.n_ensemble):
-            if hvd.rank()==0:
-                print(f"RUNNING ENSEMBlE {e} / {self.n_ensemble} \n")
-
-            # Load pre-trained model weights in ensemble loop
-            if self.load_pretrain:
-                assert self.load_pretrain != (self.start > 0), \
-                "Pretrain cannot be set if start >= 1"
-
-                if hvd.rank()==0:
-                    print(f"Loading pretrained weights for Step 1 from {self.pre_train_name1}")                
-                self.model1.load_weights(self.pre_train_name1).expect_partial()
-
-            elif self.fine_tune:
-                if hvd.rank()==0:
-                    print(f"Loading pretrained weights for Step 1 from {self.pre_train_name1}")                
-                    print(f"And resetting Classifier HEAD")
-                self.model1.load_weights(self.pre_train_name1).expect_partial()
-                reset_weights(self.model1.head)
-
-            else: # from scratch, reset weights
-                if hvd.rank()==0:
-                    print("Resetting Weights")
-                reset_weights(self.model1)
-
-            self.RunModel(
+            print("Estimated total number of events: {}".format(
+                int((self.mc.nmax + self.data.nmax))//hvd.size()))
+            print("Full number of events {}".format(
                 np.concatenate((self.labels_mc[self.mc.pass_reco],
-                                self.labels_data[self.data.pass_reco])),
-                np.concatenate((self.weights_push[self.mc.pass_reco]*\
-                    self.mc.weight[self.mc.pass_reco],
-                                self.data.weight[self.data.pass_reco])),
-                i,e,self.model1,stepn=1,
-                NTRAIN = self.num_steps_reco*self.BATCH_SIZE,
-                # cached = (i>self.start) and (e > 0)
-                cached = False
-                # ^ after first training cache the training data
-            )
+                                self.labels_data[self.data.pass_reco])).shape[0]))
 
-            #Don't update weights where there's no reco events
-            new_weights = np.ones_like(self.weights_pull)
-            new_weights[self.mc.pass_reco] = self.reweight(self.mc.reco,self.model1_ema,
-                                                           batch_size=1000)[self.mc.pass_reco]
+        # Model Weights: Pre-train, Fine Tune, or From Scratch
+        if self.load_pretrain:
+            assert self.load_pretrain != (self.start > 0), \
+            "Pretrain cannot be set if start >= 1"
 
-            ensemble_avg_weights += new_weights/self.n_ensemble  # running average
+            if hvd.rank()==0:
+                print(f"Loading pretrained weights for Step 1 from {self.pre_train_name1}")                
+            self.model1.load_weights(self.pre_train_name1).expect_partial()
 
-            tf.keras.backend.clear_session() # double check weights are reset, random initialization
-            del new_weights
-            gc.collect()
-            self.CompileModel(self.lr,fixed=(i>0))
+        elif self.fine_tune:
+            if hvd.rank()==0:
+                print(f"Loading pretrained weights for Step 1 from {self.pre_train_name1}")
+                print(f"and resetting Classifier HEAD (FineTune)")
+            self.model1.load_weights(self.pre_train_name1).expect_partial()
+            reset_weights(self.model1.head)
 
-        # self.weights_pull = self.weights_push *new_weights
-        self.weights_pull = self.weights_push *ensemble_avg_weights
+        if hvd.rank()==0:
+            print("Training From Scratch")
+
+
+        self.RunModel(
+            np.concatenate((self.labels_mc[self.mc.pass_reco],
+                            self.labels_data[self.data.pass_reco])),
+            np.concatenate((self.weights_push[self.mc.pass_reco]*\
+                self.mc.weight[self.mc.pass_reco],
+                            self.data.weight[self.data.pass_reco])),
+            i, self.model1, stepn=1,
+            NTRAIN = self.num_steps_reco*self.BATCH_SIZE,
+            cached = (i>self.start)# cache the training data after 1st iter
+        )
+
+        #Don't update weights where there's no reco events
+        new_weights = np.ones_like(self.weights_pull)
+        new_weights[self.mc.pass_reco] = self.reweight(self.mc.reco,self.model1,
+                                                       batch_size=1000)[self.mc.pass_reco]
+
+        self.weights_pull = self.weights_push *new_weights
+
 
     def RunStep2(self,i):
         '''Gen to Gen reweighing'''        
         if hvd.rank()==0:print("RUNNING STEP 2")
 
-        ensemble_avg_weights = np.zeros_like(self.weights_pull)
+        # model2 loads pre_train 1 b/c closure is often run, where django
+        # is used as 'data'. If pre-training used step 2, then the closure
+        # test would be useless: we would test on the same dataset as pre-loaded
 
-        initial_model_weights2 = self.model2.get_weights()
-        for e in range(self.n_ensemble):
+        if self.load_pretrain:
             if hvd.rank()==0:
-                print(f"RUNNING ENSEMBlE {e} / {self.n_ensemble} \n")
+                print(f"Loading pretrained weights for Step 2 from {self.pre_train_name1}")                
+            self.model2.load_weights(self.pre_train_name1).expect_partial()
 
-            if self.load_pretrain:
-                if hvd.rank()==0:
-                    print(f"Loading pretrained weights for Step 2 from {self.pre_train_name1}")                
-                self.model2.load_weights(self.pre_train_name1).expect_partial()
-                # model2 loads pre_train1 b/c closure is often run, 
-                # and pre-train/closure use same rapgap + django for step 2
+        if self.fine_tune:
+            if hvd.rank()==0:
+                print(f"Loading pretrained weights for Step 2 from {self.pre_train_name1}")                
+                print(f"And resetting Classifier HEAD")
+            self.model2.load_weights(self.pre_train_name1).expect_partial()
+            reset_weights(self.model2.head)
 
-            if self.fine_tune:
-                if hvd.rank()==0:
-                    print(f"Loading pretrained weights for Step 2 from {self.pre_train_name1}")                
-                    print(f"And resetting Classifier HEAD")
-                self.model2.load_weights(self.pre_train_name1).expect_partial()
-                reset_weights(self.model2.head)
+        if hvd.rank()==0:
+            print("Training Model 2 From Scratch")
 
-            else:
-                if hvd.rank()==0:
-                    print("Resetting Weights")
-                # self.model2.set_weights(initial_model_weights2)
-                reset_weights(self.model2)
+        self.RunModel(
+            np.concatenate((self.labels_mc, self.labels_gen)),
+            np.concatenate((self.mc.weight, self.mc.weight*self.weights_pull)),
+            i, self.model2, stepn=2,
+            NTRAIN = self.num_steps_gen*self.BATCH_SIZE,
+            cached = (i>self.start)  # cache training data after 1st iter
+        )
 
-            self.RunModel(
-                np.concatenate((self.labels_mc, self.labels_gen)),
-                np.concatenate((self.mc.weight, self.mc.weight*self.weights_pull)),
-                i,e,self.model2,stepn=2,
-                NTRAIN = self.num_steps_gen*self.BATCH_SIZE,
-                cached = False
-                # cached = (i>self.start) and (e > 0) #after first training cache the training data
-            )
-
-            new_weights=self.reweight(self.mc.gen,self.model2_ema)
-
-            ensemble_avg_weights += new_weights/self.n_ensemble  # running average
-
-            tf.keras.backend.clear_session()
-            del new_weights
-            gc.collect()
-            self.CompileModel(self.lr,fixed=(i>0))
-
-        # self.weights_push = new_weights
-        self.weights_push = ensemble_avg_weights
-        np.save(f'{self.weights_folder}/step2_iter{i}_ensembleAvg_EventWeights.npy', ensemble_avg_weights)
+        new_weights=self.reweight(self.mc.gen,self.model2)
+        self.weights_push = new_weights
+        # np.save(f'{self.weights_folder}/step2_iter{i}_ensembleAvg_EventWeights.npy', ensemble_avg_weights)
 
 
     def RunModel(self,
                  labels,
                  weights,
                  iteration,
-                 ensemble,
                  model,
                  stepn,
                  NTRAIN=1000,
@@ -269,14 +239,27 @@ class Multifold():
         test_frac = 1.-self.train_frac
         NTEST = int(test_frac*NTRAIN)
         train_data, test_data = self.cache(labels,weights,stepn,cached,NTRAIN-NTEST)
+        num_steps = self.num_steps_reco if stepn==1 else self.num_steps_gen
         
         if self.verbose and hvd.rank()==0:
             print(80*'#')
-            self.log_string("Train events used: {}, Test events used: {}".format(NTRAIN,NTEST))
+            self.log_string(f"Train events used: {NTRAIN}")
+            self.log_string(f"Test events used: {NTEST}")
             print(80*'#')
 
         verbose = 1 if hvd.rank() == 0 else 0
+
+        # Model Checkpoint Name
+        model_name = '{}/OmniFold_{}_iter{}_step{}'.format(
+            self.weights_folder, self.version, iteration, stepn)
+        if self.n_ensemble > 1: model_name += '_ensembleE'  #replace E in loop
+        if self.nstrap > 0: model_name += f'_strap{self.nstrap}' #FIXME: strap iter?
+        model_name += '/checkpoint'
+
+        if hvd.rank() == 0:
+            print('Saving model', model_name)
         
+
         callbacks = [
             hvd.callbacks.BroadcastGlobalVariablesCallback(0),
             hvd.callbacks.MetricAverageCallback(),
@@ -285,37 +268,57 @@ class Multifold():
                               verbose=verbose,monitor="val_loss"),
             EarlyStopping(patience=self.opt['NPATIENCE'],restore_best_weights=True,
                           monitor="val_loss"),
-        ]
+        ]  # will append checkpoint in ensemble loop
         
         
-        if hvd.rank() ==0:
-            if self.nstrap>0:
-                model_name = '{}/OmniFold_{}_iter{}_ens{}_step{}_strap{}/checkpoint'.format(
-                    self.weights_folder,self.version,iteration,ensemble,stepn,self.nstrap)
-            else:
-                if self.pretrain:
-                    model_name = '{}/OmniFold_pretrained_step{}/checkpoint'.format(
-                        self.weights_folder,stepn)
-                else:
-                    model_name = '{}/OmniFold_{}_iter{}_ens{}_step{}/checkpoint'.format(
-                        self.weights_folder,self.version,iteration,ensemble,stepn)
+        for ensemble in range(self.n_ensemble):
+            ''' ensembling implemented here, in RunModel. This reduces parallelization''' 
+            ''' but results in overall less variance. Called 'step ensembling' since  '''
+            ''' the ensembling is done within each step, before passing onto the next '''
+            ''' step or iteration. Alternative would be to call a script and run the  '''
+            ''' OmniFold procedure as a whole (for all iterations), [n_ensemble] times'''
 
-            callbacks.append(ModelCheckpoint(model_name,save_best_only=True,
-                                             mode='auto',period=1,save_weights_only=True))
-                    
-        hist =  model.fit(
-            train_data,
-            epochs=self.EPOCHS,
-            steps_per_epoch=int(self.train_frac*NTRAIN//self.BATCH_SIZE),
-            validation_data= test_data,
-            validation_steps=NTEST//self.BATCH_SIZE,
-            verbose= verbose,
-            callbacks=callbacks)
-        
-        if hvd.rank() ==0:
-            with open(model_name.replace("/checkpoint",".pkl"),"wb") as f:
-                pickle.dump(hist.history, f)
-        
+
+            ens_name = model_name
+            if self.n_ensemble > 1: ens_name = model_name.replace('E',f'{ensemble}')
+                
+            if hvd.rank() == 0:
+                self.log_string("Ensemble: {} / {}".format(
+                ensemble + 1, self.n_ensemble))
+                callbacks.append(ModelCheckpoint(ens_name, save_best_only=True,
+                                                 mode='auto', period=1,
+                                                 save_weights_only=True))
+
+                        
+            # Instantiate new model_e, then load from previous iteration
+            if iteration < 1:
+                model_e = tf.keras.models.clone_model(model)
+
+                if stepn == 1:
+                    self.step1_models.append(model_e)
+                if stepn == 2:
+                    self.step2_models.append(model_e)
+
+            else:
+                model_e = self.step1_models[ensemble] if stepn == 1 else self.step2_models[ensemble]
+                        
+            # model_e = model  # to test iterations passing models
+
+            self.CompileModel(model_e, self.lr ,num_steps)
+
+            hist =  model_e.fit(
+                train_data,
+                epochs=self.EPOCHS,
+                steps_per_epoch=int(self.train_frac*NTRAIN//self.BATCH_SIZE),
+                validation_data= test_data,
+                validation_steps=NTEST//self.BATCH_SIZE,
+                verbose= verbose,
+                callbacks=callbacks)
+            
+            if hvd.rank() ==0:
+                with open(ens_name.replace("/checkpoint",".pkl"),"wb") as f:
+                    pickle.dump(hist.history, f)
+            
         del train_data, test_data
         gc.collect()
 
@@ -327,7 +330,6 @@ class Multifold():
               cached,
               NTRAIN
               ):
-
 
         if not cached:
             if self.verbose:
@@ -381,87 +383,58 @@ class Multifold():
         self.PrepareModel()
 
 
-    def CompileModel(self,lr,fixed=False):
+    def CompileModels(self, lr, fixed=False):
 
         if self.num_steps_reco ==None:
-            self.num_steps_reco = int(0.7*(self.mc.nmax + self.data.nmax))//hvd.size()//self.BATCH_SIZE
+            self.num_steps_reco = int(0.7*(self.mc.nmax + self.data.nmax))\
+                //hvd.size()//self.BATCH_SIZE
             self.num_steps_gen = 2*self.mc.nmax//hvd.size()//self.BATCH_SIZE
-            if hvd.rank()==0:print(self.num_steps_reco,self.num_steps_gen)
 
-        
-        lr_schedule_body_reco = keras.optimizers.schedules.CosineDecay(
-            initial_learning_rate=lr/self.lr_factor,
-            warmup_target = lr*np.sqrt(self.size)/self.lr_factor,
-            warmup_steps= 3*int(self.train_frac*self.num_steps_reco),
-            decay_steps= self.EPOCHS*int(self.train_frac*self.num_steps_reco),
-            alpha = 1e-2,
-        )
+        self.CompileModel(self.model1, lr, self.num_steps_reco,False)
+        self.CompileModel(self.model2, lr, self.num_steps_gen, fixed)
 
+        # loop over ensembles
+        if self.n_ensemble > 1 and len(self.step1_models) > 0:
+            for model in self.step1_models:
+                self.CompileModel(model,lr,self.num_steps_reco,fixed)
+            for model in self.step2_models:
+                self.CompileModel(model,lr,self.num_steps_gen, fixed)
 
-        lr_schedule_head_reco = keras.optimizers.schedules.CosineDecay(
-            initial_learning_rate=lr,
-            warmup_target = lr*np.sqrt(self.size),
-            warmup_steps= 3*int(self.train_frac*(self.num_steps_reco)),
-            decay_steps= self.EPOCHS*int(self.train_frac*self.num_steps_reco),
-            alpha = 1e-2,
-        )
-
-
-        lr_schedule_body_gen = keras.optimizers.schedules.CosineDecay(
-            initial_learning_rate=lr/self.lr_factor,
-            warmup_target = lr*np.sqrt(self.size)/self.lr_factor,
-            warmup_steps= 3*int(self.train_frac*self.num_steps_gen),
-            decay_steps= self.EPOCHS*int(self.train_frac*self.num_steps_reco),
-            alpha = 1e-2,
-        )
-
-
-        lr_schedule_head_gen = keras.optimizers.schedules.CosineDecay(
-            initial_learning_rate=lr,
-            warmup_target = lr*np.sqrt(self.size),
-            warmup_steps= 3*int(self.train_frac*self.num_steps_gen),
-            decay_steps= self.EPOCHS*int(self.train_frac*self.num_steps_reco),
-            alpha = 1e-2,
-        )
-
+    def CompileModel(self,model,lr,num_steps,fixed=False):
 
         min_learning_rate = 1e-5
-        opt_head1 = tf.keras.optimizers.Lion(
-            learning_rate=min_learning_rate if fixed else lr_schedule_head_reco,
+
+        lr_schedule_body = keras.optimizers.schedules.CosineDecay(
+            initial_learning_rate=lr/self.lr_factor,
+            warmup_target = lr*np.sqrt(self.size)/self.lr_factor,
+            warmup_steps= int(3*self.train_frac*(num_steps)),
+            decay_steps= int(self.EPOCHS*self.train_frac*self.num_steps_reco),
+            alpha = 1e-2,)
+
+        lr_schedule_head = keras.optimizers.schedules.CosineDecay(
+            initial_learning_rate=lr,
+            warmup_target = lr*np.sqrt(self.size),
+            warmup_steps= int(3*self.train_frac*(num_steps)),
+            decay_steps= int(self.EPOCHS*self.train_frac*self.num_steps_reco),
+            alpha = 1e-2,)  # ^reco and gen had n_steps_reco in decay
+
+
+        opt_head = tf.keras.optimizers.Lion(
+            learning_rate=min_learning_rate if fixed else lr_schedule_head,
             weight_decay=1e-5,
             beta_1=0.95,
             beta_2=0.99)
         
-        opt_head1 = hvd.DistributedOptimizer(opt_head1)
-        
-        opt_body1 = tf.keras.optimizers.Lion(
-            learning_rate=min_learning_rate if fixed else lr_schedule_body_reco,
+        opt_body = tf.keras.optimizers.Lion(
+            learning_rate=min_learning_rate if fixed else lr_schedule_body,
             weight_decay=1e-5,
             beta_1=0.95,
             beta_2=0.99)
         
-        opt_body1 = hvd.DistributedOptimizer(opt_body1)
+        opt_head = hvd.DistributedOptimizer(opt_head)
+        opt_body = hvd.DistributedOptimizer(opt_body)
 
-
-        opt_head2 = tf.keras.optimizers.Lion(
-            learning_rate=min_learning_rate if fixed else lr_schedule_head_gen,
-            weight_decay=1e-5,
-            beta_1=0.95,
-            beta_2=0.99)
-        
-        opt_head2 = hvd.DistributedOptimizer(opt_head2)
-        
-        opt_body2 = tf.keras.optimizers.Lion(
-            learning_rate=min_learning_rate if fixed else lr_schedule_body_gen,
-            weight_decay=1e-5,
-            beta_1=0.95,
-            beta_2=0.99)
-        
-        opt_body2 = hvd.DistributedOptimizer(opt_body2)
-
-
-        self.model1.compile(opt_body1,opt_head1)
-        self.model2.compile(opt_body2,opt_head2)
+        model.compile(opt_body, opt_head)
 
 
     def PrepareInputs(self):
@@ -469,8 +442,9 @@ class Multifold():
         self.labels_data = np.ones(len(self.data.pass_reco),dtype=np.float32)
         self.labels_gen = np.ones(len(self.mc.pass_gen),dtype=np.float32)
 
-        print(f"Length of MC = {len(self.labels_mc)}")
-        print(f"Length of data = {len(self.labels_data)}")
+        if hvd.rank() == 0:
+            print(f"Length of MC = {len(self.labels_mc)}")
+            print(f"Length of data = {len(self.labels_data)}")
         # # Label smoothing to avoid overtraining, experimental feature
         # self.labels_mc = label_smoothing(np.zeros(len(self.mc.pass_reco)),0.1)
         # self.labels_data = label_smoothing(np.ones(len(self.data.pass_reco)),0.1)
@@ -481,6 +455,7 @@ class Multifold():
         #Will assume same number of features for simplicity
         if self.verbose:            
             self.log_string("Preparing model architecture with: {} particle features and {} event features".format(self.num_feat,self.num_event))
+
         self.model1 = Classifier(self.num_feat,
                                  self.num_event,
                                  num_heads=self.opt['NHEADS'],
@@ -497,21 +472,27 @@ class Multifold():
                                  step=2,
                                  )
 
-        
-        self.model1_ema = self.model1.model_ema
-        self.model2_ema = self.model2.model_ema
-        
         # if self.verbose:
         #     print(self.model2.classifier.summary())
 
 
     def reweight(self,events,model,batch_size=None):
         if batch_size is None:
-           batch_size =  self.BATCH_SIZE
+            batch_size =  self.BATCH_SIZE
 
-        f = expit(model.predict(events,batch_size=batch_size,verbose=self.verbose)[0])            
-        weights = f / (1. - f)
-        return np.nan_to_num(weights[:,0],posinf=1)
+        # normally, would pass a flag instead of actual model
+        # but by passing self.model1 or 2, we can keep functionality
+        models = self.step1_models if model == self.model1 else self.step2_models
+
+        avg_weights = np.zeros((len(events[0])))
+        for model in models:
+            # self.model1_ema = self.model1.model_ema
+            f = expit(model.model_ema.predict(events,batch_size=batch_size,verbose=self.verbose)[0])
+            # f = expit(model.predict(events,batch_size=batch_size,verbose=self.verbose)[0])
+            weights = f / (1. - f)  # approximates likelihood ratio
+            weights = np.nan_to_num(weights[:,0],posinf=1)
+            avg_weights += weights / len(models)
+        return avg_weights
 
     def CompareDistance(self,patience,min_distance,weights1,weights2):
         distance = np.mean(
