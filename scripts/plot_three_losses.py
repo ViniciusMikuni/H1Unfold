@@ -42,51 +42,59 @@ for iter in range(N_iteration):
     axes.append(ax1)
     axes.append(fig)
 
-    N_ensemble = 3
     for e in range(N_ensemble):
         print(f"Plotting Ensemble {e+1}/{N_ensemble}")
 
         #BASELINE  = From Scratch. No pretrained loading, no finetune
         version = 'H1_Nov_ModelLists_1lrscale_fromscratch_closure'
-        baseline_file = '{}/OmniFold_{}_iter{}_step{}_ensemble{}.pkl'.format(
+        fromscratch_file = '{}/OmniFold_{}_iter{}_step{}_ensemble{}.pkl'.format(
             flags.weights,version,iter,flags.step,e)
         
+        #Fine Tuned file
+        version = 'H1_Nov_ModelLists_1lrscale_closure_finetuned'
+        finetuned_file = '{}/OmniFold_{}_iter{}_step{}_ensemble{}.pkl'.format(
+            flags.weights,version,iter,flags.step,e)
 
-        #PreTrained
+        #Pre-Trained file
         version = 'H1_Nov_ModelLists_1lrscale_closure_pretrained'
-        ft_file = '{}/OmniFold_{}_iter{}_step{}_ensemble{}.pkl'.format(
+        pretrained_file = '{}/OmniFold_{}_iter{}_step{}_ensemble{}.pkl'.format(
             flags.weights,version,iter,flags.step,e)
 
 
-        history_baseline = load_pickle(baseline_file)
-        history_ft = load_pickle(ft_file)
+        history_baseline = load_pickle(fromscratch_file)
+        history_finetuned = load_pickle(finetuned_file)
+        history_pretrained = load_pickle(pretrained_file)
 
         # print("From Scratch: ", history_baseline)
-        # print("Pretrained: ", history_ft)
+        # print("Pretrained: ", history_finetuned)
 
         plot_dict = {
             f'FromScratch_Ens{e}':history_baseline['val_loss'],
-            f'PreTrained_Ens{e}':history_ft['val_loss'],
+            f'FineTuned_Ens{e}':history_finetuned['val_loss'],
+            f'PreTrained_Ens{e}':history_pretrained['val_loss'],
         }
 
-
-        _,_ = utils.PlotRoutine(plot_dict,xlabel='Epochs',ylabel='Validation Loss',axes=axes)
-        # ax0.set_yscale('log')
-        # ax0.set_ylim(0.0, 0.1)
+        _,ax0 = utils.PlotRoutine(
+            plot_dict,xlabel='Epochs',ylabel='Validation Loss',axes=axes)
+        ax0.set_yscale('log')
+        ax0.set_ylim(0.0, 0.1)
+        ax0.set_xlim(0.0, 100)
 
     #Mess with Legend
     handles, labels = plt.gca().get_legend_handles_labels()
 
     # Separate 'Baseline' and 'Pre-trained' entries
-    baseline_entries = [(h, l) for h, l in zip(handles, labels) if 'FromScratch' in l]
+    fromscratch_entries = [(h, l) for h, l in zip(handles, labels) if 'FromScratch' in l]
+    finetuned_entries = [(h, l) for h, l in zip(handles, labels) if 'FineTuned' in l]
     pretrained_entries = [(h, l) for h, l in zip(handles, labels) if 'PreTrained' in l]
 
     # Sort entries to ensure correct order (optional)
-    baseline_entries.sort(key=lambda x: x[1])
+    fromscratch_entries.sort(key=lambda x: x[1])
+    finetuned_entries.sort(key=lambda x: x[1])
     pretrained_entries.sort(key=lambda x: x[1])
 
     # Combine entries: Baseline first, then Pre-trained
-    combined_entries = baseline_entries + pretrained_entries
+    combined_entries = fromscratch_entries + finetuned_entries + pretrained_entries
     combined_handles, combined_labels = zip(*combined_entries)
 
     # Verify the ordering
