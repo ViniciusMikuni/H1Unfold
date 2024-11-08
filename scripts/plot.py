@@ -185,6 +185,7 @@ def plot_jet(flags,dataloaders,reference_name,version, axes, ens):
                                axes=axes[0], save_str=save_str)
 
     fig.savefig('../plots/{}_jet_pt_ens_{}.pdf'.format(version, ens))
+    plt.close(fig)
 
     feed_dict = {
         f'Rapgap_unfolded{ens}': dataloaders['Rapgap'].jet[:,1][dataloaders['Rapgap'].jet[:,0] > 0],
@@ -206,6 +207,95 @@ def plot_jet(flags,dataloaders,reference_name,version, axes, ens):
                                label_loc='upper left', axes=axes[1], save_str=save_str
                                )
     fig.savefig('../plots/{}_jet_eta_ens_{}.pdf'.format(version, ens))
+    plt.close(fig)
+
+    feed_dict = {
+        f'Rapgap_unfolded{ens}': dataloaders['Rapgap'].jet[:,4][dataloaders['Rapgap'].jet[:,0] > 0],
+        'Rapgap': dataloaders['Rapgap'].jet[:,4][dataloaders['Rapgap'].jet[:,0] > 0],
+        'Djangoh': dataloaders['Djangoh'].jet[:,4][dataloaders['Djangoh'].jet[:,0] > 0],
+    }
+
+    if flags.reco:
+        feed_dict['data'] = dataloaders['data'].jet[:,4][dataloaders['data'].jet[:,0] > 0]
+        weights['data'] = dataloaders['data'].weight[dataloaders['data'].jet[:,0] > 0]
+
+                    
+    save_str = f"_{version}_jet_tau11_ens{ens}"
+    fig,ax = utils.HistRoutine(feed_dict,
+                               xlabel=r"ln $\lambda_{1}^{1}$",
+                               weights = weights,
+                               binning = np.linspace(-4,0.,7),
+                               reference_name = reference_name,
+                               label_loc='upper left', axes=axes[1], save_str=save_str
+                               )
+    fig.savefig('../plots/{}_jet_tau11_ens_{}.pdf'.format(version, ens))
+    plt.close(fig)
+
+    feed_dict = {
+        f'Rapgap_unfolded{ens}': dataloaders['Rapgap'].jet[:,5][dataloaders['Rapgap'].jet[:,0] > 0],
+        'Rapgap': dataloaders['Rapgap'].jet[:,5][dataloaders['Rapgap'].jet[:,0] > 0],
+        'Djangoh': dataloaders['Djangoh'].jet[:,5][dataloaders['Djangoh'].jet[:,0] > 0],
+    }
+
+    if flags.reco:
+        feed_dict['data'] = dataloaders['data'].jet[:,5][dataloaders['data'].jet[:,0] > 0]
+        weights['data'] = dataloaders['data'].weight[dataloaders['data'].jet[:,0] > 0]
+
+                    
+    save_str = f"_{version}_jet_tau11p5_ens{ens}"
+    fig,ax = utils.HistRoutine(feed_dict,
+                               xlabel=r"ln $\lambda_{1.5}^{1}$",
+                               weights = weights,
+                               binning = np.linspace(-4,0.,7),
+                               reference_name = reference_name,
+                               label_loc='upper left', axes=axes[1], save_str=save_str
+                               )
+    fig.savefig('../plots/{}_jet_tau11p5_ens_{}.pdf'.format(version, ens))
+    plt.close(fig)
+
+    feed_dict = {
+        f'Rapgap_unfolded{ens}': dataloaders['Rapgap'].jet[:,6][dataloaders['Rapgap'].jet[:,0] > 0],
+        'Rapgap': dataloaders['Rapgap'].jet[:,6][dataloaders['Rapgap'].jet[:,0] > 0],
+        'Djangoh': dataloaders['Djangoh'].jet[:,6][dataloaders['Djangoh'].jet[:,0] > 0],
+    }
+
+    if flags.reco:
+        feed_dict['data'] = dataloaders['data'].jet[:,6][dataloaders['data'].jet[:,0] > 0]
+        weights['data'] = dataloaders['data'].weight[dataloaders['data'].jet[:,0] > 0]
+
+                    
+    save_str = f"_{version}_jet_tau12_ens{ens}"
+    fig,ax = utils.HistRoutine(feed_dict,
+                               xlabel=r"ln $\lambda_{2}^{1}$",
+                               weights = weights,
+                               binning = np.linspace(-4,0.,7),
+                               reference_name = reference_name,
+                               label_loc='upper left', axes=axes[1], save_str=save_str
+                               )
+    fig.savefig('../plots/{}_jet_tau12_ens_{}.pdf'.format(version, ens))
+    plt.close(fig)
+
+    feed_dict = {
+        f'Rapgap_unfolded{ens}': dataloaders['Rapgap'].jet[:,8][dataloaders['Rapgap'].jet[:,0] > 0],
+        'Rapgap':dataloaders['Rapgap'].jet[:,8][dataloaders['Rapgap'].jet[:,0] > 0],
+        'Djangoh': dataloaders['Djangoh'].jet[:,8][dataloaders['Djangoh'].jet[:,0] > 0],
+    }
+
+    if flags.reco:
+        feed_dict['data'] = dataloaders['data'].jet[:,8][dataloaders['data'].jet[:,0] > 0]
+        weights['data'] = dataloaders['data'].weight[dataloaders['data'].jet[:,0] > 0]
+
+                    
+    save_str = f"_{version}_jet_ptD_ens{ens}"
+    fig,ax = utils.HistRoutine(feed_dict,
+                               xlabel = r"$p_{T}D \, (\sqrt{\lambda_{0}^{2}})$",
+                               weights = weights,
+                               binning = np.linspace(0,1,7),
+                               reference_name = reference_name,
+                               label_loc='upper left', axes=axes[1], save_str=save_str
+                               )
+    fig.savefig('../plots/{}_jet_ptD_ens_{}.pdf'.format(version, ens))
+    plt.close(fig)
 
     def _get_deltaphi(jet,elec):
         delta_phi = np.abs(np.pi + jet[:,2] - elec[:,4])
@@ -234,6 +324,7 @@ def plot_jet(flags,dataloaders,reference_name,version, axes, ens):
 
     ax.set_ylim(1e-2,50)
     fig.savefig('../plots/{}_jet_deltaphi_ens_{}.pdf'.format(version, ens))
+    plt.close(fig)
 
 
     def _get_qtQ(jet,elec):
@@ -262,6 +353,7 @@ def plot_jet(flags,dataloaders,reference_name,version, axes, ens):
 
     ax.set_ylim(1e-2,20)
     fig.savefig('../plots/{}_jet_qtQ_ens_{}.pdf'.format(version, ens))
+    plt.close(fig)
 
     
 
@@ -296,7 +388,10 @@ def plot_particles(flags,dataloaders,reference_name,version,num_part, axes, ens)
         fig.savefig('../plots/{}_part_{}_ens_{}.pdf'.format(version,feature,ens))
 
 def cluster_jets(dataloaders):
-    import fastjet
+    """ Updating dataloaders
+        1. With the jet info.
+    """
+    import fastjet 
     import awkward as ak
     import itertools
     
@@ -313,32 +408,90 @@ def cluster_jets(dataloaders):
         return new_particles*mask[:,:,None]
     
     for dataloader in dataloaders:
+        print(f"----------------- Started working with {dataloader} ------------------- ")
         cartesian = _convert_kinematics(dataloaders[dataloader].part,
                                         dataloaders[dataloader].event,
                                         dataloaders[dataloader].mask)
-        events = []
+        max_len_of_jet_per_dataloader = -1
+        list_of_jet =[]
         for event in cartesian:
-            events.append([{"px": part[0], "py": part[1], "pz": part[2], "E": part[3]} for part in event if np.abs(part[0])!=0])
-
-        array = ak.Array(events)
-        cluster = fastjet.ClusterSequence(array, jetdef)
-        jets = cluster.inclusive_jets(min_pt=10)
-        
-        jets["pt"] = -np.sqrt(jets["px"]**2 + jets["py"]**2)
-        jets["phi"] = np.arctan2(jets["py"],jets["px"])
-        jets["eta"] = np.arcsinh(jets["pz"]/jets["pt"])
-        jets=fastjet.sorted_by_pt(jets)
-        
-
-        def _take_leading_jet(jets):
-            jet = np.zeros((dataloaders[dataloader].event.shape[0],4))
-            jet[:,0] = -np.array(list(itertools.zip_longest(*jets.pt.to_list(), fillvalue=0))).T[:,0]
-            jet[:,1] = np.array(list(itertools.zip_longest(*jets.eta.to_list(), fillvalue=0))).T[:,0]
-            jet[:,2] = np.array(list(itertools.zip_longest(*jets.phi.to_list(), fillvalue=0))).T[:,0]
-            jet[:,3] = np.array(list(itertools.zip_longest(*jets.E.to_list(), fillvalue=0))).T[:,0]
-            return jet
+            list_of_particles = []
+            for part in event:
+                if np.abs(part[0])!=0:
+                    list_of_particles.append(fastjet.PseudoJet(part[0], part[1],  part[2],part[3]))
             
-        dataloaders[dataloader].jet = _take_leading_jet(jets)
+            cluster = fastjet.ClusterSequence(list_of_particles, jetdef)
+            jets = cluster.inclusive_jets(ptmin=10)
+
+            # Sort by pt.
+            sorted_by_pt_jets=fastjet.sorted_by_pt(jets)
+
+            for i, jet in enumerate(sorted_by_pt_jets):
+                tau_11, tau_11p5, tau_12, tau_20, sumpt = 0, 0, 0, 0, 0
+                constituents = jet.constituents()  # Get the constituents of the jet                                                                                                                                            
+                for j, constituent in enumerate(constituents):
+
+                    tau_11 += constituent.pt()*pow(jet.delta_R(constituent),1)
+                    tau_11p5 += constituent.pt()*pow(jet.delta_R(constituent),1.5)
+                    tau_12 += constituent.pt()*pow(jet.delta_R(constituent),2)
+                    tau_20 += pow(constituent.pt(),2)
+
+
+                    sumpt += constituent.pt()    
+
+                # Assigning cumulative values of tau10, tau15, tau20
+                jet.tau_11 = np.log(tau_11/jet.pt())
+                jet.tau_11p5 = np.log(tau_11p5/jet.pt())
+                jet.tau_12 = np.log(tau_12/jet.pt())
+                jet.tau_20 = tau_20/pow(jet.pt(),2)
+                # jet.ncharged = ncharged
+                # jet.jetcharge = jet_charge/jet.pt()
+                jet.ptD = np.sqrt(tau_20)/sumpt
+
+                # print(f" jet ptD: {np.sqrt(tau_20)}")
+
+        
+
+            def _take_leading_jet(temp_jets):
+
+                if (len(temp_jets) == 0): return np.array([0, 0, 0, 0, 0, 0, 0, 0, 0])
+
+                # Extract individual jet properties as lists
+                pt_list = [jet.pt() for jet in temp_jets]
+                eta_list = [jet.eta() for jet in temp_jets]
+                phi_list = [jet.phi() for jet in temp_jets]
+                E_list = [jet.E() for jet in temp_jets]
+                tau_11_list = [jet.tau_11 for jet in temp_jets]
+                tau_11p5_list = [jet.tau_11p5 for jet in temp_jets]
+                tau_12_list = [jet.tau_12 for jet in temp_jets]
+                tau_20_list = [jet.tau_20 for jet in temp_jets]
+                # ncharged_list = [jet.ncharged for jet in temp_jets]
+                # jetcharge_list = [jet.jetcharge for jet in temp_jets]
+                ptD_list = [jet.ptD for jet in temp_jets]
+                
+
+                jet = np.zeros(9)
+                
+                # Just take leading values
+                jet[0] = pt_list[0]
+                jet[1] = eta_list[0]
+                jet[2] = phi_list[0]
+                jet[3] = E_list[0]
+                jet[4] = tau_11_list[0]
+                jet[5] = tau_11p5_list[0]
+                jet[6] = tau_12_list[0]
+                jet[7] = tau_20_list[0]
+                jet[8] = ptD_list[0]
+
+
+
+                return jet
+            current_list_of_jets = _take_leading_jet(sorted_by_pt_jets)
+            list_of_jet.append(current_list_of_jets)
+
+        output = np.array(list_of_jet, dtype=object)
+        dataloaders[dataloader].jet = output.astype(np.float32)
+        print(f"----------------- Done working with {dataloader} ------------------- ")
         
 
         
@@ -387,6 +540,8 @@ def main():
 
     ensemble_avg_weights = 0
     for e in range(flags.n_ens):
+
+        print(f"plotting ensemble {e}")
 
         dataloaders = get_dataloaders(flags)
         reference_name, version = get_version(flags,opt)

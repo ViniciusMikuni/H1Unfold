@@ -23,6 +23,11 @@ line_style = {
     'Pre-trained_Ens2':'-',
     'Pre-trained_Ens3':'-',
     'Pre-trained_Ens4':'-',
+    'Finetuned_Ens0':'-',
+    'Finetuned_Ens1':'-',
+    'Finetuned_Ens2':'-',
+    'Finetuned_Ens3':'-',
+    'Finetuned_Ens4':'-',
     'data':'dotted',
     'Rapgap reco':'-',
     'Rapgap gen':'-',
@@ -41,6 +46,11 @@ colors = {
     'Pre-trained_Ens2':'#FF6600',
     'Pre-trained_Ens3':'#FF3300',
     'Pre-trained_Ens4':'#FF0000',
+    'Finetuned_Ens0':'#FFCC00',
+    'Finetuned_Ens1':'#FF9900',
+    'Finetuned_Ens2':'#FF6600',
+    'Finetuned_Ens3':'#FF3300',
+    'Finetuned_Ens4':'#FF0000',
     'data':'black',
     'Rapgap reco':'#7570b3',
     'Rapgap gen':'darkorange',
@@ -247,6 +257,7 @@ def HistRoutine(feed_dict,
     ref_plot = {'histtype':'stepfilled','alpha':0.2}
     other_plots = {'histtype':'step','linewidth':2, 'alpha':0.6}
 
+    
     if axes is not None:
         ax0 = axes[0]
         fig = axes[-1]
@@ -261,11 +272,15 @@ def HistRoutine(feed_dict,
         else:
             ax1 = plt.subplot(gs[1],sharex=ax0)
 
-
+    
     if binning is None:
         binning = np.linspace(np.quantile(feed_dict[reference_name],0.01),np.quantile(feed_dict[reference_name],0.99),50)
 
     xaxis = [(binning[i] + binning[i+1])/2.0 for i in range(len(binning)-1)]
+
+    ## clear the axes at the start
+    ax0.cla()
+    ax1.cla()
 
     if weights is not None:
         reference_hist,_ = np.histogram(feed_dict[reference_name],weights=weights[reference_name],bins=binning,density=True)
@@ -309,7 +324,7 @@ def HistRoutine(feed_dict,
                                          uncertainty[ibin],-uncertainty[ibin], alpha=0.3,color='k')    
 
         plot_vals = np.array([xaxis, dist, ratio])
-        print(f'saving to: ../plots/{plot}{save_str}_plot_vals.npy')
+        # print(f'saving to: ../plots/{plot}{save_str}_plot_vals.npy')
         np.save(f'../plots/{plot}{save_str}_plot_vals.npy',plot_vals)
         # plot_dict = {} #dictionary for storing histogram, ratio, and x-values
         # plot_dict['xvals'] = xaxis
