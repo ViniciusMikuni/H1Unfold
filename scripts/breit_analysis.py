@@ -3,9 +3,42 @@ import numpy as np
 import vector
 import matplotlib.pyplot as plt
 import awkward as ak
-import itertools
-import uproot
+import fastjet
 import subprocess
+import uproot
+import argparse 
+import itertools
+import os
+from omnifold import  Multifold
+import horovod.tensorflow as hvd
+import tensorflow as tf
+hvd.init()
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="Train a PET model using Pythia and Herwig data.")
+    parser.add_argument("--data_dir", type=str, default="/global/cfs/cdirs/m3246/H1/h5/", help="Folder containing input files")
+    parser.add_argument("--save_dir", type=str, default="/global/homes/r/rmilton/m3246/rmilton/H1Unfold/jet_data/", help="Folder to store jet data")
+    parser.add_argument("--outfile_name", type=str, default="saved_jets.root", help="Name of output ROOT file")
+    parser.add_argument("--num_data", type=int, default=-1, help="Number of data to analyze")
+    parser.add_argument("--frame", type=str, default="breit", help="breit/lab frames")
+    parser.add_argument("--clustering", type=str, default="centauro", help="kt/centauro clustering")
+    parser.add_argument("--dataset", type=str, default="H1", help="H1/Rapgap/Djangoh will be used. Rapgap and Djangoh will be saved with unfolded weights")
+
+    args = parser.parse_args()
+    return args
+
+
+def load_model(model_path, dataloader):
+    #Load the trained model        
+    model_name = '{}/checkpoint'.format(model_path)
+    if hvd.rank()==0:
+        print("Loading model {}".format(model_name))
+
+    mfold = Multifold(verbose = hvd.rank()==0)
+    mfold.PrepareModel()
+    mfold.model2.load_weights(model_name).expect_partial() #Doesn't matter which model is loaded since both have the same architecture
+    unfolded_weights = mfold.reweight(dataloader.gen,mfold.model2_ema,batch_size=1000)
+    #return unfolded_weights
+    return hvd.allgather(tf.constant(unfolded_weights)).numpy()
 
 def _convert_kinematics(part, event, mask):
     #return particles in cartesian coordinates
@@ -65,44 +98,123 @@ def boost_particles(final_states, scattered_electron):
     return boosted_vectors
 
 if __name__ == "__main__":
-    base_path = '/global/cfs/cdirs/m3246/H1/h5/'
-    file_data = ['Rapgap_Eplus0607_prep.h5']
-    # Taking all MC events, not just the ones that pass fiduucial cuts
-    dataloader_MC = Dataset(file_data, base_path, is_mc=True, pass_fiducial=False, nmax=50000)
 
-    print("Loaded {} data events".format(dataloader_MC.gen[0].shape[0]))
-        
-    #Undo the preprocessing
-    particles_MC, events_MC, mask_MC  = dataloader_MC.gen
-    particles_MC, events_MC = dataloader_MC.revert_standardize(particles_MC, events_MC, mask_MC)
-    MC_weight = dataloader_MC.weight # These weights are calibration constants that should be applied
+    flags = parse_arguments()
+    file_data_dict = {"H1": 'data_prep.h5', "Rapgap": 'Rapgap_Eplus0607_prep.h5', "Djangoh": 'Djangoh_Eplus0607_prep.h5'}
+    model_dict = {"Rapgap": "/global/homes/r/rmilton/m3246/rmilton/H1Unfold/weights/OmniFold_pretrained_step2", "Djangoh": "/global/homes/r/rmilton/m3246/rmilton/H1Unfold/weights/OmniFold_pretrained_step2"}
+    dataset = flags.dataset
+    if dataset != "H1" and dataset != "Rapgap" and dataset != "Djangoh":
+        print("Invalid dataset. Please use H1, Rapgap, or Djangoh.")
+        exit()
+    if dataset == "H1":
+        MC = False
+    elif dataset == "Rapgap" or dataset == "Djangoh":
+        MC = True
+        model_path = model_dict[dataset]
 
-    # Getting the four vectors of our hadronic final states and scattered electron
-    data_cartesian = _convert_kinematics(particles_MC, events_MC, mask_MC)
-    data_electron_momentum = _convert_electron_kinematics(events_MC)
-    # Boosting particles to Breit frame
-    boosted_vectors = boost_particles(data_cartesian, data_electron_momentum)
-
-    # Extracting individual components of 4-vectors
-    boosted_px, boosted_py, boosted_pz, boosted_E = [], [], [], []
-    for event in boosted_vectors:
-        boosted_px.append([particle_vector.px for particle_vector in event])
-        boosted_py.append([particle_vector.py for particle_vector in event])
-        boosted_pz.append([particle_vector.pz for particle_vector in event])
-        boosted_E.append([particle_vector.E for particle_vector in event])
-    boosted_px = ak.Array(boosted_px)
-    boosted_py = ak.Array(boosted_py)
-    boosted_pz = ak.Array(boosted_pz)
-    boosted_E = ak.Array(boosted_E)
-
-    # Saving 4-vectors and passing it to Centauro jet-clustering
-    with uproot.recreate("./breit_particles.root") as file:
-        file["particles"] = {"px": boosted_px, "py": boosted_py, "pz": boosted_pz, "energy": boosted_E}
-    subprocess.run(["./run_centauro.sh"], shell=True)
-    with uproot.open("{file}:jets".format(file="./centauro_jets.root")) as out:
-        jets = out.arrays(["eta", "px", "py", "pz", "E", "pT", "phi"])
     
-    # Saving clustered jets and event kinematics
-    with uproot.recreate("./breit_output.root") as file:
+    # Taking all events, not just the ones that pass fiduucial cuts
+    dataloader = Dataset([file_data_dict[dataset]],
+                         flags.data_dir,
+                         rank=hvd.rank(),
+                         size=hvd.size(),
+                         is_mc=MC,
+                         pass_fiducial=MC,
+                         pass_reco = not MC,
+                         nmax=flags.num_data)
+    num_events = dataloader.gen[0].shape[0] if MC else dataloader.reco[0].shape[0]
+    print(f"Loaded {num_events} data events")
+    if MC:
+        unfolded_weights = load_model(model_path, dataloader)
+    #Undo the preprocessing
+    if MC:
+        particles, events = dataloader.revert_standardize(dataloader.gen[0], dataloader.gen[1], dataloader.gen[-1])
+        mask = dataloader.gen[-1]
+    else:
+        particles, events = dataloader.revert_standardize(dataloader.reco[0], dataloader.reco[1], dataloader.reco[-1])
+        mask = dataloader.reco[-1]
+    
+    calibration_weights = dataloader.weight # These weights are calibration constants that should be applied
+
+    if not MC:
+        pass_reco_data = dataloader.pass_reco
+        particles = particles[pass_reco_data]
+        events = events[pass_reco_data]
+        mask = mask[pass_reco_data]
+        calibration_weights = calibration_weights[pass_reco_data]
+
+    num_valid_events = len(events)
+    # Getting the four vectors of our hadronic final states
+    # cartesian_particles will be shape (N_events, N_particles, 4)
+    # The 4 will be [px, py, pz, E]
+    cartesian_particles = _convert_kinematics(particles, events, mask)
+    
+    events_for_clustering = []
+    # Boosting particles to Breit frame
+    if flags.frame == "breit":
+        print("Boosting to the Breit frame.")
+        # Getting scattered electron kinematics
+        # Shape is (N_events,)
+        # Each entry will be a MomentumObject4D containing the lab frame 4-momenta
+        electron_momentum = _convert_electron_kinematics(events)
+        # boosted_vectors has shape (N_events, N_particles_in_event,)
+        # Each event contains the 4-momenta of the particles
+        boosted_vectors = boost_particles(cartesian_particles, electron_momentum)
+        #Extracting individual components of 4-vectors
+        for event in boosted_vectors:
+            events_for_clustering.append([{"px": part_vec.px, "py": part_vec.py, "pz": part_vec.pz, "E": part_vec.E} for part_vec in event])
+            
+    elif flags.frame == "lab":
+        for event in cartesian_particles:
+            events_for_clustering.append([{"px": part[0], "py": part[1], "pz": part[2], "E": part[3]} for part in event if np.abs(part[0])!=0])
+
+    if flags.clustering == "centauro":
+        px, py, pz, energy = [], [], [], []
+        for event in events_for_clustering:
+            px.append([particle_vector["px"] for particle_vector in event])
+            py.append([particle_vector["py"] for particle_vector in event])
+            pz.append([particle_vector["pz"] for particle_vector in event])
+            energy.append([particle_vector["E"] for particle_vector in event])
+        px = ak.Array(px)
+        py = ak.Array(py)
+        pz = ak.Array(pz)
+        energy = ak.Array(energy)
+        # Saving 4-vectors and passing it to Centauro jet-clustering
+        with uproot.recreate("./breit_particles.root") as file:
+            file["particles"] = {"px": px, "py": py, "pz": pz, "energy": energy}
+        subprocess.run(["./run_centauro.sh"], shell=True)
+        with uproot.open("{file}:jets".format(file="./centauro_jets.root")) as out:
+            jets = out.arrays(["eta", "px", "py", "pz", "E", "pT", "phi"])
+    elif flags.clustering == "kt":
+        jetdef = fastjet.JetDefinition(fastjet.kt_algorithm, 1.0)
+
+        array = ak.Array(events_for_clustering)
+        cluster = fastjet.ClusterSequence(array, jetdef)
+        jets = cluster.inclusive_jets(min_pt=10)
+        jets["pt"] = -np.sqrt(jets["px"]**2 + jets["py"]**2)
+        jets["phi"] = np.arctan2(jets["py"],jets["px"])
+        jets["eta"] = np.arctanh(jets["pz"]/np.sqrt(jets["px"]**2 + jets["py"]**2 + jets["pz"]**2))
+        jets=fastjet.sorted_by_pt(jets)
+
+        def _take_leading_jet(jets):
+            jet = {}
+            jet["pT"] = -np.array(list(itertools.zip_longest(*jets.pt.to_list(), fillvalue=0))).T[:,0]
+            jet["eta"] = np.array(list(itertools.zip_longest(*jets.eta.to_list(), fillvalue=0))).T[:,0]
+            jet["phi"] = np.array(list(itertools.zip_longest(*jets.phi.to_list(), fillvalue=0))).T[:,0]
+            jet["E"] =   np.array(list(itertools.zip_longest(*jets.E.to_list(), fillvalue=0))).T[:,0]
+            jet["px"] = np.array(list(itertools.zip_longest(*jets.px.to_list(), fillvalue=0))).T[:,0]
+            jet["py"] = np.array(list(itertools.zip_longest(*jets.py.to_list(), fillvalue=0))).T[:,0]
+            jet["pz"] = np.array(list(itertools.zip_longest(*jets.pz.to_list(), fillvalue=0))).T[:,0]
+            return jet
+        jets = _take_leading_jet(jets)
+    # Saving clustered jets and event kinematics.
+    output_path = flags.save_dir + flags.outfile_name
+    if not os.path.exists(flags.save_dir):
+        os.makedirs(flags.save_dir)
+    with uproot.recreate(output_path) as file:
         file["jets"] = {"eta": jets["eta"], "px": jets["px"], "py": jets["py"], "pz": jets["pz"], "E": jets["E"], "pT": jets["pT"], "phi": jets["phi"]}
-        file["event"] = {"Q2": np.exp(events_MC[:, 0]), "weight":MC_weight}
+        output_event_dict = {"Q2": np.exp(events[:, 0]), "y": events[:,1], "elec_pT": events[:,2]*np.sqrt(np.exp(events[:, 0])), "elec_eta": events[:,3], "elec_phi": events[:,4], "weight":calibration_weights}
+        if MC:
+            output_event_dict["unfolded_weights"] = unfolded_weights
+        file["event"] = output_event_dict
+        
