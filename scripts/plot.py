@@ -21,7 +21,6 @@ mc_file_names = {
     # 'Djangoh':'toy1.h5',mask
 }
 
-
 def parse_arguments():
     parser = argparse.ArgumentParser()
     
@@ -29,6 +28,7 @@ def parse_arguments():
     parser.add_argument('--data_folder', default='/global/cfs/cdirs/m3246/vmikuni/H1v2/h5/', help='Folder containing data and MC files')
     parser.add_argument('--weights', default='../weights', help='Folder to store trained weights')
     parser.add_argument('--load_pretrain', action='store_true', default=False,help='Load pretrained model instead of starting from scratch')
+    parser.add_argument('--finetuned', action='store_true', default=False,help='Load pretrained, but reset classifier head. All weight still trainable')
     parser.add_argument('--config', default='config_general.json', help='Basic config file containing general options')
     parser.add_argument('--plot_folder', default='../plots', help='Folder to store plots')
     parser.add_argument('--reco', action='store_true', default=False,help='Plot reco level  results')
@@ -83,6 +83,10 @@ def get_version(flags,opt):
         
     if flags.load_pretrain:
         version += '_pretrained'
+
+    if flags.finetuned:
+        version += '_finetuned'
+
     if flags.reco:
         reference_name = 'data'
         
@@ -97,7 +101,7 @@ def load_model(flags,opt,version,dataloaders, ens):
 
     else:
         # model_name = '{}/OmniFold_{}_iter{}_step2/checkpoint'.format(flags.weights,version,flags.niter)
-        model_name = '{}/OmniFold_{}_iter{}_ens{}_step2/checkpoint'.format(
+        model_name = '{}/OmniFold_{}_iter{}_step2_ensemble{}/checkpoint'.format(
                         flags.weights,version,flags.niter, ens)
 
     if hvd.rank()==0:
@@ -106,7 +110,7 @@ def load_model(flags,opt,version,dataloaders, ens):
     mfold = Multifold(version = version,verbose = hvd.rank()==0)
     mfold.PrepareModel()
     mfold.model2.load_weights(model_name).expect_partial() #Doesn't matter which model is loaded since both have the same architecture
-    unfolded_weights = mfold.reweight(dataloaders['Rapgap'].evts,mfold.model2_ema,batch_size=1000)
+    unfolded_weights = mfold.reweight(dataloaders['Rapgap'].evts,mfold.model2,batch_size=1000)
     #return unfolded_weights
     return hvd.allgather(tf.constant(unfolded_weights)).numpy()
 
@@ -538,7 +542,10 @@ def main():
 
     # for feature in range(dataloaders['Rapgap'].event.shape[-1]):
 
+
+    # dataloaders = get_dataloaders(flags)
     ensemble_avg_weights = 0
+
     for e in range(flags.n_ens):
 
         print(f"plotting ensemble {e}")
@@ -549,10 +556,10 @@ def main():
         if flags.load:
             # raise ValueError("ERROR:NOT IMPLEMENTED")
             print("\n--- Loading .npy weights from ../weights/ ---\n")
-            weights = np.load(f"../weights/{version}_ens{e}_weights.npy")
+            weights = np.load(f"../weights/{version}_ensemble{e}_weights.npy")
         else:        
             weights = load_model(flags, opt, version, dataloaders, e)
-            np.save(f"../weights/{version}_ens{e}_weights.npy",weights) #already re-weighted, L:109
+            np.save(f"../weights/{version}_ensemble{e}_weights.npy",weights) #already re-weighted, L:109
         if hvd.rank()==0:
             print(weights[:5], weights[-5:])
 

@@ -1,0 +1,8 @@
+{
+    'NAME': 'H1_Dec_ModelLists_5lrscale_patience10',
+    'MC_NAMES_test':['test_sim.h5'],
+    'MC_NAMES':['Rapgap_Eplus0607_prep.h5'],
+    'MC_NAMES_FULL':['Rapgap_nominal','Djangoh_nominal','Rapgap_sys_0','Rapgap_sys_1','Rapgap_sys_5','Rapgap_sys_7','Rapgap_sys_11','Djangoh_sys_0','Djangoh_sys_1','Djangoh_sys_5','Djangoh_sys_7','Djangoh_sys_11'],
+    'NBOOTSTRAP':99,
+    'NITER':5,
+}

@@ -13,6 +13,14 @@ from architecture import Classifier,weighted_binary_crossentropy
 import utils
 import pickle
 
+import warnings
+warnings.filterwarnings(
+    "ignore",
+    message=r"Callback method `on_train_batch_end` is slow compared to the batch time",
+    category=UserWarning,
+)
+
+
 def label_smoothing(y_true,alpha=0):
     '''Regularization through binary label smoothing'''
     new_label = y_true*(1-alpha) + (1-y_true)*alpha
@@ -53,7 +61,7 @@ class Multifold():
                  verbose=1,
                  start = 0,
                  ):
-        
+
         self.version = version
         self.verbose = verbose
         self.log_file =  open('log_{}.txt'.format(self.version),'w')
@@ -70,17 +78,20 @@ class Multifold():
         self.pretrain = pretrain
         self.load_pretrain = load_pretrain        
         self.fine_tune = fine_tune        
-        
+
+        #runs the pretraining (uses same inputs as closure)
         if self.pretrain:
-            self.niter = 1 #Skip iterative procedure when pretraining the model
-        if self.load_pretrain:
+            self.niter = 1  # Skip iterative procedure when pretraining the model
+
+        if self.load_pretrain: 
             self.version += '_pretrained'
-            self.lr_factor = 1.
-        if self.fine_tune:
+            self.lr_factor = 5.  # default 5
+        elif self.fine_tune:
             self.version += '_finetuned'
-            self.lr_factor = 1.
+            self.lr_factor = 5.  # default 5
         else:
-            self.lr_factor = 1.
+            self.version += '_fromscratch'
+            self.lr_factor = 5.  # default 1
 
         self.num_steps_reco = None
         self.num_steps_gen = None
@@ -101,11 +112,11 @@ class Multifold():
         # ensembling. Will deep-copy self.model1 or self.model2
         self.step1_models = []
         self.step2_models = []
-            
+
     def Unfold(self):
         self.BATCH_SIZE=self.opt['BATCH_SIZE']
         self.EPOCHS=self.opt['EPOCHS']
-                                        
+
         self.weights_pull = np.ones(self.mc.weight.shape[0])
         if self.start>0:
 
@@ -139,7 +150,7 @@ class Multifold():
             self.RunStep2(i)
             self.CompileModels(self.lr,fixed=True)
 
-            
+
     def RunStep1(self,i):
         '''Data versus reco MC reweighting'''
         if hvd.rank()==0:print("RUNNING STEP 1")
@@ -240,7 +251,7 @@ class Multifold():
         NTEST = int(test_frac*NTRAIN)
         train_data, test_data = self.cache(labels,weights,stepn,cached,NTRAIN-NTEST)
         num_steps = self.num_steps_reco if stepn==1 else self.num_steps_gen
-        
+
         if self.verbose and hvd.rank()==0:
             print(80*'#')
             self.log_string(f"Train events used: {NTRAIN}")
@@ -258,19 +269,19 @@ class Multifold():
 
         if hvd.rank() == 0:
             print('Saving model', model_name)
-        
+
 
         callbacks = [
             hvd.callbacks.BroadcastGlobalVariablesCallback(0),
             hvd.callbacks.MetricAverageCallback(),
-            
+
             ReduceLROnPlateau(patience=1000, min_lr=1e-7,
                               verbose=verbose,monitor="val_loss"),
             EarlyStopping(patience=self.opt['NPATIENCE'],restore_best_weights=True,
                           monitor="val_loss"),
         ]  # will append checkpoint in ensemble loop
-        
-        
+
+
         for ensemble in range(self.n_ensemble):
             ''' ensembling implemented here, in RunModel. This reduces parallelization''' 
             ''' but results in overall less variance. Called 'step ensembling' since  '''
@@ -281,15 +292,15 @@ class Multifold():
 
             ens_name = model_name
             if self.n_ensemble > 1: ens_name = model_name.replace('E',f'{ensemble}')
-                
+
             if hvd.rank() == 0:
                 self.log_string("Ensemble: {} / {}".format(
-                ensemble + 1, self.n_ensemble))
+                    ensemble + 1, self.n_ensemble))
                 callbacks.append(ModelCheckpoint(ens_name, save_best_only=True,
                                                  mode='auto', period=1,
                                                  save_weights_only=True))
 
-                        
+
             # Instantiate new model_e, then load from previous iteration
             if iteration < 1:
                 model_e = tf.keras.models.clone_model(model)
@@ -301,7 +312,7 @@ class Multifold():
 
             else:
                 model_e = self.step1_models[ensemble] if stepn == 1 else self.step2_models[ensemble]
-                        
+
             # model_e = model  # to test iterations passing models
 
             self.CompileModel(model_e, self.lr ,num_steps)
@@ -314,11 +325,11 @@ class Multifold():
                 validation_steps=NTEST//self.BATCH_SIZE,
                 verbose= verbose,
                 callbacks=callbacks)
-            
+
             if hvd.rank() ==0:
                 with open(ens_name.replace("/checkpoint",".pkl"),"wb") as f:
                     pickle.dump(hist.history, f)
-            
+
         del train_data, test_data
         gc.collect()
 
@@ -334,7 +345,7 @@ class Multifold():
         if not cached:
             if self.verbose:
                 self.log_string("Creating cached data from step {}".format(stepn))
-                    
+
             if stepn ==1:
                 self.idx_1 = np.arange(label.shape[0])
                 np.random.shuffle(self.idx_1)
@@ -363,7 +374,7 @@ class Multifold():
             print(label[idx])
             print(NTRAIN,idx.shape[0])
         labels = tf.data.Dataset.from_tensor_slices(np.stack((label[idx],weights[idx]),axis=1))
-        
+
         if stepn ==1:
             data = tf.data.Dataset.zip((self.tf_data1,labels))
         elif stepn==2:
@@ -371,7 +382,7 @@ class Multifold():
         else:
             logging.error("ERROR: STEPN not recognized")
 
-                
+
         train_data = data.take(NTRAIN).shuffle(NTRAIN).repeat().batch(self.BATCH_SIZE).prefetch(buffer_size=tf.data.AUTOTUNE)
         test_data  = data.skip(NTRAIN).repeat().batch(self.BATCH_SIZE).prefetch(buffer_size=tf.data.AUTOTUNE)
         del data
@@ -424,13 +435,13 @@ class Multifold():
             weight_decay=1e-5,
             beta_1=0.95,
             beta_2=0.99)
-        
+
         opt_body = tf.keras.optimizers.Lion(
             learning_rate=min_learning_rate if fixed else lr_schedule_body,
             weight_decay=1e-5,
             beta_1=0.95,
             beta_2=0.99)
-        
+
         opt_head = hvd.DistributedOptimizer(opt_head)
         opt_body = hvd.DistributedOptimizer(opt_body)
 
@@ -463,7 +474,7 @@ class Multifold():
                                  projection_dim= self.opt['NDIM'],
                                  step=1,
                                  )
-        
+
         self.model2 = Classifier(self.num_feat,
                                  self.num_event,
                                  num_heads=self.opt['NHEADS'],
@@ -497,11 +508,11 @@ class Multifold():
     def CompareDistance(self,patience,min_distance,weights1,weights2):
         distance = np.mean(
             (np.sort(weights1) - np.sort(weights2))**2)
-                
+
         print(80*'#')
         self.log_string("Distance between weights: {}".format(distance))
         print(80*'#')
-                
+
         if distance<min_distance:
             min_distance = distance
             patience = 0
@@ -511,7 +522,7 @@ class Multifold():
             print(80*'#')
             patience+=1
         return patience, min_distance
-        
+
     def log_string(self,out_str):
         self.log_file.write(out_str+'\n')
         self.log_file.flush()
