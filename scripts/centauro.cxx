@@ -14,9 +14,51 @@
 #include "TTreeReaderArray.h"
 #include "TCanvas.h"
 
-int main()
+int main(int argc, char* argv[])
 {
-    TFile *breit_file = TFile::Open("./breit_particles.root");
+    if (argc < 5) {
+        std::cerr << "Usage: " << argv[0] << " --input <input_file> --output <output_file>" << std::endl;
+        return 1;
+    }
+
+    std::map<std::string, std::string> args;
+    for (int i = 1; i < argc; i += 2) {
+        if (i + 1 < argc) { // Ensure there's a value after the flag
+            args[argv[i]] = argv[i + 1];
+        }
+    }
+
+    if (args.find("--input") == args.end() || args.find("--output") == args.end()) {
+        std::cerr << "Error: Both --input and --output arguments are required." << std::endl;
+        return 1;
+    }
+
+    std::string inputFileName;
+    if (args.find("--input") == args.end())
+    {
+        inputFileName = "breit_particles.root";
+        std::cout<<"No input argument found. Input file is "<<inputFileName<<std::endl;
+    }
+    else
+    {
+        inputFileName = args["--input"];
+        std::cout<<"Input file is "<<inputFileName<<std::endl;
+    }
+
+    std::string outputFileName;
+    if (args.find("--output") == args.end())
+    {
+        outputFileName = "centuaro_jets.root";
+        std::cout<<"No output argument found. Output file is "<<outputFileName<<std::endl;
+    }
+    else
+    {
+        outputFileName = args["--output"];
+        std::cout<<"Output file is "<<outputFileName<<std::endl;
+    }
+
+
+    TFile *breit_file = TFile::Open(inputFileName.c_str());
 
     TTreeReader particle_tree("particles", breit_file);
     TTreeReaderArray<Double_t> px(particle_tree, "px");
@@ -41,7 +83,7 @@ int main()
     std::vector<Double_t> jet_pt;
     
 
-    TFile* file = TFile::Open("centauro_jets.root", "RECREATE");
+    TFile* file = TFile::Open(outputFileName.c_str(), "RECREATE");
     TTree* tree = new TTree("jets", "");
 
     tree->Branch("eta", &jet_eta);
@@ -64,7 +106,17 @@ int main()
         fastjet::JetDefinition jet_def(centauro_plugin);
         fastjet::ClusterSequence clust_seq(particle_vector, jet_def);
 
-        std::vector<fastjet::PseudoJet> jets = clust_seq.inclusive_jets(0);
+        std::vector<fastjet::PseudoJet> all_jets = clust_seq.inclusive_jets(0);
+        std::vector<fastjet::PseudoJet> jets;
+        for(auto& jet : all_jets)
+        {
+            std::vector<fastjet::PseudoJet> constituents = jet.constituents();
+
+            if(constituents.size() > 1)
+            {
+                jets.push_back(jet);
+            }
+        }
 
         std::vector<fastjet::PseudoJet> sortedJets = sorted_by_E(jets);
         jet_eta.clear();
