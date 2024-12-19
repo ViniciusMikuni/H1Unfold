@@ -16,8 +16,8 @@
 export TF_CPP_MIN_LOG_LEVEL=2
 
 # train from scratch, no loading pretrain or  running pretraining
-echo srun --mpi=pmi2 shifter python train.py --data_folder /global/cfs/cdirs/m3246/vmikuni/H1v2/h5/ --closure config_Dec_lrscale5_patience10.json
-srun --mpi=pmi2 shifter python train.py --data_folder /global/cfs/cdirs/m3246/vmikuni/H1v2/h5/ --closure config_Dec_lrscale5_patience10.json
+echo srun --mpi=pmi2 shifter python train.py --data_folder /global/cfs/cdirs/m3246/vmikuni/H1v2/h5/ --closure --config config_Dec_lrscale5_patience10.json
+srun --mpi=pmi2 shifter python train.py --data_folder /global/cfs/cdirs/m3246/vmikuni/H1v2/h5/ --closure --config config_Dec_lrscale5_patience10.json
 
 #standard
 # echo srun --mpi=pmi2 shifter python train.py
