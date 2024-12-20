@@ -26,12 +26,13 @@ def parse_arguments():
     parser.add_argument("--frame", type=str, default="breit", help="breit/lab frames")
     parser.add_argument("--clustering", type=str, default="centauro", help="kt/centauro clustering")
     parser.add_argument("--dataset", type=str, default="H1", help="H1/Rapgap/Djangoh will be used. Rapgap and Djangoh will be saved with unfolded weights")
-
+    parser.add_argument("--use_vinny_models", action='store_true', default=False,help='Use unfolded models from Vinny')
+    parser.add_argument("--vinny_version", type=str, default='H1_July_closure', help="Version of Vinny model. Only used when use_vinny_models is True")
     args = parser.parse_args()
     return args
 
 
-def load_model(model_path, dataloader, step):
+def load_model(model_path, events, use_vinny_models, version = None):
     def expit(x):
         return 1. / (1. + np.exp(-x))
     def reweight(events,model,batch_size=None):
@@ -39,30 +40,19 @@ def load_model(model_path, dataloader, step):
         weights = f / (1. - f)  # this is the crux of the reweight, approximates likelihood ratio
         weights = np.nan_to_num(weights[:,0],posinf=1)
         return weights
-    print("Loading model: ", model_path)
-    if step == 1:
-        dataset = dataloader.reco_particles
-    elif step == 2:
-        dataset = dataloader.particles
-    PET_model = PET(dataset.shape[2], num_part=dataset.shape[1], num_heads = 4, num_transformer = 4, local = True, projection_dim = 128, K = 10)
-    PET_model.load_weights(model_path)
-    unfolded_weights =  reweight(dataset, PET_model, batch_size=1000)
-    return hvd.allgather(tf.constant(unfolded_weights)).numpy()
-
-def load_model_vinny(version, dataloader, step):
-    if step == 1:
-        model_name = f'/global/cfs/cdirs/m3246/H1/weights/OmniFold_{version}_pretrained_iter9_step1/checkpoint'
-        events = dataloader.reco
-    elif step == 2:
-        model_name = f'/global/cfs/cdirs/m3246/H1/weights/OmniFold_{version}_pretrained_iter9_step2/checkpoint'
-        events = dataloader.gen
+    
     if hvd.rank()==0:
-        print("Loading model {}".format(model_name))
-
-    mfold = Multifold(version = version,verbose = hvd.rank()==0)
-    mfold.PrepareModel()
-    mfold.model2.load_weights(model_name).expect_partial() #Doesn't matter which model is loaded since both have the same architecture
-    unfolded_weights = mfold.reweight(events,mfold.model2_ema,batch_size=1000)
+        print("Loading model {}".format(model_path))
+    if use_vinny_models:
+        mfold = Multifold(version = version,verbose = hvd.rank()==0)
+        mfold.PrepareModel()
+        mfold.model2.load_weights(model_path).expect_partial() #Doesn't matter which model is loaded since both have the same architecture
+        unfolded_weights = mfold.reweight(events,mfold.model2_ema,batch_size=1000)
+    else:
+        events = np.asarray(events[0])
+        PET_model = PET(events.shape[2], num_part=events.shape[1], num_heads = 4, num_transformer = 4, local = True, projection_dim = 128, K = 10)
+        PET_model.load_weights(model_path)
+        unfolded_weights =  reweight(events, PET_model, batch_size=1000)
     return hvd.allgather(tf.constant(unfolded_weights)).numpy()
 
 def _convert_kinematics(part, event, mask):
@@ -271,22 +261,19 @@ def clustering_procedure(cartesian_particles, dataloader, dataset, reco = True):
         else:
             dataloader.gen_jet = _take_all_jet(jets, max_num_jets)
 
-def extract_electron_info(events):
-    pT = events[:, 2]*np.sqrt(np.exp(events[:, 0])) # pT/Q -> pT
-    eta = events[:, 3]
-    log_energy = np.log(np.cosh(eta)*pT)
-    phi = events[:, 4]
-    log_pT = np.log(pT) 
-    charge = -1*np.ones(events.shape[0])
-    zeros = np.zeros(events.shape[0])
-    return np.expand_dims(np.stack([eta, phi, log_pT, zeros, zeros, log_energy, zeros, charge], axis=-1), axis=1)
-
 if __name__ == "__main__":
 
     flags = parse_arguments()
+    use_vinny_models = flags.use_vinny_models
+    version = flags.vinny_version
+
     file_data_dict = {"H1": 'data_Eplus0607_prep.h5', "Rapgap": 'Rapgap_Eplus0607_prep.h5', "Djangoh": 'Djangoh_Eplus0607_prep.h5'}
-    model_dict_step1 = {"Rapgap": "/global/homes/r/rmilton/m3246/rmilton/H1Unfold/weights/OmniFold_Djangoh_Rapgap_closure_interactive_iter9_step1.weights.h5", "Djangoh": None}
-    model_dict_step2 = {"Rapgap": "/global/homes/r/rmilton/m3246/rmilton/H1Unfold/weights/OmniFold_Djangoh_Rapgap_closure_interactive_iter9_step2.weights.h5", "Djangoh": None}
+    if use_vinny_models:
+        model_dict_step1 = {"Rapgap": f"/global/cfs/cdirs/m3246/H1/weights/OmniFold_{version}_pretrained_iter9_step1/checkpoint", "Djangoh": None}
+        model_dict_step2 = {"Rapgap": f"/global/cfs/cdirs/m3246/H1/weights/OmniFold_{version}_pretrained_iter9_step2/checkpoint", "Djangoh": None}
+    else:
+        model_dict_step1 = {"Rapgap": "/global/homes/r/rmilton/m3246/rmilton/H1Unfold/weights/OmniFold_Djangoh_Rapgap_closure_12_09_iter4_step1.weights.h5", "Djangoh": None}
+        model_dict_step2 = {"Rapgap": "/global/homes/r/rmilton/m3246/rmilton/H1Unfold/weights/OmniFold_Djangoh_Rapgap_closure_12_09_iter4_step2.weights.h5", "Djangoh": None}
     dataset = flags.dataset
     if dataset != "H1" and dataset != "Rapgap" and dataset != "Djangoh":
         print("Invalid dataset. Please use H1, Rapgap, or Djangoh.")
@@ -298,104 +285,89 @@ if __name__ == "__main__":
         model_path_step2 = model_dict_step2[dataset]
         model_path_step1 = model_dict_step1[dataset]
 
-    version = 'H1_July_closure'
     
     # Taking all events, not just the ones that pass fiduucial cuts
     if flags.num_data == -1:
         nmax = None
     else:
         nmax = flags.num_data
-    if MC:
-        dataloader_gen = Dataset([file_data_dict[dataset]],
-                            flags.data_dir,
-                            rank=hvd.rank(),
-                            size=hvd.size(),
-                            is_mc=MC,
-                            pass_reco=False,
-                            pass_fiducial=False,
-                            nmax=nmax)
         
     dataloader = Dataset([file_data_dict[dataset]],
                         flags.data_dir,
                         rank=hvd.rank(),
                         size=hvd.size(),
                         is_mc=MC,
-                        pass_reco=False,
-                        pass_fiducial=False,
                         nmax=nmax)
-        
-    print(dataloader.reco[0].shape)
-    num_events = dataloader.gen[0].shape[0] if MC else dataloader.reco[0].shape[0]
-    print(f"Loaded {num_events} data events")
+    dataloader.masked_reco = [dataloader.reco[0][dataloader.pass_reco], dataloader.reco[1][dataloader.pass_reco], dataloader.reco[2][dataloader.pass_reco]]
+    dataloader.reco_weight = dataloader.weight[dataloader.pass_reco]
+    del dataloader.reco
+    if MC:
+        dataloader.masked_gen = [dataloader.gen[0][dataloader.pass_gen], dataloader.gen[1][dataloader.pass_gen], dataloader.gen[2][dataloader.pass_gen]]
+        dataloader.gen_weight = dataloader.weight[dataloader.pass_gen]
+        del dataloader.gen
+    del dataloader.weight
+    gc.collect()
+
     #Undo the preprocessing
+    # The mask obtained from masked_X[-1] removes events that have pT = 0
+
     if MC:
         if model_path_step1 is not None:
-            step1_weights = load_model_vinny(version, dataloader, 1)
-        # if model_path_step1 is not None:
-        #     step1_weights = load_model(model_path_step1, dataloader, 1)
-        dataloader.reco_particles, dataloader.reco_events = dataloader.revert_standardize(dataloader.reco[0], dataloader.reco[1], dataloader.reco[-1])
-        dataloader.reco_mask = dataloader.reco[-1]
-        del dataloader.reco
+            step1_weights = load_model(model_path_step1, dataloader.masked_reco, use_vinny_models, version)
+        dataloader.reco_particles, dataloader.reco_events = dataloader.revert_standardize(dataloader.masked_reco[0], dataloader.masked_reco[1], dataloader.masked_reco[-1])
+        dataloader.reco_mask = dataloader.masked_reco[-1]
+        del dataloader.masked_reco
 
         if model_path_step2 is not None:
-            step2_weights = load_model_vinny(version, dataloader_gen, 2)
-        # if model_path_step2 is not None:
-            # step2_weights = load_model(model_path_step2, dataloader, 2)
-        dataloader_gen.gen_particles, dataloader_gen.gen_events = dataloader_gen.revert_standardize(dataloader_gen.gen[0], dataloader_gen.gen[1], dataloader_gen.gen[-1])
-        dataloader_gen.gen_mask = dataloader_gen.gen[-1] # To remove events that have pT = 0
-        del dataloader_gen.gen
-        gc.collect()
+            step2_weights = load_model(model_path_step2, dataloader.masked_gen, use_vinny_models, version)
+        dataloader.gen_particles, dataloader.gen_events= dataloader.revert_standardize(dataloader.masked_gen[0], dataloader.masked_gen[1], dataloader.masked_gen[-1])
+        dataloader.gen_mask = dataloader.masked_gen[-1]
+        del dataloader.masked_gen
     else:
-        del dataloader.gen
-        dataloader.reco_particles, dataloader.reco_events = dataloader.revert_standardize(dataloader.reco[0], dataloader.reco[1], dataloader.reco[-1])
-        dataloader.reco_particles = dataloader.reco_particles
-        dataloader.reco_events = dataloader.reco_events
-        dataloader.reco_mask = dataloader.reco_mask
-        del dataloader.reco
-        gc.collect()
+        dataloader.reco_particles, dataloader.reco_events = dataloader.revert_standardize(dataloader.masked_reco[0], dataloader.masked_reco[1], dataloader.masked_reco[-1])
+        dataloader.reco_mask = dataloader.masked_reco[-1]
+        del dataloader.masked_reco
+    gc.collect()
 
     # Getting the four vectors of our hadronic final states
     # cartesian_particles will be shape (N_events, N_particles, 4)
     # The 4 will be [px, py, pz, E]
     if MC:
-        gen_cartesian_particles = _convert_kinematics(dataloader_gen.gen_particles, dataloader_gen.gen_events, dataloader_gen.gen_mask)
+        gen_cartesian_particles = _convert_kinematics(dataloader.gen_particles, dataloader.gen_events, dataloader.gen_mask)
     reco_cartesian_particles = _convert_kinematics(dataloader.reco_particles, dataloader.reco_events, dataloader.reco_mask)
 
     if MC:
         print("Clustering gen jets")
-        clustering_procedure(gen_cartesian_particles, dataloader_gen, dataset, reco=False)
+        clustering_procedure(gen_cartesian_particles, dataloader, dataset, reco=False)
     print("Clustering reco jets")
     clustering_procedure(reco_cartesian_particles, dataloader, dataset, reco=True)
 
-    def gather_data(dataloader, is_MC, dataloader_gen = None):
+    def gather_data(dataloader, is_MC):
         dataloader.reco_mask = np.reshape(dataloader.reco_mask,(-1))
         dataloader.reco_particles = hvd.allgather(tf.constant(dataloader.reco_particles.reshape(
             (-1,dataloader.reco_particles.shape[-1]))[dataloader.reco_mask])).numpy()
         
         dataloader.reco_events = hvd.allgather(tf.constant(dataloader.reco_events)).numpy()
         dataloader.reco_jet = hvd.allgather(tf.constant(dataloader.reco_jet)).numpy()
-        dataloader.weight = hvd.allgather(tf.constant(dataloader.weight)).numpy()
+        dataloader.reco_weight = hvd.allgather(tf.constant(dataloader.reco_weight)).numpy()
         dataloader.reco_mask = hvd.allgather(tf.constant(dataloader.reco_mask)).numpy()
         dataloader.reco_q = hvd.allgather(tf.constant(dataloader.reco_q)).numpy()
         if is_MC:
-            dataloader_gen.gen_mask = np.reshape(dataloader_gen.gen_mask,(-1))
-            dataloader_gen.gen_particles = hvd.allgather(tf.constant(dataloader_gen.gen_particles.reshape(
-                (-1,dataloader_gen.gen_particles.shape[-1]))[dataloader_gen.gen_mask])).numpy()
+            dataloader.gen_mask = np.reshape(dataloader.gen_mask,(-1))
+            dataloader.gen_particles = hvd.allgather(tf.constant(dataloader.gen_particles.reshape(
+                (-1,dataloader.gen_particles.shape[-1]))[dataloader.gen_mask])).numpy()
             
-            dataloader_gen.gen_events = hvd.allgather(tf.constant(dataloader_gen.gen_events)).numpy()
-            dataloader_gen.gen_jet = hvd.allgather(tf.constant(dataloader_gen.gen_jet)).numpy()
-            dataloader_gen.weight = hvd.allgather(tf.constant(dataloader_gen.weight)).numpy()
-            dataloader_gen.gen_mask = hvd.allgather(tf.constant(dataloader_gen.gen_mask)).numpy()
-            dataloader.gen_q = hvd.allgather(tf.constant(dataloader_gen.gen_q)).numpy()
+            dataloader.gen_events = hvd.allgather(tf.constant(dataloader.gen_events)).numpy()
+            dataloader.gen_jet = hvd.allgather(tf.constant(dataloader.gen_jet)).numpy()
+            dataloader.gen_weight = hvd.allgather(tf.constant(dataloader.gen_weight)).numpy()
+            dataloader.gen_mask = hvd.allgather(tf.constant(dataloader.gen_mask)).numpy()
+            dataloader.gen_q = hvd.allgather(tf.constant(dataloader.gen_q)).numpy()
 
+    gather_data(dataloader, MC)
     if MC:
-        gather_data(dataloader, MC, dataloader_gen)
-    else:
-        gather_data(dataloader, MC)
-    if MC:
-        gen_jets = dataloader_gen.gen_jet
+        gen_jets = dataloader.gen_jet
         gen_jet_dict = {"pT":gen_jets[:, 0], "eta":gen_jets[:, 1], "phi":gen_jets[:, 2], "E":gen_jets[:, 3], "px":gen_jets[:, 4], "py":gen_jets[:, 5], "pz":gen_jets[:, 6]}
-        gen_q = dataloader_gen.gen_q
+        gen_q = dataloader.gen_q
         gen_q_dict = {"px":gen_q[:,0], "py":gen_q[:,1], "pz":gen_q[:,2],"E":gen_q[:,3]}
 
     reco_jets = dataloader.reco_jet
@@ -405,10 +377,10 @@ if __name__ == "__main__":
     
     # These weights are calibration constants that should be applied
     reco_events = dataloader.reco_events
-    reco_calibration_weights = dataloader.weight
+    reco_calibration_weights = dataloader.reco_weight
     if MC:
-        gen_events = dataloader_gen.gen_events
-        calibration_weights = dataloader_gen.weight
+        gen_events = dataloader.gen_events
+        gen_calibration_weights = dataloader.gen_weight
      
     # Saving clustered jets and event kinematics.
     output_path = flags.save_dir + flags.outfile_name
@@ -417,7 +389,7 @@ if __name__ == "__main__":
     with uproot.recreate(output_path) as file:
         if MC:
             file["gen_jets"] = {"eta": gen_jet_dict["eta"], "px": gen_jet_dict["px"], "py": gen_jet_dict["py"], "pz": gen_jet_dict["pz"], "E": gen_jet_dict["E"], "pT": gen_jet_dict["pT"], "phi": gen_jet_dict["phi"]}
-            output_event_dict = {"q_x":gen_q_dict["px"], "q_y":gen_q_dict["py"], "q_z":gen_q_dict["pz"], "q_E":gen_q_dict["E"], "Q2": np.exp(gen_events[:, 0]), "y": gen_events[:,1],"elec_pT": gen_events[:,2]*np.sqrt(np.exp(gen_events[:, 0])), "elec_eta": gen_events[:,3], "elec_phi": gen_events[:,4], "weight":calibration_weights}
+            output_event_dict = {"q_x":gen_q_dict["px"], "q_y":gen_q_dict["py"], "q_z":gen_q_dict["pz"], "q_E":gen_q_dict["E"], "Q2": np.exp(gen_events[:, 0]), "y": gen_events[:,1],"elec_pT": gen_events[:,2]*np.sqrt(np.exp(gen_events[:, 0])), "elec_eta": gen_events[:,3], "elec_phi": gen_events[:,4], "weight":gen_calibration_weights}
             if model_path_step2 is not None:
                 output_event_dict["step2_weights"] = step2_weights
             file["gen_event"] = output_event_dict
