@@ -28,6 +28,9 @@ def parse_arguments():
     parser.add_argument("--dataset", type=str, default="H1", help="H1/Rapgap/Djangoh will be used. Rapgap and Djangoh will be saved with unfolded weights")
     parser.add_argument("--use_vinny_models", action='store_true', default=False,help='Use unfolded models from Vinny')
     parser.add_argument("--vinny_version", type=str, default='H1_July_closure', help="Version of Vinny model. Only used when use_vinny_models is True")
+    parser.add_argument("--load_breit", action='store_true', default=False, help = "Option to load boosted Breit particles from file")
+    parser.add_argument("--breit_gen_path", type=str, default="breit_particles_Rapgap_gen.root", help="Location of saved gen Breit particles ROOT file")
+    parser.add_argument("--breit_reco_path", type=str, default="breit_particles_Rapgap_reco.root", help="Location of saved reco Breit particles ROOT file")
     args = parser.parse_args()
     return args
 
@@ -79,57 +82,71 @@ def _convert_electron_kinematics(event_list):
     return electron_cartesian
 
 def boost_particles(final_states, scattered_electron):
-    particle_vectors, particle_sigma_tot = [], []
+    particle_vectors, sigma_h = [], []
     # Putting all particles into vectors and calculating sigma_tot
-    for i, event in enumerate(final_states):
-        sigma_h = np.sum([part[3] - part[2] for part in event if np.abs(part[0])!=0]) # sum_i(E_i - pz_i)
-        sigma_eprime = scattered_electron[i].energy*(1-np.cos(scattered_electron[i].theta))
-        sigma_tot = sigma_h + sigma_eprime
-        particle_vectors.append([vector.obj(px=part[0], py=part[1], pz=part[2], energy=part[3]) for part in event if np.abs(part[0]!=0)])
-        particle_sigma_tot.append(sigma_tot)
+    for event in final_states:
+        nonzero_particles = np.array([part for part in event if np.abs(part[0])!=0])
+        event_sigma_h = np.sum(nonzero_particles[:, 3] - nonzero_particles[:, 2]) # sum_i(E_i - pz_i)
+        sigma_h.append(event_sigma_h)
+        particle_vectors.append([vector.obj(px=part[0], py=part[1], pz=part[2], energy=part[3]) for part in nonzero_particles])
     
     # Getting the effictive lepton beam momentum
-    particle_sigma_tot = np.asarray(particle_sigma_tot)
+    sigma_h = np.array(sigma_h)
+
+    # Compute sigma_eprime vectorized
+    sigma_eprime = np.array([e.energy * (1 - np.cos(e.theta)) for e in scattered_electron])
+    sigma_tot = sigma_h + sigma_eprime
+
     vectorize_func = np.vectorize(vector.obj, otypes=[object])
-    beam_electron_momentum = vectorize_func(px=0, py=0, pz=-particle_sigma_tot/2., energy=particle_sigma_tot/2.)
+    beam_electron_momentum = vectorize_func(px=np.zeros_like(sigma_tot), py=np.zeros_like(sigma_tot), pz=-sigma_tot/2., energy=sigma_tot/2.)
 
     # Boosting the particles to the Breit frame
     boosted_vectors = []
-    for i, (beam_e, scattered_e, event_particles) in enumerate(zip(beam_electron_momentum, scattered_electron, particle_vectors)):
+    z_hat = vector.obj(px=0, py=0, pz=1, energy=1)
+
+    for beam_e, scattered_e, event_particles in zip(beam_electron_momentum, scattered_electron, particle_vectors):
         # Calculating boost vector
         # Calculation taken from https://doi.org/10.1140/epjc/s10052-024-13003-1
-        z_hat = vector.obj(px=0, py=0, pz=1, energy=1)
-        photon = beam_e - scattered_e
-        Q = np.sqrt(-1*photon.dot(photon))
-        Sigma = photon.energy - photon.pz
-        boostvector = photon - Q*Q/Sigma*(-1*z_hat)
-        xBoost = vector.obj(px = photon.px/photon.pt, py = photon.py/photon.pt, pz = photon.pt/Sigma, energy = photon.pt/Sigma)
-        yBoost = vector.obj(px = -photon.py/photon.pt, py = photon.px/photon.pt, pz = 0, energy = 0)
-        boosted_event_vectors = []
-        for vec in event_particles:
-            breit_vec = vector.obj(px = xBoost.dot(vec), py = yBoost.dot(vec), pz = photon.dot(vec)/Q, energy = boostvector.dot(vec)/Q)
-            boosted_event_vectors.append(breit_vec)
+        q = beam_e - scattered_e
+        Q = np.sqrt(-1*q.dot(q))
+        Sigma = q.energy - q.pz
+        boostvector = q - Q*Q/Sigma*(-1*z_hat)
+        xBoost = vector.obj(px = q.px/q.pt, py = q.py/q.pt, pz = q.pt/Sigma, energy = q.pt/Sigma)
+        yBoost = vector.obj(px = -q.py/q.pt, py = q.px/q.pt, pz = 0, energy = 0)
+        boosted_event_vectors = [
+            vector.obj(
+                px = xBoost.dot(vec),
+                py = yBoost.dot(vec),
+                pz = q.dot(vec)/Q,
+                energy = boostvector.dot(vec)/Q
+                )
+                for vec in event_particles
+        ]
+
         boosted_vectors.append(boosted_event_vectors)
     return boosted_vectors
 
 def get_q(final_states, scattered_electron):
-    particle_vectors, particle_sigma_tot = [], []
+    particle_vectors, sigma_h = [], []
     # Putting all particles into vectors and calculating sigma_tot
-    for i, event in enumerate(final_states):
-        sigma_h = np.sum([part[3] - part[2] for part in event if np.abs(part[0])!=0]) # sum_i(E_i - pz_i)
-        sigma_eprime = scattered_electron[i].energy*(1-np.cos(scattered_electron[i].theta))
-        sigma_tot = sigma_h + sigma_eprime
-        particle_vectors.append([vector.obj(px=part[0], py=part[1], pz=part[2], energy=part[3]) for part in event if np.abs(part[0]!=0)])
-        particle_sigma_tot.append(sigma_tot)
+    for event in final_states:
+        nonzero_particles = np.array([part for part in event if np.abs(part[0])!=0])
+        event_sigma_h = np.sum(nonzero_particles[:, 3] - nonzero_particles[:, 2]) # sum_i(E_i - pz_i)
+        sigma_h.append(event_sigma_h)
+        particle_vectors.append([vector.obj(px=part[0], py=part[1], pz=part[2], energy=part[3]) for part in nonzero_particles])
     
     # Getting the effictive lepton beam momentum
-    particle_sigma_tot = np.asarray(particle_sigma_tot)
+    sigma_h = np.array(sigma_h)
+
+    # Compute sigma_eprime vectorized
+    sigma_eprime = np.array([e.energy * (1 - np.cos(e.theta)) for e in scattered_electron])
+    sigma_tot = sigma_h + sigma_eprime
+
     vectorize_func = np.vectorize(vector.obj, otypes=[object])
-    beam_electron_momentum = vectorize_func(px=0, py=0, pz=-particle_sigma_tot/2., energy=particle_sigma_tot/2.)
+    beam_electron_momentum = vectorize_func(px=0, py=0, pz=-sigma_tot/2., energy=sigma_tot/2.)
+    
     q_list = np.zeros((final_states.shape[0], 4))
     for i, (beam_e, scattered_e) in enumerate(zip(beam_electron_momentum, scattered_electron)):
-        # Calculating boost vector
-        # Calculation taken from https://doi.org/10.1140/epjc/s10052-024-13003-1
         q = beam_e - scattered_e
         q_list[i, 0] = q.px
         q_list[i, 1] = q.py
@@ -137,8 +154,7 @@ def get_q(final_states, scattered_electron):
         q_list[i, 3] = q.E
     return q_list
 
-
-def clustering_procedure(cartesian_particles, dataloader, dataset, reco = True):
+def clustering_procedure(cartesian_particles, dataloader, dataset, reco, load_breit, breit_gen_path, breit_reco_path):
 
     events_for_clustering = []
     
@@ -146,50 +162,65 @@ def clustering_procedure(cartesian_particles, dataloader, dataset, reco = True):
     if flags.frame == "breit":
         # for event in boosted_vectors:
         #     events_for_clustering.append([{"px": part_vec.px, "py": part_vec.py, "pz": part_vec.pz, "E": part_vec.E} for part_vec in event])
-        print("Boosting to the Breit frame.")
         # Getting scattered electron kinematics
         # Shape is (N_events,)
         # Each entry will be a MomentumObject4D containing the lab frame 4-momenta
         electron_momentum = _convert_electron_kinematics(dataloader.reco_events if reco else dataloader.gen_events)
-        q = get_q(cartesian_particles, electron_momentum)
 
         # boosted_vectors has shape (N_events, N_particles_in_event,)
         # Each event contains the 4-momenta of the particles
-        boosted_vectors = boost_particles(cartesian_particles, electron_momentum)
-        #Extracting individual components of 4-vectors
-        for event in boosted_vectors:
-            events_for_clustering.append([{"px": part_vec.px, "py": part_vec.py, "pz": part_vec.pz, "E": part_vec.E} for part_vec in event])
+        if not load_breit:
+            print("Boosting to the Breit frame.")
+
+            boosted_vectors = boost_particles(cartesian_particles, electron_momentum)
+            for event in boosted_vectors:
+                events_for_clustering.append([{"px": part_vec.px, "py": part_vec.py, "pz": part_vec.pz, "E": part_vec.E} for part_vec in event])
+        # Need to add support for breit + kt
+
+        q = get_q(cartesian_particles, electron_momentum)
+        # Extracting individual components of 4-vectors
+        
     elif flags.frame == "lab":
         for event in cartesian_particles:
             # events_for_clustering.append([{"px": part[0], "py": part[1], "pz": part[2], "E": part[3]} for part in event if np.abs(part[0])!=0]) # Removing particles that are zero padded
             events_for_clustering.append([fastjet.PseudoJet(part[0], part[1], part[2], part[3]) for part in event if np.abs(part[0])!=0]) # Removing particles that are zero padded
         electron_momentum = _convert_electron_kinematics(dataloader.reco_events if reco else dataloader.gen_events)
         q = get_q(cartesian_particles, electron_momentum)
-
     if reco:
         dataloader.reco_q = q
     else:
         dataloader.gen_q = q
+
     if flags.clustering == "centauro":
-        px, py, pz, energy = [], [], [], []
-        for event in events_for_clustering:
-            px.append([particle_vector["px"] for particle_vector in event])
-            py.append([particle_vector["py"] for particle_vector in event])
-            pz.append([particle_vector["pz"] for particle_vector in event])
-            energy.append([particle_vector["E"] for particle_vector in event])
-        px = ak.Array(px)
-        py = ak.Array(py)
-        pz = ak.Array(pz)
-        energy = ak.Array(energy)
+        if not load_breit:
+            px, py, pz, energy = [], [], [], []
+            for event in events_for_clustering:
+                px.append([particle_vector["px"] for particle_vector in event])
+                py.append([particle_vector["py"] for particle_vector in event])
+                pz.append([particle_vector["pz"] for particle_vector in event])
+                energy.append([particle_vector["E"] for particle_vector in event])
+            px = ak.Array(px)
+            py = ak.Array(py)
+            pz = ak.Array(pz)
+            energy = ak.Array(energy)
         # Saving 4-vectors and passing it to Centauro jet-clustering
         if reco:
-            breit_file_name = f"breit_particles_{dataset}_reco.root"
+            if load_breit:
+                breit_file_name = breit_reco_path
+                print(f"Loading reco from pre-boosted Breit files: {breit_file_name}")
+            else:
+                breit_file_name = f"breit_particles_{dataset}_reco.root"
             jet_file_name = f"centauro_jets_{dataset}_reco.root"
         else:
-            breit_file_name = f"breit_particles_{dataset}_gen.root"
+            if load_breit:
+                breit_file_name = breit_gen_path
+                print(f"Loading gen from pre-boosted Breit files: {breit_file_name}")
+            else:
+                breit_file_name = f"breit_particles_{dataset}_gen.root"
             jet_file_name = f"centauro_jets_{dataset}_gen.root"
-        with uproot.recreate(breit_file_name) as file:
-            file["particles"] = {"px": px, "py": py, "pz": pz, "energy": energy}
+        if not load_breit:
+            with uproot.recreate(breit_file_name) as file:
+                file["particles"] = {"px": px, "py": py, "pz": pz, "energy": energy}
         print(f"./run_centauro.sh --input {breit_file_name} --output {jet_file_name}")
         subprocess.run([f"./run_centauro.sh --input {breit_file_name} --output {jet_file_name}"], shell=True)
         with uproot.open(f"{jet_file_name}:jets") as out:
@@ -205,7 +236,7 @@ def clustering_procedure(cartesian_particles, dataloader, dataset, reco = True):
                 jet[:,0] = np.array(list(itertools.zip_longest(*jets.pT.to_list(), fillvalue=0))).T
                 jet[:,1] = np.array(list(itertools.zip_longest(*jets.eta.to_list(), fillvalue=0))).T
                 jet[:,2] = np.array(list(itertools.zip_longest(*jets.phi.to_list(), fillvalue=0))).T
-                jet[:,3] =   np.array(list(itertools.zip_longest(*jets.E.to_list(), fillvalue=0))).T
+                jet[:,3] = np.array(list(itertools.zip_longest(*jets.E.to_list(), fillvalue=0))).T
                 jet[:,4] = np.array(list(itertools.zip_longest(*jets.px.to_list(), fillvalue=0))).T
                 jet[:,5] = np.array(list(itertools.zip_longest(*jets.py.to_list(), fillvalue=0))).T
                 jet[:,6] = np.array(list(itertools.zip_longest(*jets.pz.to_list(), fillvalue=0))).T
@@ -269,18 +300,18 @@ if __name__ == "__main__":
 
     file_data_dict = {"H1": 'data_Eplus0607_prep.h5', "Rapgap": 'Rapgap_Eplus0607_prep.h5', "Djangoh": 'Djangoh_Eplus0607_prep.h5'}
     if use_vinny_models:
-        model_dict_step1 = {"Rapgap": f"/global/cfs/cdirs/m3246/H1/weights/OmniFold_{version}_pretrained_iter9_step1/checkpoint", "Djangoh": None}
-        model_dict_step2 = {"Rapgap": f"/global/cfs/cdirs/m3246/H1/weights/OmniFold_{version}_pretrained_iter9_step2/checkpoint", "Djangoh": None}
+        model_dict_step1 = {"Rapgap": f"/global/cfs/cdirs/m3246/H1/weights/OmniFold_{version}_pretrained_iter4_step1/checkpoint"}
+        model_dict_step2 = {"Rapgap": f"/global/cfs/cdirs/m3246/H1/weights/OmniFold_{version}_pretrained_iter4_step2/checkpoint"}
     else:
-        model_dict_step1 = {"Rapgap": "/global/homes/r/rmilton/m3246/rmilton/H1Unfold/weights/OmniFold_Djangoh_Rapgap_closure_12_09_iter4_step1.weights.h5", "Djangoh": None}
-        model_dict_step2 = {"Rapgap": "/global/homes/r/rmilton/m3246/rmilton/H1Unfold/weights/OmniFold_Djangoh_Rapgap_closure_12_09_iter4_step2.weights.h5", "Djangoh": None}
+        model_dict_step1 = {"Rapgap": "/global/homes/r/rmilton/m3246/rmilton/H1Unfold/weights/OmniFold_Djangoh_Rapgap_closure_12_09_iter4_step1.weights.h5"}
+        model_dict_step2 = {"Rapgap": "/global/homes/r/rmilton/m3246/rmilton/H1Unfold/weights/OmniFold_Djangoh_Rapgap_closure_12_09_iter4_step2.weights.h5"}
     dataset = flags.dataset
     if dataset != "H1" and dataset != "Rapgap" and dataset != "Djangoh":
         print("Invalid dataset. Please use H1, Rapgap, or Djangoh.")
         exit()
-    if dataset == "H1":
+    if dataset == "H1" or dataset == "Djangoh":
         MC = False
-    elif dataset == "Rapgap" or dataset == "Djangoh":
+    elif dataset == "Rapgap":
         MC = True
         model_path_step2 = model_dict_step2[dataset]
         model_path_step1 = model_dict_step1[dataset]
@@ -336,11 +367,30 @@ if __name__ == "__main__":
         gen_cartesian_particles = _convert_kinematics(dataloader.gen_particles, dataloader.gen_events, dataloader.gen_mask)
     reco_cartesian_particles = _convert_kinematics(dataloader.reco_particles, dataloader.reco_events, dataloader.reco_mask)
 
+    load_breit = flags.load_breit
+    if load_breit and flags.frame == "lab":
+        print("load_breit is used, but frame is selected as lab. Lab frame will be used instead.")
     if MC:
         print("Clustering gen jets")
-        clustering_procedure(gen_cartesian_particles, dataloader, dataset, reco=False)
+        clustering_procedure(
+            cartesian_particles=gen_cartesian_particles,
+            dataloader=dataloader,
+            dataset=dataset,
+            reco=False,
+            load_breit=load_breit,
+            breit_gen_path=flags.breit_gen_path,
+            breit_reco_path=flags.breit_reco_path
+        )
     print("Clustering reco jets")
-    clustering_procedure(reco_cartesian_particles, dataloader, dataset, reco=True)
+    clustering_procedure(
+            cartesian_particles=reco_cartesian_particles,
+            dataloader=dataloader,
+            dataset=dataset,
+            reco=True,
+            load_breit=load_breit,
+            breit_gen_path=flags.breit_gen_path,
+            breit_reco_path=flags.breit_reco_path
+        )
 
     def gather_data(dataloader, is_MC):
         dataloader.reco_mask = np.reshape(dataloader.reco_mask,(-1))
