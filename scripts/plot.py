@@ -81,11 +81,14 @@ def get_version(flags,opt):
     else:
         reference_name = 'Rapgap_unfolded'
         
-    if flags.load_pretrain:
+    if flags.load_pretrain: 
         version += '_pretrained'
 
-    if flags.finetuned:
+    elif flags.finetuned:
         version += '_finetuned'
+
+    else:
+        version += '_fromscratch'
 
     if flags.reco:
         reference_name = 'data'
