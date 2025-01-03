@@ -113,6 +113,7 @@ def load_model(flags,opt,version,dataloaders, ens):
     mfold = Multifold(version = version,verbose = hvd.rank()==0)
     mfold.PrepareModel()
     mfold.model2.load_weights(model_name).expect_partial() #Doesn't matter which model is loaded since both have the same architecture
+    mfold.step2_models = [mfold.model2]  # FIXME: better implementation for single models
     unfolded_weights = mfold.reweight(dataloaders['Rapgap'].evts,mfold.model2,batch_size=1000)
     #return unfolded_weights
     return hvd.allgather(tf.constant(unfolded_weights)).numpy()
@@ -565,6 +566,7 @@ def main():
             np.save(f"../weights/{version}_ensemble{e}_weights.npy",weights) #already re-weighted, L:109
         if hvd.rank()==0:
             print(weights[:5], weights[-5:])
+            print("Mean Weights = ",np.mean(weights))
 
         if e ==0:
             ensemble_avg_weights = weights/flags.n_ens
