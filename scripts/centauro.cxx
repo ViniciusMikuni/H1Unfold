@@ -57,6 +57,18 @@ int main(int argc, char* argv[])
         std::cout<<"Output file is "<<outputFileName<<std::endl;
     }
 
+    Double_t jet_radius;
+    if (args.find("--jet_radius") == args.end())
+    {
+        jet_radius = 0.8;
+        std::cout<<"No jet radius argument found. Jet radius set to "<<jet_radius<<std::endl;
+    }
+    else
+    {
+        jet_radius = std::stod(args["--jet_radius"]);
+        std::cout<<" Jet radius set to "<<jet_radius<<std::endl;
+    }
+
 
     TFile *breit_file = TFile::Open(inputFileName.c_str());
 
@@ -66,13 +78,7 @@ int main(int argc, char* argv[])
     TTreeReaderArray<Double_t> pz(particle_tree, "pz");
     TTreeReaderArray<Double_t> energy(particle_tree, "energy");
 
-    TH1D *h_mult = new TH1D("h_mult", "", 50, 0, 50);
-    TH1D *h_eta = new TH1D("h_eta", "", 50, -5, 5);
-    TH1D *h_pt = new TH1D("h_pt", "", 50, 0, 20);
-    TH1D *h_phi = new TH1D("h_phi", "", 50, 0, 6.5);
-    TH1D *h_z = new TH1D("h_z", "", 50, 0, 5);
-
-    fastjet::contrib::CentauroPlugin *centauro_plugin = new fastjet::contrib::CentauroPlugin(.8);
+    fastjet::contrib::CentauroPlugin *centauro_plugin = new fastjet::contrib::CentauroPlugin(jet_radius);
     
     std::vector<Double_t> jet_eta;
     std::vector<Double_t> jet_px;
@@ -127,7 +133,6 @@ int main(int argc, char* argv[])
         jet_pt.clear();
         jet_phi.clear();
         
-        h_mult->Fill(sortedJets.size());
         for (unsigned int i=0; i<sortedJets.size(); i++){
             const fastjet::PseudoJet &jet = sortedJets[i];
             jet_eta.push_back(jet.pseudorapidity());
@@ -137,43 +142,9 @@ int main(int argc, char* argv[])
             jet_E.push_back(jet.E());
             jet_pt.push_back(jet.pt());
             jet_phi.push_back(jet.phi());
-
-            h_eta->Fill(jet.pseudorapidity());
-            h_pt->Fill(jet.pt());
-            h_phi->Fill(jet.phi_02pi());
         }
         tree->Fill();
     }
-
     tree->Write();
     file->Close();
-    
-    TCanvas *c_mult = new TCanvas();
-    h_mult->Draw();
-    h_mult->GetXaxis()->SetTitle("Num. jets in event");
-    c_mult->SaveAs("mult.pdf");
-
-    TCanvas *c_eta = new TCanvas();
-    h_eta->Draw();
-    h_eta->GetXaxis()->SetTitle("Jet pseudorapidity");
-    c_eta->SaveAs("eta.pdf");
-
-    TCanvas *c_pt = new TCanvas();
-    h_pt->Draw();
-    h_pt->GetXaxis()->SetTitle("Jet pT (GeV)");
-    c_pt->SaveAs("pt.pdf");
-
-    TCanvas *c_phi = new TCanvas();
-    h_phi->Draw();
-    h_phi->GetXaxis()->SetTitle("Jet phi (rad)");
-    c_phi->SaveAs("phi.pdf");
-
-    delete c_mult;
-    delete c_eta;
-    delete c_pt;
-    delete c_phi;
-    delete h_mult;
-    delete h_eta;
-    delete h_pt;
-    delete h_phi;
 }

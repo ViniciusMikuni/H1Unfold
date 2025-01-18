@@ -25,6 +25,7 @@ def parse_arguments():
     parser.add_argument("--num_data", type=int, default=-1, help="Number of data to analyze")
     parser.add_argument("--frame", type=str, default="breit", help="breit/lab frames")
     parser.add_argument("--clustering", type=str, default="centauro", help="kt/centauro clustering")
+    parser.add_argument("--jet_radius", type=float, default=0.8, help="Jet radius for clustering")
     parser.add_argument("--dataset", type=str, default="H1", help="H1/Rapgap/Djangoh will be used. Rapgap and Djangoh will be saved with unfolded weights")
     parser.add_argument("--use_vinny_models", action='store_true', default=False,help='Use unfolded models from Vinny')
     parser.add_argument("--vinny_version", type=str, default='H1_July_closure', help="Version of Vinny model. Only used when use_vinny_models is True")
@@ -86,32 +87,33 @@ def _convert_electron_kinematics(event_list):
     return electron_cartesian_dict
 
 def boost_particles(final_states, scattered_electron):
-    particle_vectors, sigma_h = [], []
+    particle_vectors = []
     # Putting all particles into vectors and calculating sigma_tot
     for event in final_states:
         nonzero_particles = np.array([part for part in event if np.abs(part[0])!=0])
-        event_sigma_h = np.sum(nonzero_particles[:, 3] - nonzero_particles[:, 2]) # sum_i(E_i - pz_i)
-        sigma_h.append(event_sigma_h)
         particle_vectors.append([vector.obj(px=part[0], py=part[1], pz=part[2], energy=part[3]) for part in nonzero_particles])
     
-    # Getting the effictive lepton beam momentum
-    sigma_h = np.array(sigma_h)
+    sigma_h = np.array([np.sum(event[:, 3] - event[:, 2]) for event in final_states if any(np.abs(event[:, 0]) != 0)])
 
-    # Compute sigma_eprime vectorized
-    sigma_eprime = np.array([e.energy * (1 - np.cos(e.theta)) for e in scattered_electron])
+    scattered_electron_momentum = np.sqrt(scattered_electron["px"]**2 + scattered_electron["py"]**2 + scattered_electron["pz"]**2)
+    scattered_electron_theta = np.arccos(scattered_electron["pz"]/scattered_electron_momentum)
+    sigma_eprime = scattered_electron["E"] * (1 - np.cos(scattered_electron_theta))
     sigma_tot = sigma_h + sigma_eprime
 
-    vectorize_func = np.vectorize(vector.obj, otypes=[object])
-    beam_electron_momentum = vectorize_func(px=np.zeros_like(sigma_tot), py=np.zeros_like(sigma_tot), pz=-sigma_tot/2., energy=sigma_tot/2.)
-
+    beam_electron_momentum = {"px":np.zeros(len(sigma_tot)), "py":np.zeros(len(sigma_tot)), "pz":-sigma_tot/2., "E":sigma_tot/2.}
+    q_x = beam_electron_momentum["px"] - scattered_electron["px"]
+    q_y = beam_electron_momentum["py"] - scattered_electron["py"]
+    q_z = beam_electron_momentum["pz"] - scattered_electron["pz"]
+    q_E = beam_electron_momentum["E"] - scattered_electron["E"]
+    q_list = np.stack((q_x, q_y, q_z, q_E), axis=1)
     # Boosting the particles to the Breit frame
     boosted_vectors = []
     z_hat = vector.obj(px=0, py=0, pz=1, energy=1)
 
-    for beam_e, scattered_e, event_particles in zip(beam_electron_momentum, scattered_electron, particle_vectors):
+    for q, event_particles in zip(q_list, particle_vectors):
         # Calculating boost vector
         # Calculation taken from https://doi.org/10.1140/epjc/s10052-024-13003-1
-        q = beam_e - scattered_e
+        q = vector.obj(px=q[0], py=q[1], pz=q[2], energy=q[3])
         Q = np.sqrt(-1*q.dot(q))
         Sigma = q.energy - q.pz
         boostvector = q - Q*Q/Sigma*(-1*z_hat)
@@ -133,7 +135,6 @@ def boost_particles(final_states, scattered_electron):
 def get_q_and_y(final_states, scattered_electron):
     sigma_h = np.array([np.sum(event[:, 3] - event[:, 2]) for event in final_states if any(np.abs(event[:, 0]) != 0)])
 
-    # Compute sigma_eprime vectorized
     scattered_electron_momentum = np.sqrt(scattered_electron["px"]**2 + scattered_electron["py"]**2 + scattered_electron["pz"]**2)
     scattered_electron_theta = np.arccos(scattered_electron["pz"]/scattered_electron_momentum)
     sigma_eprime = scattered_electron["E"] * (1 - np.cos(scattered_electron_theta))
@@ -148,7 +149,7 @@ def get_q_and_y(final_states, scattered_electron):
     q_list = np.stack((q_x, q_y, q_z, q_E), axis=1)
     return q_list, y
 
-def clustering_procedure(cartesian_particles, dataloader, dataset, reco, load_breit, breit_gen_path, breit_reco_path):
+def clustering_procedure(cartesian_particles, dataloader, dataset, reco, jet_radius, load_breit, breit_gen_path, breit_reco_path):
     clustering_start = time.time()
     events_for_clustering = []
     
@@ -219,7 +220,7 @@ def clustering_procedure(cartesian_particles, dataloader, dataset, reco, load_br
         if not load_breit:
             with uproot.recreate(breit_file_name) as file:
                 file["particles"] = {"px": px, "py": py, "pz": pz, "energy": energy}
-        print(f"./run_centauro.sh --input {breit_file_name} --output {jet_file_name}")
+        print(f"./run_centauro.sh --input {breit_file_name} --output {jet_file_name} --jet_radius {jet_radius}")
         subprocess.run([f"./run_centauro.sh --input {breit_file_name} --output {jet_file_name}"], shell=True)
         with uproot.open(f"{jet_file_name}:jets") as out:
             jets = out.arrays(["pT", "eta", "phi", "E", "px", "py", "pz"])
@@ -246,7 +247,7 @@ def clustering_procedure(cartesian_particles, dataloader, dataset, reco, load_br
             dataloader.gen_jet = _take_all_jet(jets, max_num_jets)
 
     elif flags.clustering == "kt":
-        jetdef = fastjet.JetDefinition(fastjet.kt_algorithm, 0.8)
+        jetdef = fastjet.JetDefinition(fastjet.kt_algorithm, jet_radius)
         jet_px, jet_py, jet_pz, jet_E = [], [], [], []
         for event in events_for_clustering:
             event_px, event_py, event_pz, event_E = [], [], [], []
@@ -391,6 +392,7 @@ if __name__ == "__main__":
     load_breit = flags.load_breit
     if load_breit and flags.frame == "lab":
         print("load_breit is used, but frame is selected as lab. Lab frame will be used instead.")
+    jet_radius = flags.jet_radius
     if MC:
         print("Clustering gen jets")
         clustering_procedure(
@@ -398,6 +400,7 @@ if __name__ == "__main__":
             dataloader=dataloader,
             dataset=dataset,
             reco=False,
+            jet_radius = jet_radius,
             load_breit=load_breit,
             breit_gen_path=flags.breit_gen_path,
             breit_reco_path=flags.breit_reco_path
@@ -409,6 +412,7 @@ if __name__ == "__main__":
             dataloader=dataloader,
             dataset=dataset,
             reco=True,
+            jet_radius = jet_radius,
             load_breit=load_breit,
             breit_gen_path=flags.breit_gen_path,
             breit_reco_path=flags.breit_reco_path
