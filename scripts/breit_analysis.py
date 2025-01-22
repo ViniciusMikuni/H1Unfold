@@ -155,8 +155,6 @@ def clustering_procedure(cartesian_particles, dataloader, dataset, reco, jet_rad
     
     # Boosting particles to Breit frame
     if flags.frame == "breit":
-        # for event in boosted_vectors:
-        #     events_for_clustering.append([{"px": part_vec.px, "py": part_vec.py, "pz": part_vec.pz, "E": part_vec.E} for part_vec in event])
         # Getting scattered electron kinematics
         # Shape is (N_events,)
         # Each entry will be a MomentumObject4D containing the lab frame 4-momenta
