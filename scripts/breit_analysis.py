@@ -333,12 +333,8 @@ if __name__ == "__main__":
     print("Files loaded time: ", time.time()-start_time)
     dataloader.masked_reco = [dataloader.reco[0][dataloader.pass_reco], dataloader.reco[1][dataloader.pass_reco], dataloader.reco[2][dataloader.pass_reco]]
     dataloader.reco_weight = dataloader.weight[dataloader.pass_reco]
-    # dataloader.masked_reco = [dataloader.reco[0], dataloader.reco[1], dataloader.reco[2]]
-    # dataloader.reco_weight = dataloader.weight
     del dataloader.reco
     if MC:
-        # dataloader.masked_gen = [dataloader.gen[0][dataloader.pass_gen], dataloader.gen[1][dataloader.pass_gen], dataloader.gen[2][dataloader.pass_gen]]
-        # dataloader.gen_weight = dataloader.weight[dataloader.pass_gen]
         dataloader.masked_gen = [dataloader.gen[0], dataloader.gen[1], dataloader.gen[2]]
         dataloader.gen_weight = dataloader.weight
         del dataloader.gen
