@@ -14,9 +14,8 @@ from omnifold import PET
 import horovod.tensorflow as hvd
 import tensorflow as tf
 import h5py as h5
-import utils
-import time
 hvd.init()
+
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Train a PET model using Pythia and Herwig data.")
     parser.add_argument("--data_dir", type=str, default="/global/cfs/cdirs/m3246/H1/h5/", help="Folder containing input files")
@@ -82,8 +81,6 @@ def _convert_electron_kinematics(event_list):
     pz = pt * np.sinh(eta)
     E = np.sqrt(px**2 + py**2 + pz**2)
     electron_cartesian_dict = {"px":px, "py":py, "pz":pz, "E":E}
-    # vectorize_func = np.vectorize(vector.obj, otypes=[object])
-    # electron_cartesian = vectorize_func(px=px, py=py, pz=pz, energy=E)
     return electron_cartesian_dict
 
 def boost_particles(final_states, scattered_electron):
@@ -150,7 +147,6 @@ def get_q_and_y(final_states, scattered_electron):
     return q_list, y
 
 def clustering_procedure(cartesian_particles, dataloader, dataset, reco, jet_radius, load_breit, breit_gen_path, breit_reco_path):
-    clustering_start = time.time()
     events_for_clustering = []
     
     # Boosting particles to Breit frame
@@ -178,9 +174,7 @@ def clustering_procedure(cartesian_particles, dataloader, dataset, reco, jet_rad
             for event in cartesian_particles
         ]
         electron_momentum = _convert_electron_kinematics(dataloader.reco_events if reco else dataloader.gen_events)
-        print("Configuring events time: ", time.time()-clustering_start)
         q, y = get_q_and_y(cartesian_particles, electron_momentum)
-        print("q time: ", time.time()-clustering_start)
     if reco:
         dataloader.reco_q = q
         dataloader.reco_y = y
@@ -263,7 +257,6 @@ def clustering_procedure(cartesian_particles, dataloader, dataset, reco, jet_rad
             jet_py.append(event_py)
             jet_pz.append(event_pz)
             jet_E.append(event_E)
-        print("Actual clustering time: ", time.time()-clustering_start)
         jets = {"px":ak.Array(jet_px), "py":ak.Array(jet_py), "pz":ak.Array(jet_pz),"E":ak.Array(jet_E)}
         jets["pt"] = np.sqrt(jets["px"]**2 + jets["py"]**2)
         jets["phi"] = np.arctan2(jets["py"],jets["px"])
@@ -291,7 +284,6 @@ def clustering_procedure(cartesian_particles, dataloader, dataset, reco, jet_rad
 
 if __name__ == "__main__":
 
-    start_time = time.time()
     flags = parse_arguments()
     use_vinny_models = flags.use_vinny_models
     version = flags.vinny_version
@@ -330,7 +322,6 @@ if __name__ == "__main__":
                         is_mc=MC,
                         nmax=nmax)
     
-    print("Files loaded time: ", time.time()-start_time)
     dataloader.masked_reco = [dataloader.reco[0][dataloader.pass_reco], dataloader.reco[1][dataloader.pass_reco], dataloader.reco[2][dataloader.pass_reco]]
     dataloader.reco_weight = dataloader.weight[dataloader.pass_reco]
     del dataloader.reco
@@ -357,7 +348,6 @@ if __name__ == "__main__":
         dataloader.reco_mask = dataloader.masked_reco[-1]
         del dataloader.masked_reco
 
-        print("Step 1 time: ", time.time()-start_time)
         if model_path_step2 is not None:
             if flags.saved_step2_weights_path == "":
                 step2_weights = load_model(model_path_step2, dataloader.masked_gen, use_vinny_models, version)
@@ -370,7 +360,6 @@ if __name__ == "__main__":
         dataloader.gen_particles, dataloader.gen_events= dataloader.revert_standardize(dataloader.masked_gen[0], dataloader.masked_gen[1], dataloader.masked_gen[-1])
         dataloader.gen_mask = dataloader.masked_gen[-1]
         del dataloader.masked_gen
-        print("Step 2 time: ", time.time()-start_time)
     else:
         dataloader.reco_particles, dataloader.reco_events = dataloader.revert_standardize(dataloader.masked_reco[0], dataloader.masked_reco[1], dataloader.masked_reco[-1])
         dataloader.reco_mask = dataloader.masked_reco[-1]
@@ -399,7 +388,6 @@ if __name__ == "__main__":
             breit_gen_path=flags.breit_gen_path,
             breit_reco_path=flags.breit_reco_path
         )
-        print("Gen clustering time: ", time.time()-start_time)
     print("Clustering reco jets")
     clustering_procedure(
             cartesian_particles=reco_cartesian_particles,
@@ -411,7 +399,6 @@ if __name__ == "__main__":
             breit_gen_path=flags.breit_gen_path,
             breit_reco_path=flags.breit_reco_path
         )
-    print("Reco clustering time: ", time.time()-start_time)
     def gather_data(dataloader, is_MC):
         dataloader.reco_mask = np.reshape(dataloader.reco_mask,(-1))
         dataloader.reco_particles = hvd.allgather(tf.constant(dataloader.reco_particles.reshape(
@@ -436,7 +423,6 @@ if __name__ == "__main__":
             dataloader.gen_y = hvd.allgather(tf.constant(dataloader.gen_y)).numpy()
 
     gather_data(dataloader, MC)
-    print("Gathering data time: ", time.time()-start_time)
     if MC:
         gen_jets = dataloader.gen_jet
         gen_jet_dict = {"pT":gen_jets[:, 0], "eta":gen_jets[:, 1], "phi":gen_jets[:, 2], "E":gen_jets[:, 3], "px":gen_jets[:, 4], "py":gen_jets[:, 5], "pz":gen_jets[:, 6]}
