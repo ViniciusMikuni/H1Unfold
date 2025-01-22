@@ -213,7 +213,7 @@ def clustering_procedure(cartesian_particles, dataloader, dataset, reco, jet_rad
             with uproot.recreate(breit_file_name) as file:
                 file["particles"] = {"px": px, "py": py, "pz": pz, "energy": energy}
         print(f"./run_centauro.sh --input {breit_file_name} --output {jet_file_name} --jet_radius {jet_radius}")
-        subprocess.run([f"./run_centauro.sh --input {breit_file_name} --output {jet_file_name}"], shell=True)
+        subprocess.run([f"./run_centauro.sh --input {breit_file_name} --output {jet_file_name} --jet_radius {jet_radius}"], shell=True)
         with uproot.open(f"{jet_file_name}:jets") as out:
             jets = out.arrays(["pT", "eta", "phi", "E", "px", "py", "pz"])
             max_num_jets = max([len(jet_pt) for jet_pt in jets["pT"]])
