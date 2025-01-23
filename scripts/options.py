@@ -13,6 +13,7 @@ colors = {
     'Djangoh':'#8c564b',
     'Rapgap':'darkorange',
     'Rapgap_unfolded':'darkolivegreen',
+    'Rapgap_closure':'darkolivegreen',
     'Herwig':'crimson',
     'Herwig_Matchbox':'#a50f15',
     'Herwig_Merging':'#fc9272',
@@ -29,6 +30,7 @@ markers = {
     'Djangoh':'P',
     'Rapgap':'X',
     'Rapgap_unfolded':'X',
+    'Rapgap_closure':'X',
     'mc':'X',    
 
     'Pythia': '^',
@@ -156,7 +158,8 @@ name_translate = {
     'Sherpa2Lund':'Sherpa 2 Lund string',
     'Sherpa3NLO': 'Sherpa 3.0 NLO',
     'Rapgap': 'RAPGAP',
-    'Rapgap_unfolded': 'RAPGAP+Unfolding',
+    'Rapgap_unfolded': 'RAPGAP + Unfolding',
+    'Rapgap_closure': 'RAPGAP Closure',
     'Djangoh': 'DJANGOH',
 
 }

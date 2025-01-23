@@ -43,7 +43,7 @@ def preprocess(data):
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--data_folder', default='/pscratch/sd/v/vmikuni/H1v2/h5', help='Folder containing data and MC files')
-parser.add_argument('--file_name', default='data.h5', help='File to load')
+parser.add_argument('--file_name', default='data_Eplus0607.h5', help='File to load')
 
 flags = parser.parse_args()
 

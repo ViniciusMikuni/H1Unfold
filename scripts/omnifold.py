@@ -160,6 +160,7 @@ class Multifold():
                               verbose=verbose,monitor="val_loss"),
             EarlyStopping(patience=self.opt['NPATIENCE'],restore_best_weights=True,
                           monitor="val_loss"),
+            
         ]
         
         
@@ -263,6 +264,7 @@ class Multifold():
             if hvd.rank()==0:print(self.num_steps_reco,self.num_steps_gen)
 
 
+            
         
         lr_schedule_body_reco = keras.optimizers.schedules.CosineDecay(
             initial_learning_rate=lr/self.lr_factor,
@@ -303,7 +305,7 @@ class Multifold():
         min_learning_rate = 1e-5
         opt_head1 = tf.keras.optimizers.Lion(
             learning_rate=min_learning_rate if fixed else lr_schedule_head_reco,
-            weight_decay=1e-5,
+            weight_decay=0.0,
             beta_1=0.95,
             beta_2=0.99)
         
@@ -311,7 +313,7 @@ class Multifold():
         
         opt_body1 = tf.keras.optimizers.Lion(
             learning_rate=min_learning_rate if fixed else lr_schedule_body_reco,
-            weight_decay=1e-5,
+            weight_decay=0.0,
             beta_1=0.95,
             beta_2=0.99)
         
@@ -320,7 +322,7 @@ class Multifold():
 
         opt_head2 = tf.keras.optimizers.Lion(
             learning_rate=min_learning_rate if fixed else lr_schedule_head_gen,
-            weight_decay=1e-5,
+            weight_decay=0.0,
             beta_1=0.95,
             beta_2=0.99)
         
@@ -328,7 +330,7 @@ class Multifold():
         
         opt_body2 = tf.keras.optimizers.Lion(
             learning_rate=min_learning_rate if fixed else lr_schedule_body_gen,
-            weight_decay=1e-5,
+            weight_decay=0.0,
             beta_1=0.95,
             beta_2=0.99)
         
@@ -408,3 +410,8 @@ class Multifold():
         self.log_file.write(out_str+'\n')
         self.log_file.flush()
         print(out_str)
+
+
+    
+
+        

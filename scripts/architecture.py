@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tensorflow.keras.activations import swish
+
 from tensorflow.keras import layers
 import tensorflow.keras.backend as K
 import numpy as np
@@ -88,7 +88,7 @@ class Classifier(keras.Model):
             y_pred,y_evt = self.classifier(x)
             loss_pred = weighted_binary_crossentropy(y, y_pred)
             loss_evt = mse(x['inputs_event_{}'.format(self.step)],y_evt)
-            loss = loss_pred+loss_evt
+            loss = loss_pred+0.1*loss_evt
 
         self.body_optimizer.minimize(loss,self.body.trainable_variables,tape=tape)
         self.optimizer.minimize(loss,self.head.trainable_variables,tape=tape)
@@ -106,7 +106,7 @@ class Classifier(keras.Model):
         y_pred,y_evt = self.classifier(x)
         loss_evt = mse(x['inputs_event_{}'.format(self.step)],y_evt)
         loss_pred = weighted_binary_crossentropy(y, y_pred)
-        loss = loss_pred+loss_evt
+        loss = loss_pred+0.1*loss_evt
         self.loss_tracker.update_state(loss)
         return {"loss": self.loss_tracker.result()}
         
@@ -170,7 +170,8 @@ class Classifier(keras.Model):
     ):
 
 
-        conditional = layers.Dense(2*projection_dim,activation='gelu')(input_evt)
+        conditional = layers.Dense(2*projection_dim)(input_evt)
+        conditional = layers.LeakyReLU(alpha=0.01)(conditional)
         conditional = tf.tile(conditional[:,None, :], [1,tf.shape(encoded)[1], 1])
         scale,shift = tf.split(conditional,2,-1)
         encoded = encoded*(1.0 + scale) + shift
@@ -210,8 +211,9 @@ def get_neighbors(points,features,projection_dim,K):
     knn_fts = knn(tf.shape(points)[1], K, indices, features)  # (N, P, K, C)
     knn_fts_center = tf.broadcast_to(tf.expand_dims(features, 2), tf.shape(knn_fts))
     local = tf.concat([knn_fts-knn_fts_center,knn_fts_center],-1)
-    local = layers.Dense(2*projection_dim,activation='gelu')(local)
-    local = layers.Dense(projection_dim,activation='gelu')(local)
+    local = layers.Dense(2*projection_dim)(local)
+    local = layers.LeakyReLU(alpha=0.01)(local)
+    local = layers.Dense(projection_dim)(local)
     local = tf.reduce_mean(local,-2)
     
     return local
@@ -236,7 +238,8 @@ def knn(num_points, k, topk_indices, features):
 
 
 def get_encodding(x,projection_dim):
-    x = layers.Dense(2*projection_dim,activation='gelu')(x)
-    x = layers.Dense(projection_dim,activation='gelu')(x)
+    x = layers.Dense(2*projection_dim)(x)
+    x = layers.LeakyReLU(alpha=0.01)(x)
+    x = layers.Dense(projection_dim)(x)
     return x
 

@@ -10,8 +10,8 @@ import tensorflow as tf
 import tensorflow.keras.backend as K
 import utils
 from dataloader import Dataset
-tf.random.set_seed(1234)
-np.random.seed(1234)
+# tf.random.set_seed(1234)
+# np.random.seed(1234)
 
 if __name__ == "__main__":
     hvd.init()
@@ -46,7 +46,7 @@ if __name__ == "__main__":
     version = opt['NAME']
 
     mc_file_names = opt['MC_NAMES']
-    data_file_names = ['data_prep.h5']
+    data_file_names = ['data_Eplus0607_prep.h5']
     if flags.closure or flags.pretrain:
         #use djangoh as pseudo data
         data_file_names = ['Djangoh_Eplus0607_prep.h5']
