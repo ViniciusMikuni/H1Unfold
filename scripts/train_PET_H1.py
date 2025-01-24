@@ -19,6 +19,7 @@ def parse_arguments():
     parser.add_argument("--num_nature_data", type=int, default=-1, help="Number of nature data to train with")
     parser.add_argument("--num_iterations", type=int, default=5, help="Number of iterations to use during training")
     parser.add_argument("--start_N", type=int, default=0, help="Number of iterations to start with")
+    parser.add_argument("--model_name", type=str, default="H1_OmniFold_model", help="Name to be used for model")
     args = parser.parse_args()
     return args
 
@@ -82,8 +83,9 @@ def main():
                                         size=hvd.size())
     step1_model = PET(synthetic_reco_parts.shape[2], num_part=synthetic_reco_parts.shape[1], num_heads = 4, num_transformer = 4, local = True, projection_dim = 128, K = 10)
     step2_model = PET(synthetic_gen_parts.shape[2], num_part=synthetic_gen_parts.shape[1], num_heads = 4, num_transformer = 4, local = True, projection_dim = 128, K = 10)
+    model_name = flags.model_name
     omnifold_PET = MultiFold(
-        "Djangoh_Rapgap_closure_12_09",
+        model_name,
         model_reco = step1_model,
         model_gen = step2_model,
         data = nature_parts_dataloader,
@@ -98,34 +100,6 @@ def main():
         size=hvd.size()
     )
     omnifold_PET.Unfold()
-
-
-
-        # synthetic_gen_parts  = h5.File(synthetic_file_path, 'r')['gen_particle_features'][:num_synthetic_data]
-    # synthetic_reco_parts = h5.File(synthetic_file_path, 'r')['reco_particle_features'][:num_synthetic_data]
-    # synthetic_gen_events = h5.File(synthetic_file_path, 'r')['gen_event_features'][:num_synthetic_data]
-    # synthetic_reco_events = h5.File(synthetic_file_path, 'r')['reco_event_features'][:num_synthetic_data]
-    
-    # Adding the electron info to the particles
-    # synthetic_gen_electron = extract_electron_info(synthetic_gen_events)
-    # synthetic_reco_electron = extract_electron_info(synthetic_reco_events)
-    # synthetic_gen_parts = np.concatenate((synthetic_gen_electron, synthetic_gen_parts), axis=1)
-    # synthetic_reco_parts = np.concatenate((synthetic_reco_electron, synthetic_reco_parts), axis=1)
-
-    # synthetic_pass_truth = synthetic_gen_events[:, -1]
-
-    # del synthetic_reco_events, synthetic_gen_events, synthetic_reco_electron, synthetic_gen_electron
-    # gc.collect()
-    # nature_reco_parts = h5.File(nature_file_path, 'r')['reco_particle_features'][:num_nature_data]
-    # nature_reco_events = h5.File(nature_file_path, 'r')['reco_event_features'][:num_nature_data]
-
-    # nature_gen_parts = nature['gen_particle_features'][:num_nature_data]
-    # nature_reco_electron = extract_electron_info(nature_reco_events)
-
-    # nature_reco_electron = extract_electron_info(nature_reco_events)
-    # nature_reco_parts = np.concatenate((nature_reco_electron, nature_reco_parts), axis=1)
-    # del nature_reco_events, nature_reco_electron
-    # gc.collect()
 
 if __name__ == '__main__':
     main()
