@@ -12,6 +12,7 @@ import logging
 from architecture import Classifier,weighted_binary_crossentropy
 import utils
 import pickle
+import time
 
 import warnings
 warnings.filterwarnings(
@@ -19,6 +20,21 @@ warnings.filterwarnings(
     message=r"Callback method `on_train_batch_end` is slow compared to the batch time",
     category=UserWarning,
 )
+def hvd_synchronize():
+    # Create a dummy tensor
+    sync_pause_start = 0
+
+    if hvd.rank() == 0:
+        print("\n\n==== Waiting for all horovod processes before reweight ====")
+        sync_pause_start = time.time()
+
+    dummy = tf.constant(0.0)
+    hvd.allreduce(dummy)
+
+    if hvd.rank() == 0:
+            print(f"==== Syncing took {time.time() - sync_pause_start} Seconds ====\n\n")
+
+    # Perform an allreduce operation which acts as a barrier
 
 
 def label_smoothing(y_true,alpha=0):
@@ -86,6 +102,7 @@ class Multifold():
         if self.load_pretrain: 
             self.version += '_pretrained'
             self.lr_factor = 5.  # default 5
+
         elif self.fine_tune:
             self.version += '_finetuned'
             self.lr_factor = 5.  # default 5
@@ -144,12 +161,19 @@ class Multifold():
 
         self.CompileModels(self.lr)
 
+        start_time = time.time()
         for i in range(self.start,self.niter):
             if hvd.rank()==0:print(f"ITERATION: {i} / {self.niter-self.start}")
             self.RunStep1(i)        
+            if hvd.rank()==0:
+                print(f"\n----- Step 1 Iter {i+1}/ {self.niter} took {time.time() -  start_time} Seconds -----\n")
             self.RunStep2(i)
+            if hvd.rank()==0:
+                print(f"\n----- Step 2 Iter {i+1} / {self.niter} took {time.time() - start_time} Seconds -----\n")
             self.CompileModels(self.lr,fixed=True)
 
+        total_time = time.time() - start_time
+        print(f"\n----- OmniFold Took {total_time} Seconds -----\n")
 
     def RunStep1(self,i):
         '''Data versus reco MC reweighting'''
@@ -177,6 +201,9 @@ class Multifold():
                 print(f"and resetting Classifier HEAD (FineTune)")
             self.model1.load_weights(self.pre_train_name1).expect_partial()
             reset_weights(self.model1.head)
+
+        else:  # BaseLine
+            reset_weights(self.model1)
 
         if hvd.rank()==0:
             print("Training From Scratch")
@@ -279,6 +306,7 @@ class Multifold():
                               verbose=verbose,monitor="val_loss"),
             EarlyStopping(patience=self.opt['NPATIENCE'],restore_best_weights=True,
                           monitor="val_loss"),
+            # monitor="val_loss", min_delta=0.001),
         ]  # will append checkpoint in ensemble loop
 
 
@@ -293,17 +321,30 @@ class Multifold():
             ens_name = model_name
             if self.n_ensemble > 1: ens_name = model_name.replace('E',f'{ensemble}')
 
+            callbacks = [
+                hvd.callbacks.BroadcastGlobalVariablesCallback(0),
+                hvd.callbacks.MetricAverageCallback(),
+
+                ReduceLROnPlateau(patience=1000, min_lr=1e-7,
+                                  verbose=verbose,monitor="val_loss"),
+                EarlyStopping(patience=self.opt['NPATIENCE'],restore_best_weights=True,
+                              monitor="val_loss"),
+                # monitor="val_loss", min_delta=0.001),
+            ]  # will append checkpoint in ensemble loop
+
             if hvd.rank() == 0:
-                self.log_string("Ensemble: {} / {}".format(
-                    ensemble + 1, self.n_ensemble))
+                #avoid simoultanous writes, so only rank0 has checkpoint
                 callbacks.append(ModelCheckpoint(ens_name, save_best_only=True,
                                                  mode='auto', period=1,
                                                  save_weights_only=True))
 
+                self.log_string("Ensemble: {} / {}".format(ensemble + 1, self.n_ensemble))
+
 
             # Instantiate new model_e, then load from previous iteration
             if iteration < 1:
-                model_e = tf.keras.models.clone_model(model)
+                model_e = tf.keras.models.clone_model(model)  #clones layers and architecture
+                model_e.set_weights(self.model1.get_weights())  #actually clones weights
 
                 if stepn == 1:
                     self.step1_models.append(model_e)
@@ -316,6 +357,17 @@ class Multifold():
             # model_e = model  # to test iterations passing models
 
             self.CompileModel(model_e, self.lr ,num_steps)
+
+            if hvd.rank() == 0:
+                print(f"\n\nEnsemble {ensemble+1}/{self.n_ensemble} Iter {iteration}/{self.niter-self.start}: Model Weights summary:")
+                model_weights = model.get_weights()
+                all_weights = tf.concat([tf.reshape(w, [-1]) for w in model_weights if w.size > 0], axis=0)
+                mean_weights = tf.reduce_mean([tf.reduce_mean(w) for w in model_weights if w.size > 0])
+                stdv_weights = tf.math.reduce_std(all_weights)
+                print("Mean of weights:", mean_weights)
+                print("Stdv of weights:", stdv_weights)
+                print("\n\n")
+            # continue
 
             hist =  model_e.fit(
                 train_data,
@@ -494,6 +546,12 @@ class Multifold():
         # normally, would pass a flag instead of actual model
         # but by passing self.model1 or 2, we can keep functionality
         models = self.step1_models if model == self.model1 else self.step2_models
+        if hvd.rank() == 0:
+            print("In Rewight Function, mfold.models = ", models)
+
+        # Make sure all ranks finish before averaging model outputs
+        if hvd.size() > 1:
+            hvd_synchronize()
 
         avg_weights = np.zeros((len(events[0])))
         for model in models:
@@ -502,7 +560,12 @@ class Multifold():
             # f = expit(model.predict(events,batch_size=batch_size,verbose=self.verbose)[0])
             weights = f / (1. - f)  # approximates likelihood ratio
             weights = np.nan_to_num(weights[:,0],posinf=1)
+            if hvd.rank() == 0:
+                print("Avg f = ",np.mean(f))
+                print("Avg Weights after reweight = ",np.mean(weights))
             avg_weights += weights / len(models)
+        if hvd.rank() == 0:
+            print("Avg Weights after averaging reweight = ",np.mean(avg_weights))
         return avg_weights
 
     def CompareDistance(self,patience,min_distance,weights1,weights2):
