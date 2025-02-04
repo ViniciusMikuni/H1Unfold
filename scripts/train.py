@@ -60,7 +60,7 @@ if __name__ == "__main__":
                    rank=hvd.rank(),size=hvd.size(),nmax=nmax) #match the normalization from MC files
 
     mc = Dataset(mc_file_names,flags.data_folder,is_mc=True,
-                 rank=hvd.rank(),size=hvd.size(),nmax=5_000_000, norm = data.nmax)
+                 rank=hvd.rank(),size=hvd.size(),nmax=None, norm = data.nmax)
 
 
     

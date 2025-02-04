@@ -45,8 +45,8 @@ def convert_to_np(file_list,base_path,name,is_data = False,
             gen_dict['particle_features'].append(np.stack([tmp_file['gen_'+feat].array()[:nevts].pad(max_part).fillna(0).regular() for feat in particle_list],-1))
             
             #Set charge to 0 for gen particles outside the tracker acceptance
-
             gen_dict['particle_features'][-1][:,:,-1] *= np.abs(gen_dict['particle_features'][-1][:,:,1])<2.0
+        
             #print("Removing events")
             #Remove events not passing Q2> 100
             gen_dict['particle_features'][ifile] = gen_dict['particle_features'][ifile][mask_evt]
@@ -105,10 +105,12 @@ def convert_to_np(file_list,base_path,name,is_data = False,
     if 'Data' not in name:
         gen_dict['event_features'] = np.concatenate(gen_dict['event_features'])
         gen_dict['particle_features'] = np.concatenate(gen_dict['particle_features'])
+
         order = np.argsort(-gen_dict['particle_features'][:,:,0],1)
         gen_dict['particle_features'] = np.take_along_axis(gen_dict['particle_features'],order[:,:,None],1)
         max_nonzero_gen = np.max(np.sum(gen_dict['particle_features'][:,:,0]>0,1))
         gen_dict['particle_features'] = gen_dict['particle_features'][:,:max_nonzero]
+
         print("Maximum gen particle multiplicity",max_nonzero_gen)
     del tmp_file
     return reco_dict,gen_dict

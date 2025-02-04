@@ -34,6 +34,19 @@ event_names = {
     '3': r'$e_{\eta}$',
     '4': r'$e_{\phi}$',
     }
+
+jet_names = {
+    '0': r'Jet $p_{T}$ [GeV]',
+    '1': r'Jet $\eta$',
+    '2': r'Jet $\phi$',
+    '3': r'Jet E [GeV]',
+    '4': r'$\mathrm{ln}(\lambda_1^1)$',
+    '5': r'$\mathrm{ln}(\lambda_{1.5}^1)$',
+    '6': r'$\mathrm{ln}(\lambda_{2.0}^1)$',
+    '7': r'$p_\mathrm{T}\mathrm{D}$ $(\sqrt{\lambda_0^2})$',
+    }
+
+
 particle_names = {
     '0': r'$\eta_p - \eta_e$',
     '1': r'$\phi_p - \phi_e - \pi$',
@@ -42,7 +55,7 @@ particle_names = {
     '4': 'log(E/Q)',
     '5': 'log(E)',
     '6':r'$\sqrt{(\eta_p - \eta_e)^2 + (\phi_p - \phi_e)^2}$',
-    '7': 'Charge',
+    '7': 'Absolute Charge',
     }
 
 
@@ -91,9 +104,9 @@ def SetStyle():
     mpl.rcParams.update({'legend.frameon': False}) 
     
     import matplotlib.pyplot as plt
-    # import mplhep as hep
-    # hep.set_style(hep.style.CMS)
-    # hep.style.use("CMS") 
+    import mplhep as hep
+    hep.set_style(hep.style.CMS)
+    hep.style.use("CMS") 
 
 # def SetGrid(npanels=2):
 #     fig = plt.figure(figsize=(9, 9))
@@ -118,7 +131,7 @@ def SetGrid(ratio=True):
 
 
 
-def FormatFig(xlabel,ylabel,ax0,xpos=0.9,ypos=0.9):
+def FormatFig(xlabel,ylabel,ax0,xpos=0.84,ypos=1.04):
     #Limit number of digits in ticks
     # y_loc, _ = plt.yticks()
     # y_update = ['%.1f' % y for y in y_loc]
@@ -127,8 +140,8 @@ def FormatFig(xlabel,ylabel,ax0,xpos=0.9,ypos=0.9):
     ax0.set_ylabel(ylabel)
         
 
-    # text = r'$\bf{H1}$'
-    # WriteText(xpos,ypos,text,ax0)
+    text = r'$\bf{H1 Internal}$'
+    WriteText(xpos,ypos,text,ax0)
 
 
 def WriteText(xpos,ypos,text,ax0):
@@ -206,78 +219,125 @@ def HistRoutine(feed_dict,
                 ylabel='',
                 reference_name='data',
                 logy=False,
-                logx = False,
+                logx=False,
                 binning=None,
                 label_loc='best',
                 plot_ratio=True,
                 weights=None,
                 uncertainty=None):
-    assert reference_name in feed_dict.keys(), "ERROR: Don't know the reference distribution"
+    """
+    Generate a histogram plot with optional ratio and uncertainties.
 
-    ref_plot = {'histtype':'stepfilled','alpha':0.2}
-    other_plots = {'histtype':'step','linewidth':2}
-    fig,gs = SetGrid(ratio=plot_ratio) 
+    Args:
+        feed_dict (dict): Dictionary containing data to be plotted.
+        xlabel (str): Label for the x-axis.
+        ylabel (str): Label for the y-axis.
+        reference_name (str): Key in feed_dict used as the reference distribution.
+        logy (bool): Whether to use a logarithmic scale on the y-axis.
+        logx (bool): Whether to use a logarithmic scale on the x-axis.
+        binning (array-like): Bin edges for the histograms.
+        label_loc (str): Location of the legend.
+        plot_ratio (bool): Whether to plot the ratio to the reference distribution.
+        weights (dict): Optional weights for each distribution in feed_dict.
+        uncertainty (array-like): Optional uncertainties for the ratio plot.
+
+    Returns:
+        fig, ax0: The generated figure and main axis.
+    """
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from utils import SetGrid, FormatFig
+
+    assert reference_name in feed_dict, "ERROR: Reference distribution not found in feed_dict."
+
+    # Default styles for plots
+    ref_plot_style = {'histtype': 'stepfilled', 'alpha': 0.2}
+    other_plot_style = {'histtype': 'step', 'linewidth': 2}
+
+    # Set up the figure and axes
+    fig, gs = SetGrid(ratio=plot_ratio)
     ax0 = plt.subplot(gs[0])
 
     if plot_ratio:
-        plt.xticks(fontsize=0)
-        ax1 = plt.subplot(gs[1],sharex=ax0)
+        ax1 = plt.subplot(gs[1], sharex=ax0)
+        ax0.xaxis.set_visible(False)
 
-    
+    # Define binning if not provided
     if binning is None:
-        binning = np.linspace(np.quantile(feed_dict[reference_name],0.01),np.quantile(feed_dict[reference_name],0.99),50)
-        
-    xaxis = [(binning[i] + binning[i+1])/2.0 for i in range(len(binning)-1)]
+        binning = np.linspace(
+            np.quantile(feed_dict[reference_name], 0.01),
+            np.quantile(feed_dict[reference_name], 0.99),
+            50
+        )
 
-    if weights is not None:
-        reference_hist,_ = np.histogram(feed_dict[reference_name],weights=weights[reference_name],bins=binning,density=True)
-    else:
-        reference_hist,_ = np.histogram(feed_dict[reference_name],bins=binning,density=True)
+    xaxis = 0.5 * (binning[:-1] + binning[1:])  # Bin centers
 
-    maxy = 0    
-    for ip,plot in enumerate(feed_dict.keys()):
-        plot_style = ref_plot if reference_name == plot else other_plots
-        if weights is not None:
-            dist,_,_=ax0.hist(feed_dict[plot],bins=binning,label=plot,color=options.colors[plot],density=True,weights=weights[plot],**plot_style)
-        else:
-            dist,_,_=ax0.hist(feed_dict[plot],bins=binning,label=plot,color=options.colors[plot],density=True,**plot_style)
+    # Compute reference histogram
+    ref_weights = weights[reference_name] if weights else None
+    reference_hist, _ = np.histogram(feed_dict[reference_name], bins=binning, density=True, weights=ref_weights)
 
-        if np.max(dist) > maxy:
-            maxy = np.max(dist)
-            
-        if plot_ratio:
-            if reference_name!=plot:
-                ratio = np.ma.divide(dist,reference_hist).filled(0)
-                ax1.plot(xaxis,ratio,color=options.colors[plot],
-                         marker=options.markers[plot],ms=10,
-                         lw=0,markerfacecolor='none',markeredgewidth=3)
-                if uncertainty is not None:
-                    for ibin in range(len(binning)-1):
-                        xup = binning[ibin+1]
-                        xlow = binning[ibin]
-                        ax1.fill_between(np.array([xlow,xup]),
-                                         uncertainty[ibin],-uncertainty[ibin], alpha=0.3,color='k')    
+    max_y = 0
+
+    # Plot each distribution
+    for plot_name, data in feed_dict.items():
+        plot_style = ref_plot_style if plot_name == reference_name else other_plot_style
+        plot_weights = weights[plot_name] if weights else None
+
+        # Plot histogram
+        dist, _, _ = ax0.hist(
+            data, bins=binning, density=True, weights=plot_weights,
+            label=options.name_translate[plot_name],
+            color=options.colors[plot_name],
+            **plot_style
+        )
+
+        max_y = max(max_y, np.max(dist))
+
+        # Plot ratio if applicable
+        if plot_ratio and plot_name != reference_name:
+            ratio = np.ma.divide(dist, reference_hist).filled(0)
+            ax1.plot(
+                xaxis, ratio,
+                color=options.colors[plot_name],
+                marker=options.markers[plot_name],
+                ms=10, lw=0,
+                markerfacecolor='none', markeredgewidth=3
+            )
+
+            # Add uncertainties
+            if uncertainty is not None:
+                for ibin in range(len(binning)-1):
+                    xup = binning[ibin+1]
+                    xlow = binning[ibin]
+                    ax1.fill_between(np.array([xlow,xup]),
+                                     1.0 + uncertainty[ibin],1.0 -uncertainty[ibin],
+                                     alpha=0.3,color='k')    
+
+    # Adjust y-axis scale
     if logy:
         ax0.set_yscale('log')
-        ax0.set_ylim(1e-5,10*maxy)
+        ax0.set_ylim(1e-5, 10 * max_y)
     else:
-        ax0.set_ylim(0,1.3*maxy)
+        ax0.set_ylim(0, 1.3 * max_y)
 
+    # Adjust x-axis scale
     if logx:
-        #ax0.set_xscale('log')
-        ax1.set_xscale('log')
+        ax0.set_xscale('log')
+        if plot_ratio:
+            ax1.set_xscale('log')
 
-    ax0.legend(loc=label_loc,fontsize=16,ncol=2)
+    # Add legend and format axes
+    ax0.legend(loc=label_loc, fontsize=16, ncol=2)
     if plot_ratio:
-        FormatFig(xlabel = "", ylabel = ylabel,ax0=ax0) 
-        plt.ylabel('Ratio to Data')
-        plt.axhline(y=1.0, color='r', linestyle='-',linewidth=1)
-        plt.ylim([0.5,1.5])
-        plt.xlabel(xlabel)
+        FormatFig(xlabel="", ylabel=ylabel, ax0=ax0)
+        ax1.set_ylabel('Pred./Ref.')
+        ax1.axhline(y=1.0, color='r', linestyle='-', linewidth=1)
+        ax1.set_ylim([0.5, 1.5])
+        ax1.set_xlabel(xlabel)
     else:
-        FormatFig(xlabel = xlabel, ylabel = ylabel,ax0=ax0) 
-        
-    return fig,ax0
+        FormatFig(xlabel=xlabel, ylabel=ylabel, ax0=ax0)
+
+    return fig, ax0
 
 
 def setup_gpus(local_rank):
