@@ -58,6 +58,7 @@ class Classifier(keras.Model):
         self.classifier = keras.Model(inputs=[inputs_part,inputs_evt,inputs_mask],
                                       outputs=outputs_head)
         self.model_ema = keras.models.clone_model(self.classifier)
+        self.model_ema.set_weights(self.classifier.get_weights())
         self.ema = 0.999
         self.loss_tracker = keras.metrics.Mean(name="loss")
 
