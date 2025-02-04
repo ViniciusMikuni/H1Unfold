@@ -46,19 +46,17 @@ for iter in range(N_iteration):
         print(f"Plotting Ensemble {e+1}/{N_ensemble}")
 
         #BASELINE  = From Scratch. No pretrained loading, no finetune
-        version = 'H1_Nov_ModelLists_1lrscale_fromscratch_closure'
         fromscratch_file = '{}/OmniFold_{}_iter{}_step{}_ensemble{}.pkl'.format(
-            flags.weights,version,iter,flags.step,e)
+            flags.weights,version + '_closure_fromscratch',iter,flags.step,e)
+        print(f"From scratch model = {fromscratch_file}")
         
         #Fine Tuned file
-        version = 'H1_Nov_ModelLists_1lrscale_closure_finetuned'
         finetuned_file = '{}/OmniFold_{}_iter{}_step{}_ensemble{}.pkl'.format(
-            flags.weights,version,iter,flags.step,e)
+            flags.weights,version + '_closure_finetuned',iter,flags.step,e)
 
         #Pre-Trained file
-        version = 'H1_Nov_ModelLists_1lrscale_closure_pretrained'
         pretrained_file = '{}/OmniFold_{}_iter{}_step{}_ensemble{}.pkl'.format(
-            flags.weights,version,iter,flags.step,e)
+            flags.weights,version + '_closure_pretrained',iter,flags.step,e)
 
 
         history_baseline = load_pickle(fromscratch_file)
@@ -69,24 +67,24 @@ for iter in range(N_iteration):
         # print("Pretrained: ", history_finetuned)
 
         plot_dict = {
-            f'FromScratch_Ens{e}':history_baseline['val_loss'],
-            f'FineTuned_Ens{e}':history_finetuned['val_loss'],
-            f'PreTrained_Ens{e}':history_pretrained['val_loss'],
+            f'Baseline_Ens{e}':history_baseline['val_loss'],
+            f'Finetuned_Ens{e}':history_finetuned['val_loss'],
+            f'Pre-trained_Ens{e}':history_pretrained['val_loss'],
         }
 
         _,ax0 = utils.PlotRoutine(
             plot_dict,xlabel='Epochs',ylabel='Validation Loss',axes=axes)
         ax0.set_yscale('log')
-        ax0.set_ylim(0.0, 0.1)
-        ax0.set_xlim(0.0, 100)
+        # ax0.set_ylim(0.0, 0.01)
+        # ax0.set_xlim(0.0, 100)
 
     #Mess with Legend
     handles, labels = plt.gca().get_legend_handles_labels()
 
     # Separate 'Baseline' and 'Pre-trained' entries
-    fromscratch_entries = [(h, l) for h, l in zip(handles, labels) if 'FromScratch' in l]
-    finetuned_entries = [(h, l) for h, l in zip(handles, labels) if 'FineTuned' in l]
-    pretrained_entries = [(h, l) for h, l in zip(handles, labels) if 'PreTrained' in l]
+    fromscratch_entries = [(h, l) for h, l in zip(handles, labels) if 'Baseline' in l]
+    finetuned_entries = [(h, l) for h, l in zip(handles, labels) if 'Finetuned' in l]
+    pretrained_entries = [(h, l) for h, l in zip(handles, labels) if 'Pre-trained' in l]
 
     # Sort entries to ensure correct order (optional)
     fromscratch_entries.sort(key=lambda x: x[1])
@@ -103,8 +101,11 @@ for iter in range(N_iteration):
         print(label)
 
     # Create the legend with two columns
-    plt.legend(combined_handles, combined_labels, ncol=2)
+    plt.legend(combined_handles, combined_labels, ncol=3,fontsize=10)
     plt.title(f"Iteration {iter} Step {flags.step}")
     plt.show()
 
-    fig.savefig("{}/loss_all_ensembles_iter{}_step{}.pdf".format(flags.plot_folder,iter,flags.step),bbox_inches='tight')
+    version = opt['NAME']
+    print("saving fig as {}/{}_loss_all_ensembles_iter{}_step{}.pdf".format(flags.plot_folder,version,iter,flags.step))
+    fig.savefig("{}/{}_loss_all_ensembles_iter{}_step{}.pdf".format(flags.plot_folder,version,iter,flags.step),
+                bbox_inches='tight')
