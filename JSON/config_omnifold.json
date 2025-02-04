@@ -1,6 +1,6 @@
 {
     'NITER': 5,
-    'NENSEMBLE': 5,
+    'NENSEMBLE': 1,
     'LR': 1e-4,
     'NEVT':5,
     'NFEAT':8,

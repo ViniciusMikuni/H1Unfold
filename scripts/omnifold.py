@@ -343,8 +343,9 @@ class Multifold():
 
             # Instantiate new model_e, then load from previous iteration
             if iteration < 1:
-                model_e = tf.keras.models.clone_model(model)  #clones layers and architecture
-                model_e.set_weights(self.model1.get_weights())  #actually clones weights
+                model_e = tf.keras.models.clone_model(model)  # clones original model layers and architecture
+                model_e.set_weights(self.model1.get_weights())  #actually clones weights. 
+                # self.model1 has custom wights (base, pre-train, or fine-tune)
 
                 if stepn == 1:
                     self.step1_models.append(model_e)
@@ -360,7 +361,7 @@ class Multifold():
 
             if hvd.rank() == 0:
                 print(f"\n\nEnsemble {ensemble+1}/{self.n_ensemble} Iter {iteration}/{self.niter-self.start}: Model Weights summary:")
-                model_weights = model.get_weights()
+                model_weights = model_e.get_weights()
                 all_weights = tf.concat([tf.reshape(w, [-1]) for w in model_weights if w.size > 0], axis=0)
                 mean_weights = tf.reduce_mean([tf.reduce_mean(w) for w in model_weights if w.size > 0])
                 stdv_weights = tf.math.reduce_std(all_weights)
