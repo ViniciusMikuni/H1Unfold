@@ -697,7 +697,8 @@ def plot_zjet(flags, dataloaders, data_weights, version, frame = "lab", clusteri
             data = ak.flatten(dataloaders[dataset_name].all_jets_breit["zjet"][num_jets_per_event>0])
         if weights is not None:
             weights = np.repeat(weights, num_jets_per_event, axis=0)
-        return np.histogram(data, bins=binning, density=True, weights=weights)
+        counts, bins = np.histogram(data, bins=binning, density=True, weights=weights)
+        return ak.to_numpy(counts), bins
 
     # Determine weight name
     weight_name = 'closure' if flags.blind else 'Rapgap'
@@ -721,6 +722,7 @@ def plot_zjet(flags, dataloaders, data_weights, version, frame = "lab", clusteri
 
             ref_hist = nominal_closure if sys == 'closure' else nominal
             unc = (np.ma.divide(sys_hist, ref_hist).filled(1) - 1) ** 2
+            print(unc, total_unc)
             total_unc += unc
 
             print(f"{sys}: max uncertainty = {np.max(np.sqrt(unc))}")
