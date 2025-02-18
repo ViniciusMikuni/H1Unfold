@@ -31,7 +31,7 @@ def parse_arguments():
     parser.add_argument('--blind', action='store_true', default=False,help='Show the results based on closure instead of data')
     #parser.add_argument('--closure', action='store_true', default=False,help='Plot closure results')
     parser.add_argument('--niter', type=int, default=0, help='Omnifold iteration to load')
-    parser.add_argument('--nmax', type=int, default=2500000, help='Maximum number of events to load')
+    parser.add_argument('--nmax', type=int, default=1000000, help='Maximum number of events to load')
     parser.add_argument('--img_fmt', default='pdf', help='Format of the output figures')
     parser.add_argument('--verbose', action='store_true', default=False,help='Increase print level')
     
