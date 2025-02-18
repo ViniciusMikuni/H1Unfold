@@ -58,8 +58,8 @@ class Multifold():
         self.data=None
 
         self.weights_folder = '../weights'
-        if self.nstrap>0:
-            self.weights_folder = '../weights_strap'
+        # if self.nstrap>0:
+        #     self.weights_folder = '../weights_strap'
         if not os.path.exists(self.weights_folder):
             os.makedirs(self.weights_folder)
             

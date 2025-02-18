@@ -60,7 +60,7 @@ if __name__ == "__main__":
                    rank=hvd.rank(),size=hvd.size(),nmax=nmax) #match the normalization from MC files
 
     mc = Dataset(mc_file_names,flags.data_folder,is_mc=True,
-                 rank=hvd.rank(),size=hvd.size(),nmax=None, norm = data.nmax)
+                 rank=hvd.rank(),size=hvd.size(),nmax=10_000_000, norm = data.nmax)
 
 
     
@@ -69,7 +69,7 @@ if __name__ == "__main__":
         if flags.verbose and hvd.rank()==0:
             print(80*"#")
             print("Running booststrap with ID: {}".format(flags.nstrap))
-            np.random.seed(flags.nstrap*hvd.rank())
+            np.random.seed(flags.nstrap*(hvd.rank()+1))
             print(80*"#")
         data.weight = np.random.poisson(1,data.weight.shape[0])        
         
