@@ -934,8 +934,32 @@ def cluster_breit(dataloaders, clustering_algorithm = "kt", store_all_jets = Fal
             
         dataloaders[dataloader_name].jet_breit = _take_leading_jet(jets)
         if store_all_jets:
-            dataloaders[dataloader_name].all_jets_breit = _take_all_jets(jets, max_num_jets)
+            dataloaders[dataloader_name].all_jets_breit = _take_all_jets(jets, max_num_jets).transpose(0, 2, 1)
+            def calculate_zjet(jet_data, event):
+                Q_array = np.sqrt(np.exp(event[:,0]))
 
+                n = np.array([0, 0, 1, 1], dtype=np.float32)
+                z_jet = []
+
+                jet_px = jet_data[:, :, 4]
+                jet_py = jet_data[:, :, 5]
+                jet_pz = jet_data[:, :, 6]
+                jet_E = jet_data[:, :, 3]
+                mask = (jet_px!=0) & (jet_py!=0) & (jet_pz!=0) & (jet_E!=0)
+                jet_px = ak.mask(jet_px, mask)
+                jet_py = ak.mask(jet_py, mask)
+                jet_pz = ak.mask(jet_pz, mask)
+                jet_E = ak.mask(jet_E, mask)
+                # jet_E = jet_data["E"]
+                numerator = n[3]*jet_E- n[0]*jet_px - n[1]*jet_py - n[2]*jet_pz
+                counts = ak.num(numerator)
+                Q_array = np.repeat(Q_array, counts)
+                z_jet = ak.flatten(numerator)/Q_array
+                z_jet = np.array(ak.fill_none(ak.unflatten(z_jet, counts), np.nan))
+                z_jet = z_jet.reshape(z_jet.shape[0], z_jet.shape[1], 1)
+                jet_data = np.concatenate((jet_data, z_jet), axis=2)
+                return jet_data
+            dataloaders[dataloader_name].all_jets_breit = calculate_zjet(dataloaders[dataloader_name].all_jets_breit, dataloaders[dataloader_name].event)
         
     
     
@@ -1042,36 +1066,8 @@ def gather_data(dataloaders, store_all_jets = False):
         dataloaders[dataloader].jet = hvd.allgather(tf.constant(dataloaders[dataloader].jet)).numpy()
         dataloaders[dataloader].jet_breit = hvd.allgather(tf.constant(dataloaders[dataloader].jet_breit)).numpy()
         if store_all_jets:
-            def mask_jets(jets, mask, frame="lab"):
-                out_dict = {}
-                if frame == "lab":
-                    jet_features = ["pt", "eta", "phi", "E", "tau11", "tau11p5", "tau12", "tau20", "ptD", "zjet"]
-                elif frame == "breit":
-                    jet_features = ["pt", "eta", "phi", "E", "px", "py", "pz"]
-                # Adding the jet observables to the dictionary and removing events that don't pass the mask
-                # The masked events will be replaced with None and then dropped
-                masked_jets = ak.drop_none(ak.mask(jets, mask))
-                for i in range(len(jet_features)):
-                    out_dict[f"{jet_features[i]}"] = masked_jets[:, :, i]
-                return out_dict
-            def calculate_zjet(jet_data, event):
-                Q_array = np.sqrt(np.exp(event[:,0]))
-                n = np.array([0, 0, 1, 1], dtype=np.float32)
-                z_jet = []
-                jet_px = jet_data["px"]
-                jet_py = jet_data["py"]
-                jet_pz = jet_data["pz"]
-                jet_E = jet_data["E"]
-                numerator = n[3]*jet_E- n[0]*jet_px - n[1]*jet_py - n[2]*jet_pz
-                z_jet = ak.drop_none(numerator/Q_array, axis=1)
-                jet_data["zjet"] = z_jet
             dataloaders[dataloader].all_jets = hvd.allgather(tf.constant(dataloaders[dataloader].all_jets)).numpy()
-            dataloaders[dataloader].all_jets = mask_jets(dataloaders[dataloader].all_jets, ~np.isnan(dataloaders[dataloader].all_jets[:, :, 9]))
             dataloaders[dataloader].all_jets_breit = hvd.allgather(tf.constant(dataloaders[dataloader].all_jets_breit)).numpy()
-            dataloaders[dataloader].all_jets_breit = dataloaders[dataloader].all_jets_breit.transpose(0, 2, 1)
-            breit_mask = (dataloaders[dataloader].all_jets_breit[:, :, 3]!=0) & (dataloaders[dataloader].all_jets_breit[:, :, 4]!=0)  & (dataloaders[dataloader].all_jets_breit[:, :, 5]!=0) & (dataloaders[dataloader].all_jets_breit[:, :, 6]!=0)
-            dataloaders[dataloader].all_jets_breit = mask_jets(dataloaders[dataloader].all_jets_breit, breit_mask, frame="breit")
-            calculate_zjet(dataloaders[dataloader].all_jets_breit, dataloaders[dataloader].event)
         dataloaders[dataloader].weight = hvd.allgather(tf.constant(dataloaders[dataloader].weight)).numpy()
         #dataloaders[dataloader].mask = hvd.allgather(tf.constant(dataloaders[dataloader].mask)).numpy()
 
