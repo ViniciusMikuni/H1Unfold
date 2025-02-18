@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import os,gc
+import os,gc, re
 from omnifold import  Multifold
 import tensorflow as tf
 import utils
@@ -26,7 +26,9 @@ def get_sample_names(use_sys, sys_list = ['sys0','sys1','sys5','sys7','sys11'],
 def get_version(dataset,flags,opt):
     version = opt['NAME']
     if 'sys' in dataset:
-        version += f'_{dataset}'
+        match = re.search(r'sys(.)', dataset)
+        version += f"_sys{match.group(1)}"        
+        #version += f'_{dataset}'
     if 'Djangoh' in dataset:
         #Djangoh used for model uncertainty
         version += f'_sys_model'
@@ -53,20 +55,15 @@ def evaluate_model(flags,opt,dataset,dataloaders,nomimal='Rapgap',version=None):
     if version is None:
         version = get_version(dataset,flags,opt)
     
-    #Load the trained model        
-    if flags.reco:
-        if flags.niter>0:
-            warnings.warn('Reco level weights are only reasonable if flags.niter == 0')
-        model_name = '{}/OmniFold_{}_iter{}_step1/checkpoint'.format(flags.weights,version,flags.niter)
-    else:
-        model_name = '{}/OmniFold_{}_iter{}_step2/checkpoint'.format(flags.weights,version,flags.niter)
+    model_name = '{}/OmniFold_{}_iter{}_step2/checkpoint'.format(flags.weights,version,flags.niter)
+    
     if hvd.rank()==0:
         print("Loading model {}".format(model_name))
 
     mfold = Multifold(version = version,verbose = hvd.rank()==0)
     mfold.PrepareModel()
     mfold.model2.load_weights(model_name).expect_partial() #Doesn't matter which model is loaded since both have the same architecture
-    unfolded_weights = mfold.reweight(dataloaders[dataset].evts,mfold.model2_ema,batch_size=1000)
+    unfolded_weights = mfold.reweight(dataloaders[dataset].gen,mfold.model2_ema,batch_size=1000)
     #return unfolded_weights
     return hvd.allgather(tf.constant(unfolded_weights)).numpy()
 
@@ -75,14 +72,15 @@ def evaluate_model(flags,opt,dataset,dataloaders,nomimal='Rapgap',version=None):
 def undo_standardizing(flags,dataloaders):
     #Undo preprocessing
     for mc in dataloaders:
-        dataloaders[mc].part, dataloaders[mc].event  = dataloaders[mc].revert_standardize(dataloaders[mc].evts[0], dataloaders[mc].evts[1],dataloaders[mc].evts[-1])
-        dataloaders[mc].mask = dataloaders[mc].evts[-1]
-        del dataloaders[mc].evts
+        if flags.reco:
+            dataloaders[mc].part, dataloaders[mc].event  = dataloaders[mc].revert_standardize(dataloaders[mc].reco[0], dataloaders[mc].reco[1],dataloaders[mc].reco[-1])
+            dataloaders[mc].mask = dataloaders[mc].reco[-1]
+        else:
+            dataloaders[mc].part, dataloaders[mc].event  = dataloaders[mc].revert_standardize(dataloaders[mc].gen[0], dataloaders[mc].gen[1],dataloaders[mc].gen[-1])            
+            dataloaders[mc].mask = dataloaders[mc].gen[-1]
+            
+        del dataloaders[mc].gen,dataloaders[mc].reco
         gc.collect()
-    if flags.reco:
-        dataloaders['data'].part, dataloaders['data'].event = dataloaders['data'].revert_standardize(dataloaders['data'].reco[0], dataloaders['data'].reco[1],dataloaders['data'].reco[-1])
-        dataloaders['data'].mask = dataloaders['data'].reco[-1]
-
 
 
 def cluster_jets(dataloaders, store_all_jets = False):
@@ -146,11 +144,11 @@ def cluster_jets(dataloaders, store_all_jets = False):
             tau_20 += pt ** 2
             sumpt += pt
 
-        jet.tau_11 = np.log(tau_11 / jet.pt())
-        jet.tau_11p5 = np.log(tau_11p5 / jet.pt())
-        jet.tau_12 = np.log(tau_12 / jet.pt())
-        jet.tau_20 = tau_20 / (jet.pt() ** 2)
-        jet.ptD = np.sqrt(tau_20) / sumpt
+        jet.tau_11 = np.log(tau_11 / jet.pt()) if jet.pt() > 0 else 0.0
+        jet.tau_11p5 = np.log(tau_11p5 / jet.pt()) if jet.pt() > 0 else 0.0
+        jet.tau_12 = np.log(tau_12 / jet.pt()) if jet.pt() > 0 else 0.0
+        jet.tau_20 = tau_20 / (jet.pt() ** 2) if jet.pt() > 0 else 0.0
+        jet.ptD = np.sqrt(tau_20) / sumpt if sumpt > 0 else 0.0
 
         # Calculating zjet
         P = np.array([0, 0, 920, 920], dtype=np.float32) # 920 GeV is proton beam energy
@@ -906,7 +904,7 @@ def cluster_breit(dataloaders, clustering_algorithm = "kt", store_all_jets = Fal
         else:
             array = ak.Array(events)
             cluster = fastjet.ClusterSequence(array, jetdef)
-            jets = cluster.inclusive_jets(min_pt=10)
+            jets = cluster.inclusive_jets(min_pt=5)
             
             jets["pt"] = -np.sqrt(jets["px"]**2 + jets["py"]**2)
             jets["phi"] = np.arctan2(jets["py"],jets["px"])
@@ -1034,9 +1032,9 @@ def gather_data(dataloaders, store_all_jets = False):
 
 
     for dataloader in dataloaders:
-        dataloaders[dataloader].mask = np.reshape(dataloaders[dataloader].mask,(-1))
-        dataloaders[dataloader].part = hvd.allgather(tf.constant(dataloaders[dataloader].part.reshape(
-            (-1,dataloaders[dataloader].part.shape[-1]))[dataloaders[dataloader].mask])).numpy()
+        #dataloaders[dataloader].mask = np.reshape(dataloaders[dataloader].mask,(-1))
+        # dataloaders[dataloader].part = hvd.allgather(tf.constant(dataloaders[dataloader].part.reshape(
+        #     (-1,dataloaders[dataloader].part.shape[-1]))[dataloaders[dataloader].mask])).numpy()
         
         dataloaders[dataloader].event = hvd.allgather(tf.constant(dataloaders[dataloader].event)).numpy()
         dataloaders[dataloader].jet = hvd.allgather(tf.constant(dataloaders[dataloader].jet)).numpy()
@@ -1073,7 +1071,7 @@ def gather_data(dataloaders, store_all_jets = False):
             dataloaders[dataloader].all_jets_breit = mask_jets(dataloaders[dataloader].all_jets_breit, breit_mask, frame="breit")
             calculate_zjet(dataloaders[dataloader].all_jets_breit, dataloaders[dataloader].event)
         dataloaders[dataloader].weight = hvd.allgather(tf.constant(dataloaders[dataloader].weight)).numpy()
-        dataloaders[dataloader].mask = hvd.allgather(tf.constant(dataloaders[dataloader].mask)).numpy()
+        #dataloaders[dataloader].mask = hvd.allgather(tf.constant(dataloaders[dataloader].mask)).numpy()
 
         
         
