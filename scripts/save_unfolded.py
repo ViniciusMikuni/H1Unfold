@@ -13,7 +13,7 @@ import warnings
 from plot_utils import *
 import h5py as h5
 hvd.init()
-utils.SetStyle()
+
 
 
 
@@ -40,16 +40,19 @@ def parse_arguments():
 def get_dataloaders(flags,file_names):
     #Load the data from the simulations
     dataloaders = {}
+
     for name in file_names:
-        dataloaders[name] = Dataset([name],flags.data_folder,is_mc=True,
-                                    rank=hvd.rank(),size=hvd.size(),
-                                    nmax=flags.nmax,pass_fiducial=True,
-                                    pass_reco = flags.reco)
-    if 'data' in name:
-        dataloaders[name] = Dataset([name],flags.data_folder,is_mc=False,
+        if 'data' in name:
+            dataloaders[name] = Dataset([name],flags.data_folder,is_mc=False,
                                     rank=hvd.rank(),size=hvd.size(),
                                     nmax=None,pass_reco=True)
-
+            
+        else:    
+            dataloaders[name] = Dataset([name],flags.data_folder,is_mc=True,
+                                        rank=hvd.rank(),size=hvd.size(),
+                                        nmax=flags.nmax,pass_fiducial= not flags.reco,
+                                        pass_reco = flags.reco)
+            
     return dataloaders
 
 
@@ -69,16 +72,18 @@ def main():
         print(f'Will load the following files : {mc_files.keys()}')
         
     dataloaders = get_dataloaders(flags,mc_files)
-    weights = {}
-    for dataset in dataloaders:
-        if flags.verbose and hvd.rank()==0:
-            print(f"Evaluating weights for dataset {dataset}")
-        weights[dataset] = evaluate_model(flags,opt,dataset,dataloaders)
 
-        if "Rapgap" in flags.file and 'sys' not in flags.file:
-            weights['closure'] = evaluate_model(
-                flags,opt,dataset,dataloaders,
-                version = opt['NAME']+'_closure'+'_pretrained' if flags.load_pretrain else '')
+    if 'data' not in flags.file:
+        weights = {}
+        for dataset in dataloaders:
+            if flags.verbose and hvd.rank()==0:
+                print(f"Evaluating weights for dataset {dataset}")
+            weights[dataset] = evaluate_model(flags,opt,dataset,dataloaders)
+
+            if "Rapgap" in flags.file and 'sys' not in flags.file:
+                weights['closure'] = evaluate_model(
+                    flags,opt,dataset,dataloaders,
+                    version = opt['NAME']+'_closure'+'_pretrained' if flags.load_pretrain else '')
         
     if hvd.rank()==0:
         print("Done with network evaluation")
@@ -99,28 +104,18 @@ def main():
 
     if hvd.rank()==0:
         with h5.File(os.path.join(flags.data_folder,output_file_name),'w') as fh5:
-            dset = fh5.create_dataset('weights', data=weights[flags.file])
-            dset = fh5.create_dataset('mc_weights', data=dataloaders[flags.file].weight)
+            if 'data' not in flags.file:
+                dset = fh5.create_dataset('weights', data=weights[flags.file])
+                dset = fh5.create_dataset('mc_weights', data=dataloaders[flags.file].weight)
+                if 'closure' in weights:
+                    dset = fh5.create_dataset('closure_weights', data=weights['closure'])
+
+                
             dset = fh5.create_dataset('jet_pt', data=dataloaders[flags.file].jet[:,0])
             dset = fh5.create_dataset('jet_breit_pt', data=dataloaders[flags.file].jet_breit[:,0])
             dset = fh5.create_dataset('deltaphi', data=get_deltaphi(dataloaders[flags.file].jet, dataloaders[flags.file].event))
             dset = fh5.create_dataset('jet_tau10', data=dataloaders[flags.file].jet[:,4])
 
-            if 'closure' in weights:
-                dset = fh5.create_dataset('closure_weights', data=weights['closure'])
-
-                
-    
-
-    #Save plot info to separate file        
-    
-    #plot_particles(flags,dataloaders,weights,opt['NAME'],num_part = num_part)
-    # plot_jet_pt(flags,dataloaders,weights,opt['NAME'],lab_frame=False)
-    # plot_jet_pt(flags,dataloaders,weights,opt['NAME'])
-    
-    # plot_deltaphi(flags,dataloaders,weights,opt['NAME'])
-    # plot_tau(flags,dataloaders,weights,opt['NAME'])
-    # plot_event(flags,dataloaders,weights,opt['NAME'])    
 
 
     
