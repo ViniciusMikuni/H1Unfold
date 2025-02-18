@@ -59,6 +59,50 @@ particle_names = {
     }
 
 
+observable_names = {
+    'jet_pt': r'Jet $p_{T}$ [GeV]',
+    'jet_breit_pt': r'Breit frame Jet $p_{T}$ [GeV]',
+    'deltaphi':r"$\Delta\phi^{jet}$ [rad]",
+    'jet_tau10':r'$\mathrm{ln}(\lambda_1^1)$',
+}
+
+dedicated_binning = {
+    'jet_pt': np.logspace(np.log10(10),np.log10(100),7),
+    'jet_breit_pt': np.logspace(np.log10(10),np.log10(50),7),
+    'deltaphi': np.linspace(0, 1, 8),
+    'jet_tau10': np.array([-4.00,-3.15,-2.59,-2.18,-1.86,-1.58,-1.29,-1.05,-0.81,-0.61,0.00])
+}
+
+def get_log(var):
+    if 'pt' in var:
+        return True, True
+    if 'deltaphi' in var:
+        return True, True
+    if 'tau' in var:
+        return False, False
+    else:
+        print(f"ERROR: {var} not present!")
+
+
+def get_ylim(var):
+    if 'pt' in var:
+        return 1e-4, 1
+    if 'deltaphi' in var:
+        return 1e-3, 50
+    if 'tau' in var:
+        return 0, 1.2
+    else:
+        print("ERROR")
+
+        
+class ObservableInfo():
+    def __init__(self,var):
+        self.var = var
+        self.name = observable_names[var]
+        self.binning = dedicated_binning[var]
+        self.logx, self.logy = get_log(var)
+        self.ylow, self.yhigh = get_ylim(var)
+                  
 class ScalarFormatterClass(mtick.ScalarFormatter):
     #https://www.tutorialspoint.com/show-decimal-places-and-scientific-notation-on-the-axis-of-a-matplotlib-plot
     def _set_format(self):
