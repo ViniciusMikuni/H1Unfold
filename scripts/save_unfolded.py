@@ -29,7 +29,7 @@ def parse_arguments():
     #parser.add_argument('--load', action='store_true', default=False,help='Load unfolded weights')
     parser.add_argument('--file', default='Rapgap_Eplus0607_prep.h5',help='File to load')
     parser.add_argument('--niter', type=int, default=4, help='Omnifold iteration to load')
-    parser.add_argument('--nmax', type=int, default=20_000_000, help='Maximum number of events to load')
+    parser.add_argument('--nmax', type=int, default=2_000_000, help='Maximum number of events to load')
     parser.add_argument('--bootstrap', action='store_true', default=False,help='Load models for bootstrapping')
     parser.add_argument('--nboot', type=int, default=50, help='Number of bootstrap models to load')
     parser.add_argument('--verbose', action='store_true', default=False,help='Increase print level')
@@ -58,7 +58,7 @@ def get_dataloaders(flags,file_names):
 
 
 def get_deltaphi(jet, elec):
-    delta_phi = np.abs(np.pi + jet[:, 2] - elec[:, 4])
+    delta_phi = np.abs(np.pi + jet[:,:, 2] - elec[:,None, 4])
     delta_phi[delta_phi > 2 * np.pi] -= 2 * np.pi
     return delta_phi
 
@@ -124,10 +124,10 @@ def main():
                     dset = fh5.create_dataset('closure_weights', data=weights['closure'])
 
                 
-            dset = fh5.create_dataset('jet_pt', data=dataloaders[flags.file].jet[:,0])
-            dset = fh5.create_dataset('jet_breit_pt', data=dataloaders[flags.file].jet_breit[:,0])
-            dset = fh5.create_dataset('deltaphi', data=get_deltaphi(dataloaders[flags.file].jet, dataloaders[flags.file].event))
-            dset = fh5.create_dataset('jet_tau10', data=dataloaders[flags.file].jet[:,4])
+            dset = fh5.create_dataset('jet_pt', data=dataloaders[flags.file].all_jets[:,:,0])
+            dset = fh5.create_dataset('jet_breit_pt', data=dataloaders[flags.file].all_jets_breit[:,:,0])
+            dset = fh5.create_dataset('deltaphi', data=get_deltaphi(dataloaders[flags.file].all_jets, dataloaders[flags.file].event))
+            dset = fh5.create_dataset('jet_tau10', data=dataloaders[flags.file].all_jets[:,:,4])
             dset = fh5.create_dataset('zjet', data=dataloaders[flags.file].all_jets[:, :, 9])
             dset = fh5.create_dataset('zjet_breit', data=dataloaders[flags.file].all_jets_breit[:, :, 7])
     

@@ -183,7 +183,7 @@ def cluster_jets(dataloaders):
         ])
     
     def _take_all_jets(jets):
-        max_num_jets = 5
+        max_num_jets = 4
 
         if not jets:
             return np.zeros((max_num_jets, 10))
@@ -232,12 +232,12 @@ def cluster_jets(dataloaders):
                 _calculate_jet_features(jet, q[i])
 
             # Take the leading jet's features
-            leading_jet = _take_leading_jet(sorted_jets)
-            list_of_jets.append(leading_jet)
+            # leading_jet = _take_leading_jet(sorted_jets)
+            # list_of_jets.append(leading_jet)
             all_jets = _take_all_jets(sorted_jets)
             list_of_all_jets.append(all_jets)
         # Store the jet features in the dataloader
-        data.jet = np.array(list_of_jets, dtype=np.float32)
+        #data.jet = np.array(list_of_jets, dtype=np.float32)
         data.all_jets = np.array(list_of_all_jets, dtype=np.float32)
         #print(f"----------------- Done working with {dataloader_name} -------------------")
 
@@ -916,29 +916,43 @@ def cluster_breit(dataloaders):
             jet[:,2] = np.array(list(itertools.zip_longest(*jets.phi.to_list(), fillvalue=0))).T[:,0]
             jet[:,3] = np.array(list(itertools.zip_longest(*jets.E.to_list(), fillvalue=0))).T[:,0]
             return jet
-        def _take_all_jets(jets, max_num_jets):
-            all_jets = []
-            for event in jets:
-                event_jets = []
-                for i in range(max_num_jets):
-                    if i < len(event):
-                        jet_info = [event[i].pt,
-                                    event[i].eta,
-                                    event[i].phi,
-                                    event[i].E,
-                                    event[i].px,
-                                    event[i].py,
-                                    event[i].pz
-                                ]
-                    else:
-                        jet_info = [0, 0, 0, 0, 0, 0, 0]
-                    event_jets.append(jet_info)
-                all_jets.append(event_jets)
-            return np.array(all_jets)
-            
-        dataloaders[dataloader_name].jet_breit = _take_leading_jet(jets)
 
-        max_num_jets = 5
+
+        def _take_all_jets(jets,maxjets = 5):
+            
+            jet = np.zeros((data.event.shape[0],maxjets,7))
+            jet[:,:,0] = -np.array(list(itertools.zip_longest(*jets.pt.to_list(), fillvalue=0))).T[:,:maxjets]
+            jet[:,:,1] = np.array(list(itertools.zip_longest(*jets.eta.to_list(), fillvalue=0))).T[:,:maxjets]
+            jet[:,:,2] = np.array(list(itertools.zip_longest(*jets.phi.to_list(), fillvalue=0))).T[:,:maxjets]
+            jet[:,:,3] = np.array(list(itertools.zip_longest(*jets.E.to_list(), fillvalue=0))).T[:,:maxjets]
+            jet[:,:,4] = np.array(list(itertools.zip_longest(*jets.px.to_list(), fillvalue=0))).T[:,:maxjets]
+            jet[:,:,5] = np.array(list(itertools.zip_longest(*jets.py.to_list(), fillvalue=0))).T[:,:maxjets]
+            jet[:,:,6] = np.array(list(itertools.zip_longest(*jets.pz.to_list(), fillvalue=0))).T[:,:maxjets]
+            return jet
+        
+        # def _take_all_jets(jets, max_num_jets):
+        #     all_jets = []
+        #     for event in jets:
+        #         event_jets = []
+        #         for i in range(max_num_jets):
+        #             if i < len(event):
+        #                 jet_info = [-event[i].pt,
+        #                             event[i].eta,
+        #                             event[i].phi,
+        #                             event[i].E,
+        #                             event[i].px,
+        #                             event[i].py,
+        #                             event[i].pz
+        #                         ]
+        #             else:
+        #                 jet_info = [0, 0, 0, 0, 0, 0, 0]
+        #             event_jets.append(jet_info)
+        #         all_jets.append(event_jets)
+        #     return np.array(all_jets)
+            
+        #dataloaders[dataloader_name].jet_breit = _take_leading_jet(jets)
+
+        max_num_jets = 4
         dataloaders[dataloader_name].all_jets_breit = _take_all_jets(jets, max_num_jets)
 
         def calculate_zjet(jet_data, event):
@@ -1063,7 +1077,7 @@ def plot_observable(flags, var, dataloaders, version):
     def compute_histogram(dataset_name, weights=None,density=True):
         if len(dataloaders[dataset_name][var].shape) > 1:
             multiple_jets_per_event = True
-            valid_indices = dataloaders[dataset_name][var]>0
+            valid_indices = dataloaders[dataset_name]['jet_pt']>0
             data = ak.mask(dataloaders[dataset_name][var], valid_indices)
             data = ak.drop_none(data)
             num_jets_per_event = ak.count(data, axis = 1)
@@ -1144,7 +1158,7 @@ def plot_observable(flags, var, dataloaders, version):
     feed_dict = {}
 
     if len(dataloaders['Rapgap'][var].shape) > 1:
-        Rapgap_mask = dataloaders["Rapgap"][var]>0
+        Rapgap_mask = dataloaders["Rapgap"]["jet_pt"]>0
         Rapgap_data = ak.drop_none(ak.mask(dataloaders["Rapgap"][var], Rapgap_mask))
         num_Rapgap_jets_per_event = ak.count(Rapgap_data, axis=1)
         Rapgap_data = ak.flatten(Rapgap_data)
@@ -1160,7 +1174,7 @@ def plot_observable(flags, var, dataloaders, version):
         feed_dict['Rapgap'] = dataloaders['Rapgap'][var][dataloaders['Rapgap']['jet_pt'] > 0]
     
     if len(dataloaders['Djangoh'][var].shape) > 1:
-        Djangoh_mask = dataloaders["Djangoh"][var]>0
+        Djangoh_mask = dataloaders["Djangoh"]["jet_pt"]>0
         Djangoh_data = ak.drop_none(ak.mask(dataloaders["Djangoh"][var], Djangoh_mask))
         num_Djangoh_jets_per_event = ak.count(Djangoh_data, axis=1)
         Djangoh_data = ak.flatten(Djangoh_data)
@@ -1173,7 +1187,7 @@ def plot_observable(flags, var, dataloaders, version):
 
     if flags.reco:
         if len(dataloaders['data'][var].shape) > 1:
-            data_mask = dataloaders["data"][var]>0
+            data_mask = dataloaders["data"]["jet_pt"]>0
             data = ak.drop_none(ak.mask(dataloaders["data"][var], data_mask))
             data = ak.flatten(data)
             weights['data'] = np.ones_like(data)
@@ -1183,11 +1197,17 @@ def plot_observable(flags, var, dataloaders, version):
 
             weights['data'] = np.ones_like(dataloaders['data'][var][dataloaders['data']['jet_pt'] > 0])
             feed_dict['data'] = dataloaders['data'][var][dataloaders['data']['jet_pt'] > 0]
-    
+
+    if flags.reco:
+        ylabel = r'1/N $\mathrm{dN}/\mathrm{d}$%s'%info.name
+    else:
+        ylabel = r'$1/\sigma$ $\mathrm{d}\sigma/\mathrm{d}$%s'%info.name
+            
     # Generate histogram plot
     fig, ax = utils.HistRoutine(
         feed_dict,
         xlabel=info.name,
+        ylabel = ylabel,
         weights=weights,
         logy=info.logy,
         logx=info.logx,
@@ -1206,15 +1226,14 @@ def plot_observable(flags, var, dataloaders, version):
 
 def gather_data(dataloaders):
 
-
     for dataloader in dataloaders:
         #dataloaders[dataloader].mask = np.reshape(dataloaders[dataloader].mask,(-1))
         # dataloaders[dataloader].part = hvd.allgather(tf.constant(dataloaders[dataloader].part.reshape(
         #     (-1,dataloaders[dataloader].part.shape[-1]))[dataloaders[dataloader].mask])).numpy()
         
         dataloaders[dataloader].event = hvd.allgather(tf.constant(dataloaders[dataloader].event)).numpy()
-        dataloaders[dataloader].jet = hvd.allgather(tf.constant(dataloaders[dataloader].jet)).numpy()
-        dataloaders[dataloader].jet_breit = hvd.allgather(tf.constant(dataloaders[dataloader].jet_breit)).numpy()
+        # dataloaders[dataloader].jet = hvd.allgather(tf.constant(dataloaders[dataloader].jet)).numpy()
+        # dataloaders[dataloader].jet_breit = hvd.allgather(tf.constant(dataloaders[dataloader].jet_breit)).numpy()
         dataloaders[dataloader].all_jets = hvd.allgather(tf.constant(dataloaders[dataloader].all_jets)).numpy()
         dataloaders[dataloader].all_jets_breit = hvd.allgather(tf.constant(dataloaders[dataloader].all_jets_breit)).numpy()
         dataloaders[dataloader].weight = hvd.allgather(tf.constant(dataloaders[dataloader].weight)).numpy()
