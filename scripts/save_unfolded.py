@@ -96,7 +96,7 @@ def main():
     gc.collect()
     gather_data(dataloaders)
 
-    replace_string = f"unfolded_{flags.niter}_ryantest"
+    replace_string = f"unfolded_{flags.niter}"
     if flags.reco:
         replace_string += '_reco'
     output_file_name = flags.file.replace("prep",replace_string)
