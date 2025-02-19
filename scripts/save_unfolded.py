@@ -30,6 +30,8 @@ def parse_arguments():
     parser.add_argument('--file', default='Rapgap_Eplus0607_prep.h5',help='File to load')
     parser.add_argument('--niter', type=int, default=4, help='Omnifold iteration to load')
     parser.add_argument('--nmax', type=int, default=20_000_000, help='Maximum number of events to load')
+    parser.add_argument('--bootstrap', action='store_true', default=False,help='Load models for bootstrapping')
+    parser.add_argument('--nboot', type=int, default=50, help='Number of bootstrap models to load')
     parser.add_argument('--verbose', action='store_true', default=False,help='Increase print level')
     
     flags = parser.parse_args()
@@ -78,18 +80,23 @@ def main():
         for dataset in dataloaders:
             if flags.verbose and hvd.rank()==0:
                 print(f"Evaluating weights for dataset {dataset}")
-            weights[dataset] = evaluate_model(flags,opt,dataset,dataloaders)
 
-            if "Rapgap" in flags.file and 'sys' not in flags.file:
-                weights['closure'] = evaluate_model(
-                    flags,opt,dataset,dataloaders,
-                    version = opt['NAME']+'_closure'+'_pretrained' if flags.load_pretrain else '')
+            if flags.bootstrap:
+                for i in range(1,flags.nboot):
+                    weights[str(i)] = evaluate_model(flags,opt,dataset,dataloaders,
+                                                     bootstrap = True,nboot=i)
+            else:                                
+                weights[dataset] = evaluate_model(flags,opt,dataset,dataloaders)
+                if "Rapgap" in flags.file and 'sys' not in flags.file:
+                    weights['closure'] = evaluate_model(
+                        flags,opt,dataset,dataloaders,
+                        version = opt['NAME']+'_closure'+'_pretrained' if flags.load_pretrain else '')
         
     if hvd.rank()==0:
         print("Done with network evaluation")
     #Important to only undo the preprocessing after the weights are derived!
     undo_standardizing(flags,dataloaders)
-    #num_part = dataloaders['Rapgap'].part.shape[1]
+
     
     cluster_breit(dataloaders)
     cluster_jets(dataloaders)
@@ -99,13 +106,19 @@ def main():
     replace_string = f"unfolded_{flags.niter}"
     if flags.reco:
         replace_string += '_reco'
+    if flags.bootstrap:
+        replace_string += '_boot'
+        
     output_file_name = flags.file.replace("prep",replace_string)
-
 
     if hvd.rank()==0:
         with h5.File(os.path.join(flags.data_folder,output_file_name),'w') as fh5:
             if 'data' not in flags.file:
-                dset = fh5.create_dataset('weights', data=weights[flags.file])
+                if flags.bootstrap:
+                    for i in range(1,flags.nboot):                        
+                        dset = fh5.create_dataset(f'weights{i}', data=weights[str(i)])
+                else:
+                    dset = fh5.create_dataset('weights', data=weights[flags.file])
                 dset = fh5.create_dataset('mc_weights', data=dataloaders[flags.file].weight)
                 if 'closure' in weights:
                     dset = fh5.create_dataset('closure_weights', data=weights['closure'])

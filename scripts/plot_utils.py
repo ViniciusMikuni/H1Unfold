@@ -880,10 +880,13 @@ def plot_observable(flags, var, dataloaders, version):
                 print("Running over boostrap entries")
                 stat_unc = []
                 for boot in range(1,flags.nboot):
+                    if boot ==10: continue
+                    if boot == 23: continue
                     sys_weights = dataloaders['bootstrap'][f'weights{boot}']
                     sys_hist, _ = compute_histogram('bootstrap', dataloaders['bootstrap']['mc_weights'] * sys_weights)
                     stat_unc.append(sys_hist)
-                stat_unc = np.std(stat_unc,0)/(1e-9 + np.mean(stat_unc,0))
+                stat_unc = np.ma.divide(np.std(stat_unc,0), np.mean(stat_unc,0)).filled(0)
+                
                 total_unc += stat_unc**2
                 print(f"{sys}: max uncertainty = {np.max(stat_unc)}")
                     

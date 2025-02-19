@@ -175,7 +175,7 @@ def SetGrid(ratio=True):
 
 
 
-def FormatFig(xlabel,ylabel,ax0,xpos=0.88,ypos=1.025):
+def FormatFig(xlabel,ylabel,ax0,xpos=0.86,ypos=0.945):
     #Limit number of digits in ticks
     # y_loc, _ = plt.yticks()
     # y_update = ['%.1f' % y for y in y_loc]
@@ -355,7 +355,8 @@ def HistRoutine(feed_dict,
                     xlow = binning[ibin]
                     ax1.fill_between(np.array([xlow,xup]),
                                      1.0 + uncertainty[ibin],1.0 -uncertainty[ibin],
-                                     alpha=0.3,color='k')    
+                                     alpha=0.3,color='k')
+                    
 
     # Adjust y-axis scale
     if logy:
