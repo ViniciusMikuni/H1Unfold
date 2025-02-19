@@ -31,7 +31,6 @@ def parse_arguments():
     parser.add_argument('--niter', type=int, default=4, help='Omnifold iteration to load')
     parser.add_argument('--nmax', type=int, default=20_000_000, help='Maximum number of events to load')
     parser.add_argument('--verbose', action='store_true', default=False,help='Increase print level')
-    parser.add_argument('--save_zjet', action='store_true', default=False, help='Save zjet using all jets')
     flags = parser.parse_args()
 
     return flags
@@ -91,11 +90,11 @@ def main():
     undo_standardizing(flags,dataloaders)
     #num_part = dataloaders['Rapgap'].part.shape[1]
     
-    cluster_jets(dataloaders, store_all_jets = flags.save_zjet)
-    cluster_breit(dataloaders, clustering_algorithm="kt", store_all_jets = flags.save_zjet)
+    cluster_jets(dataloaders)
+    cluster_breit(dataloaders)
     del dataloaders[flags.file].part, dataloaders[flags.file].mask
     gc.collect()
-    gather_data(dataloaders, store_all_jets = flags.save_zjet)
+    gather_data(dataloaders)
 
     replace_string = f"unfolded_{flags.niter}_ryantest"
     if flags.reco:
@@ -116,9 +115,8 @@ def main():
             dset = fh5.create_dataset('jet_breit_pt', data=dataloaders[flags.file].jet_breit[:,0])
             dset = fh5.create_dataset('deltaphi', data=get_deltaphi(dataloaders[flags.file].jet, dataloaders[flags.file].event))
             dset = fh5.create_dataset('jet_tau10', data=dataloaders[flags.file].jet[:,4])
-            if flags.save_zjet:
-                dset = fh5.create_dataset('zjet', data=dataloaders[flags.file].all_jets[:, :, 9])
-                dset = fh5.create_dataset('zjet_breit', data=dataloaders[flags.file].all_jets_breit[:, :, 7])
+            dset = fh5.create_dataset('zjet', data=dataloaders[flags.file].all_jets[:, :, 9])
+            dset = fh5.create_dataset('zjet_breit', data=dataloaders[flags.file].all_jets_breit[:, :, 7])
     
 if __name__ == '__main__':
     main()

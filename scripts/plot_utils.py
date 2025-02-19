@@ -88,7 +88,7 @@ def undo_standardizing(flags,dataloaders):
         gc.collect()
 
 
-def cluster_jets(dataloaders, store_all_jets = False):
+def cluster_jets(dataloaders):
     """
     Update dataloaders with clustered jet information.
 
@@ -234,13 +234,11 @@ def cluster_jets(dataloaders, store_all_jets = False):
             # Take the leading jet's features
             leading_jet = _take_leading_jet(sorted_jets)
             list_of_jets.append(leading_jet)
-            if store_all_jets:
-                all_jets = _take_all_jets(sorted_jets)
-                list_of_all_jets.append(all_jets)
+            all_jets = _take_all_jets(sorted_jets)
+            list_of_all_jets.append(all_jets)
         # Store the jet features in the dataloader
         data.jet = np.array(list_of_jets, dtype=np.float32)
-        if store_all_jets:
-            data.all_jets = np.array(list_of_all_jets, dtype=np.float32)
+        data.all_jets = np.array(list_of_all_jets, dtype=np.float32)
         #print(f"----------------- Done working with {dataloader_name} -------------------")
 
 
@@ -816,7 +814,7 @@ def plot_zjet(flags, dataloaders, data_weights, version, frame = "lab"):
     ax.set_ylim(0, 5)
     fig.savefig(f'../plots/{version}_zjet_{frame}.pdf')
 
-def cluster_breit(dataloaders, store_all_jets = False):
+def cluster_breit(dataloaders):
     import fastjet
     import awkward as ak
     import vector
@@ -910,7 +908,6 @@ def cluster_breit(dataloaders, store_all_jets = False):
         jets["eta"] = np.arcsinh(jets["pz"]/jets["pt"])
         jets = fastjet.sorted_by_pt(jets)
         
-        max_num_jets = 5
 
         def _take_leading_jet(jets):
             jet = np.zeros((data.event.shape[0],4))
@@ -940,33 +937,34 @@ def cluster_breit(dataloaders, store_all_jets = False):
             return np.array(all_jets)
             
         dataloaders[dataloader_name].jet_breit = _take_leading_jet(jets)
-        if store_all_jets:
-            dataloaders[dataloader_name].all_jets_breit = _take_all_jets(jets, max_num_jets)
 
-            def calculate_zjet(jet_data, event):
-                Q_array = np.sqrt(np.exp(event[:,0]))
+        max_num_jets = 5
+        dataloaders[dataloader_name].all_jets_breit = _take_all_jets(jets, max_num_jets)
 
-                n = np.array([0, 0, 1, 1], dtype=np.float32)
-                z_jet = []
+        def calculate_zjet(jet_data, event):
+            Q_array = np.sqrt(np.exp(event[:,0]))
 
-                jet_px = jet_data[:, :, 4]
-                jet_py = jet_data[:, :, 5]
-                jet_pz = jet_data[:, :, 6]
-                jet_E = jet_data[:, :, 3]
-                mask = (jet_px!=0) & (jet_py!=0) & (jet_pz!=0) & (jet_E!=0)
-                jet_px = ak.mask(jet_px, mask)
-                jet_py = ak.mask(jet_py, mask)
-                jet_pz = ak.mask(jet_pz, mask)
-                jet_E = ak.mask(jet_E, mask)
-                numerator = n[3]*jet_E- n[0]*jet_px - n[1]*jet_py - n[2]*jet_pz
-                counts = ak.num(numerator)
-                Q_array = np.repeat(Q_array, counts)
-                z_jet = ak.flatten(numerator)/Q_array
-                z_jet = np.array(ak.fill_none(ak.unflatten(z_jet, counts), np.nan))
-                z_jet = z_jet.reshape(z_jet.shape[0], z_jet.shape[1], 1)
-                jet_data = np.concatenate((jet_data, z_jet), axis=2)
-                return jet_data
-            dataloaders[dataloader_name].all_jets_breit = calculate_zjet(dataloaders[dataloader_name].all_jets_breit, dataloaders[dataloader_name].event)
+            n = np.array([0, 0, 1, 1], dtype=np.float32)
+            z_jet = []
+
+            jet_px = jet_data[:, :, 4]
+            jet_py = jet_data[:, :, 5]
+            jet_pz = jet_data[:, :, 6]
+            jet_E = jet_data[:, :, 3]
+            mask = (jet_px!=0) & (jet_py!=0) & (jet_pz!=0) & (jet_E!=0)
+            jet_px = ak.mask(jet_px, mask)
+            jet_py = ak.mask(jet_py, mask)
+            jet_pz = ak.mask(jet_pz, mask)
+            jet_E = ak.mask(jet_E, mask)
+            numerator = n[3]*jet_E- n[0]*jet_px - n[1]*jet_py - n[2]*jet_pz
+            counts = ak.num(numerator)
+            Q_array = np.repeat(Q_array, counts)
+            z_jet = ak.flatten(numerator)/Q_array
+            z_jet = np.array(ak.fill_none(ak.unflatten(z_jet, counts), np.nan))
+            z_jet = z_jet.reshape(z_jet.shape[0], z_jet.shape[1], 1)
+            jet_data = np.concatenate((jet_data, z_jet), axis=2)
+            return jet_data
+        dataloaders[dataloader_name].all_jets_breit = calculate_zjet(dataloaders[dataloader_name].all_jets_breit, dataloaders[dataloader_name].event)
     
     
 def plot_event(flags, dataloaders, data_weights, version, nbins=10):
@@ -1164,7 +1162,7 @@ def plot_observable(flags, var, dataloaders, version):
 
         
 
-def gather_data(dataloaders, store_all_jets = False):
+def gather_data(dataloaders):
 
 
     for dataloader in dataloaders:
@@ -1175,9 +1173,8 @@ def gather_data(dataloaders, store_all_jets = False):
         dataloaders[dataloader].event = hvd.allgather(tf.constant(dataloaders[dataloader].event)).numpy()
         dataloaders[dataloader].jet = hvd.allgather(tf.constant(dataloaders[dataloader].jet)).numpy()
         dataloaders[dataloader].jet_breit = hvd.allgather(tf.constant(dataloaders[dataloader].jet_breit)).numpy()
-        if store_all_jets:
-            dataloaders[dataloader].all_jets = hvd.allgather(tf.constant(dataloaders[dataloader].all_jets)).numpy()
-            dataloaders[dataloader].all_jets_breit = hvd.allgather(tf.constant(dataloaders[dataloader].all_jets_breit)).numpy()
+        dataloaders[dataloader].all_jets = hvd.allgather(tf.constant(dataloaders[dataloader].all_jets)).numpy()
+        dataloaders[dataloader].all_jets_breit = hvd.allgather(tf.constant(dataloaders[dataloader].all_jets_breit)).numpy()
         dataloaders[dataloader].weight = hvd.allgather(tf.constant(dataloaders[dataloader].weight)).numpy()
         #dataloaders[dataloader].mask = hvd.allgather(tf.constant(dataloaders[dataloader].mask)).numpy()
 

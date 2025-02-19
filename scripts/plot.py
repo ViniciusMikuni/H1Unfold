@@ -31,7 +31,6 @@ def parse_arguments():
     parser.add_argument('--blind', action='store_true', default=False,help='Show the results based on closure instead of data')
     #parser.add_argument('--closure', action='store_true', default=False,help='Plot closure results')
     parser.add_argument('--niter', type=int, default=0, help='Omnifold iteration to load')
-    parser.add_argument('--plot_zjet', action='store_true', default=False, help='Plot zjet using all jets')
     parser.add_argument('--nmax', type=int, default=1000000, help='Maximum number of events to load')
     parser.add_argument('--img_fmt', default='pdf', help='Format of the output figures')
     parser.add_argument('--verbose', action='store_true', default=False,help='Increase print level')
@@ -97,10 +96,9 @@ def main():
     undo_standardizing(flags,dataloaders)
     num_part = dataloaders['Rapgap'].part.shape[1]
     
-    # cluster_breit(dataloaders, store_all_jets = flags.plot_zjet)
-    cluster_jets(dataloaders, store_all_jets = flags.plot_zjet)
-    cluster_breit(dataloaders, store_all_jets = flags.plot_zjet)
-    gather_data(dataloaders, store_all_jets = flags.plot_zjet)
+    cluster_jets(dataloaders)
+    cluster_breit(dataloaders)
+    gather_data(dataloaders)
     plot_particles(flags,dataloaders,weights,opt['NAME'],num_part = num_part)
     plot_jet_pt(flags,dataloaders,weights,opt['NAME'],lab_frame=False)
     plot_jet_pt(flags,dataloaders,weights,opt['NAME'])
