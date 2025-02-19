@@ -175,7 +175,7 @@ def SetGrid(ratio=True):
 
 
 
-def FormatFig(xlabel,ylabel,ax0,xpos=0.84,ypos=1.04):
+def FormatFig(xlabel,ylabel,ax0,xpos=0.88,ypos=1.025):
     #Limit number of digits in ticks
     # y_loc, _ = plt.yticks()
     # y_update = ['%.1f' % y for y in y_loc]

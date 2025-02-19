@@ -50,11 +50,13 @@ def get_version(dataset,flags,opt):
 
 
 
-def evaluate_model(flags,opt,dataset,dataloaders,nomimal='Rapgap',version=None):
+def evaluate_model(flags,opt,dataset,dataloaders,version=None,bootstrap = False,nboot=0):
     if version is None:
         version = get_version(dataset,flags,opt)
     
     model_name = '{}/OmniFold_{}_iter{}_step2/checkpoint'.format(flags.weights,version,flags.niter)
+    if bootstrap:
+        model_name = '{}/OmniFold_{}_iter{}_step2_strap{}/checkpoint'.format(flags.weights,version,flags.niter,nboot)    
     
     if hvd.rank()==0:
         print("Loading model {}".format(model_name))
@@ -824,12 +826,12 @@ def plot_event(flags, dataloaders, data_weights, version, nbins=10):
 def plot_observable(flags, var, dataloaders, version):
     info = utils.ObservableInfo(var)
 
-    def compute_histogram(dataset_name, weights=None):
+    def compute_histogram(dataset_name, weights=None,density=True):
         valid_indices = dataloaders[dataset_name]['jet_pt'] > 0
         data = dataloaders[dataset_name][var][valid_indices]
         if weights is not None:
             weights = weights[valid_indices]
-        return np.histogram(data, bins=binning, density=True, weights=weights)
+        return np.histogram(data, bins=binning, density=density, weights=weights)
 
     # Determine weight name
     weight_name = 'closure_weights' if flags.blind else 'weights'
@@ -842,20 +844,23 @@ def plot_observable(flags, var, dataloaders, version):
     total_unc = None
     if flags.sys:
         nominal_weights = dataloaders['Rapgap']['weights'] if not flags.reco else np.ones_like(dataloaders['Rapgap']['weights'])
+
         nominal, _ = compute_histogram('Rapgap', nominal_weights * dataloaders['Rapgap']['mc_weights'])
         nominal_closure, _ = compute_histogram('Djangoh', dataloaders['Djangoh']['mc_weights'])
 
         total_unc = np.zeros_like(nominal)
         for sys in dataloaders:
+            if 'boot' in sys: continue
             print(sys)
             if flags.reco:
                 #Skip model and closure uncertainties at reco level
                 if sys == 'Rapgap': continue
                 if sys == 'Djangoh': continue
+                if sys == 'data': continue
+
                 
             sys_weights = dataloaders[sys]['closure_weights'] if sys == 'Rapgap' else dataloaders[sys]['weights']
             if flags.reco: sys_weights = np.ones_like(sys_weights)
-            
             sys_hist, _ = compute_histogram(sys, dataloaders[sys]['mc_weights'] * sys_weights)
 
             ref_hist = nominal_closure if sys == 'Rapgap' else nominal
@@ -863,6 +868,25 @@ def plot_observable(flags, var, dataloaders, version):
             total_unc += unc
             
             print(f"{sys}: max uncertainty = {np.max(np.sqrt(unc))}")
+            
+        #Statistical Uncertainties
+        if flags.reco:
+            counts,_ = compute_histogram('data',density=False)
+            unc = 1.0/(1e-9+counts)
+            total_unc += unc
+            print(f"stat: max uncertainty = {np.max(np.sqrt(unc))}")
+        else:
+            if flags.bootstrap:
+                print("Running over boostrap entries")
+                stat_unc = []
+                for boot in range(1,flags.nboot):
+                    sys_weights = dataloaders['bootstrap'][f'weights{boot}']
+                    sys_hist, _ = compute_histogram('bootstrap', dataloaders['bootstrap']['mc_weights'] * sys_weights)
+                    stat_unc.append(sys_hist)
+                stat_unc = np.std(stat_unc,0)/(1e-9 + np.mean(stat_unc,0))
+                total_unc += stat_unc**2
+                print(f"{sys}: max uncertainty = {np.max(stat_unc)}")
+                    
         total_unc = np.sqrt(total_unc)
 
 
