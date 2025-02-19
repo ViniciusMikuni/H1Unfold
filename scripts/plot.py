@@ -99,7 +99,7 @@ def main():
     
     # cluster_breit(dataloaders, store_all_jets = flags.plot_zjet)
     cluster_jets(dataloaders, store_all_jets = flags.plot_zjet)
-    cluster_breit(dataloaders, clustering_algorithm="kt", store_all_jets = flags.plot_zjet)
+    cluster_breit(dataloaders, store_all_jets = flags.plot_zjet)
     gather_data(dataloaders, store_all_jets = flags.plot_zjet)
     plot_particles(flags,dataloaders,weights,opt['NAME'],num_part = num_part)
     plot_jet_pt(flags,dataloaders,weights,opt['NAME'],lab_frame=False)
@@ -107,8 +107,8 @@ def main():
     
     plot_deltaphi(flags,dataloaders,weights,opt['NAME'])
     plot_tau(flags,dataloaders,weights,opt['NAME'])
-    plot_zjet(flags,dataloaders,weights,opt['NAME'], frame = "lab", clustering = "kt")
-    plot_zjet(flags,dataloaders,weights,opt['NAME'], frame = "breit", clustering = "centauro")
+    plot_zjet(flags,dataloaders,weights,opt['NAME'], frame = "lab")
+    plot_zjet(flags,dataloaders,weights,opt['NAME'], frame = "breit")
     plot_event(flags,dataloaders,weights,opt['NAME'])    
 
 

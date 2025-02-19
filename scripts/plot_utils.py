@@ -692,7 +692,7 @@ def plot_tau(flags, dataloaders, data_weights, version):
     ax.set_ylim(0, 1.2)
     fig.savefig(f'../plots/{version}_jet_tau10.pdf')
 
-def plot_zjet(flags, dataloaders, data_weights, version, frame = "lab", clustering = "kt"):
+def plot_zjet(flags, dataloaders, data_weights, version, frame = "lab"):
     import numpy as np
     import utils
 
@@ -801,35 +801,22 @@ def plot_zjet(flags, dataloaders, data_weights, version, frame = "lab", clusteri
             feed_dict['data'] = data
 
     # Generate histogram plot
-    if clustering == "centauro":
-        fig, ax = utils.HistRoutine(
-            feed_dict,
-            xlabel=f'$z_{{jet}}$ ({frame.capitalize()} {clustering.capitalize()})',
-            weights=weights,
-            logy=False,
-            logx=False,
-            binning=binning,
-            reference_name='data' if flags.reco else data_name,
-            label_loc='upper left',
-            uncertainty=total_unc,
-        )
-    else:
-        fig, ax = utils.HistRoutine(
-            feed_dict,
-            xlabel=f'$z_{{jet}}$ ({frame.capitalize()} {clustering})',
-            weights=weights,
-            logy=False,
-            logx=False,
-            binning=binning,
-            reference_name='data' if flags.reco else data_name,
-            label_loc='upper left',
-            uncertainty=total_unc,
-        )
+    fig, ax = utils.HistRoutine(
+        feed_dict,
+        xlabel=f'$z_{{jet}}$ ({frame.capitalize()} kt)',
+        weights=weights,
+        logy=False,
+        logx=False,
+        binning=binning,
+        reference_name='data' if flags.reco else data_name,
+        label_loc='upper left',
+        uncertainty=total_unc,
+    )
     # Set plot limits and save
     ax.set_ylim(0, 5)
-    fig.savefig(f'../plots/{version}_zjet_{frame}_{clustering}.pdf')
+    fig.savefig(f'../plots/{version}_zjet_{frame}.pdf')
 
-def cluster_breit(dataloaders, clustering_algorithm = "kt", store_all_jets = False):
+def cluster_breit(dataloaders, store_all_jets = False):
     import fastjet
     import awkward as ak
     import vector
@@ -903,8 +890,7 @@ def cluster_breit(dataloaders, clustering_algorithm = "kt", store_all_jets = Fal
         return boosted_vectors
 
     
-    if clustering_algorithm == "kt":
-        jetdef = fastjet.JetDefinition(fastjet.kt_algorithm, 1.0)
+    jetdef = fastjet.JetDefinition(fastjet.kt_algorithm, 1.0)
     for dataloader_name, data in dataloaders.items():
         
         electron_momentum = _convert_electron_kinematics(data.event)
@@ -914,38 +900,16 @@ def cluster_breit(dataloaders, clustering_algorithm = "kt", store_all_jets = Fal
 
         for event in boosted_vectors:
             events.append([{"px": part_vec.px, "py": part_vec.py, "pz": part_vec.pz, "E": part_vec.E} for part_vec in event])
-        if clustering_algorithm == "centauro":
-            px, py, pz, energy = [], [], [], []
-            for event in events:
-                px.append([particle_vector["px"] for particle_vector in event])
-                py.append([particle_vector["py"] for particle_vector in event])
-                pz.append([particle_vector["pz"] for particle_vector in event])
-                energy.append([particle_vector["E"] for particle_vector in event])
-            px = ak.Array(px)
-            py = ak.Array(py)
-            pz = ak.Array(pz)
-            energy = ak.Array(energy)
-            with uproot.recreate("./breit_particles.root") as file:
-                file["particles"] = {"px": px, "py": py, "pz": pz, "energy": energy}
-
-            breit_file_name = f"breit_particles_{dataloader_name}_gen.root"
-            jet_file_name = f"centauro_jets_{dataloader_name}_gen.root"
-
-            print(f"./run_centauro.sh --input {breit_file_name} --output {jet_file_name} --jet_radius 1.0")
-            exit()
-            subprocess.run([f"./run_centauro.sh --input {breit_file_name} --output {jet_file_name} --jet_radius 1.0"], shell=True)
-            with uproot.open(f"{jet_file_name}:jets") as out:
-                jets = out.arrays(["pt", "eta", "phi", "E", "px", "py", "pz"])
         
-        else:
-            array = ak.Array(events)
-            cluster = fastjet.ClusterSequence(array, jetdef)
-            jets = cluster.inclusive_jets(min_pt=5)
-            
-            jets["pt"] = -np.sqrt(jets["px"]**2 + jets["py"]**2)
-            jets["phi"] = np.arctan2(jets["py"],jets["px"])
-            jets["eta"] = np.arcsinh(jets["pz"]/jets["pt"])
-            jets = fastjet.sorted_by_pt(jets)
+        array = ak.Array(events)
+        cluster = fastjet.ClusterSequence(array, jetdef)
+        jets = cluster.inclusive_jets(min_pt=5)
+        
+        jets["pt"] = -np.sqrt(jets["px"]**2 + jets["py"]**2)
+        jets["phi"] = np.arctan2(jets["py"],jets["px"])
+        jets["eta"] = np.arcsinh(jets["pz"]/jets["pt"])
+        jets = fastjet.sorted_by_pt(jets)
+        
         max_num_jets = 5
 
         def _take_leading_jet(jets):
