@@ -181,23 +181,30 @@ def cluster_jets(dataloaders, store_all_jets = False):
         ])
     
     def _take_all_jets(jets):
+        max_num_jets = 5
+
         if not jets:
-            return np.zeros((0, 10))
-    
-        return np.array([
-            [
-                jet.pt(),
-                jet.eta(),
-                (jet.phi() + np.pi) % (2 * np.pi) - np.pi,
-                jet.E(),
-                jet.tau_11,
-                jet.tau_11p5,
-                jet.tau_12,
-                jet.tau_20,
-                jet.ptD,
-                jet.zjet
-            ] for jet in jets
-        ])
+            return np.zeros((max_num_jets, 10))
+        jet_array = []
+        for i in range(max_num_jets):
+            if i < len(jets):
+                jet_info = [
+                            jet.pt(),
+                            jet.eta(),
+                            (jet.phi() + np.pi) % (2 * np.pi) - np.pi,
+                            jet.E(),
+                            jet.tau_11,
+                            jet.tau_11p5,
+                            jet.tau_12,
+                            jet.tau_20,
+                            jet.ptD,
+                            jet.zjet
+                        ]
+            else:
+                jet_info = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            jet_array.append(jet_info)
+
+        return np.array(jet_array)
 
     for dataloader_name, data in dataloaders.items():
         #print(f"----------------- Started working with {dataloader_name} -------------------")
@@ -231,10 +238,7 @@ def cluster_jets(dataloaders, store_all_jets = False):
         # Store the jet features in the dataloader
         data.jet = np.array(list_of_jets, dtype=np.float32)
         if store_all_jets:
-            max_len = max(ak.num(list_of_all_jets, axis=1))
-            padded_jets = ak.pad_none(list_of_all_jets, target=max_len, axis=1)
-            numpy_padded_jets = ak.to_numpy(ak.fill_none(padded_jets, np.zeros(10)))
-            data.all_jets = numpy_padded_jets
+            data.all_jets = np.array(list_of_all_jets, dtype=np.float32)
         #print(f"----------------- Done working with {dataloader_name} -------------------")
 
 
@@ -692,11 +696,15 @@ def plot_zjet(flags, dataloaders, data_weights, version, frame = "lab", clusteri
 
     def compute_histogram(dataset_name, weights=None, frame="lab"):
         if frame == "breit":
-            num_jets_per_event = ak.count(dataloaders[dataset_name].all_jets["zjet"], axis=1)
-            data = ak.flatten(dataloaders[dataset_name].all_jets["zjet"][num_jets_per_event>0])
+            mask = dataloaders[dataset_name].all_jets[:, :, 9]>0
+            data = ak.drop_none(ak.mask(dataloaders[dataset_name].all_jets[:, :, 9], mask))
+            num_jets_per_event = ak.count(data, axis=1)
+            data = ak.flatten(data)
         else:
-            num_jets_per_event = ak.count(dataloaders[dataset_name].all_jets_breit["zjet"], axis=1)
-            data = ak.flatten(dataloaders[dataset_name].all_jets_breit["zjet"][num_jets_per_event>0])
+            mask = dataloaders[dataset_name].all_jets_breit[:, :, 7]>0
+            data = ak.drop_none(ak.mask(dataloaders[dataset_name].all_jets_breit[:, :, 7], mask))
+            num_jets_per_event = ak.count(data, axis=1)
+            data = ak.flatten(data)
         if weights is not None:
             weights = np.repeat(weights, num_jets_per_event, axis=0)
         counts, bins = np.histogram(data, bins=binning, density=True, weights=weights)
@@ -734,8 +742,16 @@ def plot_zjet(flags, dataloaders, data_weights, version, frame = "lab", clusteri
     # Prepare weights and data for plotting
 
     if frame == "breit":
-        num_Rapgap_jets_per_event = ak.count(dataloaders["Rapgap"].all_jets_breit["zjet"], axis=1)
-        num_Djangoh_jets_per_event = ak.count(dataloaders["Djangoh"].all_jets_breit["zjet"], axis=1)
+        Rapgap_mask = dataloaders["Rapgap"].all_jets_breit[:, :, 7]>0
+        Rapgap_data = ak.drop_none(ak.mask(dataloaders["Rapgap"].all_jets_breit[:, :, 7], Rapgap_mask))
+        num_Rapgap_jets_per_event = ak.count(Rapgap_data, axis=1)
+        Rapgap_data = ak.flatten(Rapgap_data)
+
+        Djangoh_mask = dataloaders["Djangoh"].all_jets_breit[:, :, 7]>0
+        Djangoh_data = ak.drop_none(ak.mask(dataloaders["Djangoh"].all_jets_breit[:, :, 7], Djangoh_mask))
+        num_Djangoh_jets_per_event = ak.count(Djangoh_data, axis=1)
+        Djangoh_data = ak.flatten(Djangoh_data)
+
         weights = {
             data_name: np.repeat((dataloaders['Rapgap'].weight * data_weights[weight_name]), num_Rapgap_jets_per_event, axis=0),
             'Rapgap': np.repeat(dataloaders['Rapgap'].weight, num_Rapgap_jets_per_event, axis=0),
@@ -743,16 +759,27 @@ def plot_zjet(flags, dataloaders, data_weights, version, frame = "lab", clusteri
         }
 
         feed_dict = {
-            data_name: ak.flatten(dataloaders['Rapgap'].all_jets_breit["zjet"][ak.count(dataloaders["Rapgap"].all_jets_breit["zjet"], axis=1) > 0]),
-            'Rapgap': ak.flatten(dataloaders['Rapgap'].all_jets_breit["zjet"][ak.count(dataloaders["Rapgap"].all_jets_breit["zjet"], axis=1) > 0]),
-            'Djangoh': ak.flatten(dataloaders['Djangoh'].all_jets_breit["zjet"][ak.count(dataloaders["Djangoh"].all_jets_breit["zjet"], axis=1) > 0]),
+            data_name: Rapgap_data,
+            'Rapgap': Rapgap_data,
+            'Djangoh': Djangoh_data,
         }
 
         if flags.reco:
-            feed_dict['data'] = ak.flatten(dataloaders['data'].all_jets_breit["zjet"][ak.count(dataloaders["data"].all_jets_breit["zjet"], axis=1) > 0])
+            data_mask = dataloaders["data"].all_jets_breit[:, :, 7]>0
+            data = ak.drop_none(ak.mask(dataloaders["data"].all_jets_breit[:, :, 7], data_mask))
+            data = ak.flatten(data)
+            feed_dict['data'] = data
     else:
-        num_Rapgap_jets_per_event = ak.count(dataloaders["Rapgap"].all_jets["zjet"], axis=1)
-        num_Djangoh_jets_per_event = ak.count(dataloaders["Djangoh"].all_jets["zjet"], axis=1)
+        Rapgap_mask = dataloaders["Rapgap"].all_jets[:, :, 9]>0
+        Rapgap_data = ak.drop_none(ak.mask(dataloaders["Rapgap"].all_jets[:, :, 9], Rapgap_mask))
+        num_Rapgap_jets_per_event = ak.count(Rapgap_data, axis=1)
+        Rapgap_data = ak.flatten(Rapgap_data)
+
+        Djangoh_mask = dataloaders["Djangoh"].all_jets[:, :, 9]>0
+        Djangoh_data = ak.drop_none(ak.mask(dataloaders["Djangoh"].all_jets[:, :, 9], Djangoh_mask))
+        num_Djangoh_jets_per_event = ak.count(Djangoh_data, axis=1)
+        Djangoh_data = ak.flatten(Djangoh_data)
+
         weights = {
             data_name: np.repeat((dataloaders['Rapgap'].weight * data_weights[weight_name]), num_Rapgap_jets_per_event, axis=0),
             'Rapgap': np.repeat(dataloaders['Rapgap'].weight, num_Rapgap_jets_per_event, axis=0),
@@ -760,13 +787,16 @@ def plot_zjet(flags, dataloaders, data_weights, version, frame = "lab", clusteri
         }
 
         feed_dict = {
-            data_name: ak.flatten(dataloaders['Rapgap'].all_jets["zjet"][ak.count(dataloaders["Rapgap"].all_jets["zjet"], axis=1) > 0]),
-            'Rapgap': ak.flatten(dataloaders['Rapgap'].all_jets["zjet"][ak.count(dataloaders["Rapgap"].all_jets["zjet"], axis=1) > 0]),
-            'Djangoh': ak.flatten(dataloaders['Djangoh'].all_jets["zjet"][ak.count(dataloaders["Djangoh"].all_jets["zjet"], axis=1) > 0]),
+            data_name: Rapgap_data,
+            'Rapgap': Rapgap_data,
+            'Djangoh': Djangoh_data,
         }
 
         if flags.reco:
-            feed_dict['data'] = ak.flatten(dataloaders['data'].all_jets["zjet"][ak.count(dataloaders["data"].all_jets["zjet"], axis=1) > 0])
+            data_mask = dataloaders["data"].all_jets[:, :, 7]>0
+            data = ak.drop_none(ak.mask(dataloaders["data"].all_jets[:, :, 7], data_mask))
+            data = ak.flatten(data)
+            feed_dict['data'] = data
 
     # Generate histogram plot
     if clustering == "centauro":
@@ -914,7 +944,7 @@ def cluster_breit(dataloaders, clustering_algorithm = "kt", store_all_jets = Fal
             jets["phi"] = np.arctan2(jets["py"],jets["px"])
             jets["eta"] = np.arcsinh(jets["pz"]/jets["pt"])
             jets = fastjet.sorted_by_pt(jets)
-        max_num_jets = max([len(jet_pt) for jet_pt in jets["pt"]])
+        max_num_jets = 5
 
         def _take_leading_jet(jets):
             jet = np.zeros((data.event.shape[0],4))
@@ -924,19 +954,29 @@ def cluster_breit(dataloaders, clustering_algorithm = "kt", store_all_jets = Fal
             jet[:,3] = np.array(list(itertools.zip_longest(*jets.E.to_list(), fillvalue=0))).T[:,0]
             return jet
         def _take_all_jets(jets, max_num_jets):
-            jet = np.zeros((data.event.shape[0], 7, max_num_jets))
-            jet[:,0] = -np.array(list(itertools.zip_longest(*jets.pt.to_list(), fillvalue=0))).T
-            jet[:,1] = np.array(list(itertools.zip_longest(*jets.eta.to_list(), fillvalue=0))).T
-            jet[:,2] = np.array(list(itertools.zip_longest(*jets.phi.to_list(), fillvalue=0))).T
-            jet[:,3] = np.array(list(itertools.zip_longest(*jets.E.to_list(), fillvalue=0))).T
-            jet[:,4] = np.array(list(itertools.zip_longest(*jets.px.to_list(), fillvalue=0))).T
-            jet[:,5] = np.array(list(itertools.zip_longest(*jets.py.to_list(), fillvalue=0))).T
-            jet[:,6] = np.array(list(itertools.zip_longest(*jets.pz.to_list(), fillvalue=0))).T
-            return jet
+            all_jets = []
+            for event in jets:
+                event_jets = []
+                for i in range(max_num_jets):
+                    if i < len(event):
+                        jet_info = [event[i].pt,
+                                    event[i].eta,
+                                    event[i].phi,
+                                    event[i].E,
+                                    event[i].px,
+                                    event[i].py,
+                                    event[i].pz
+                                ]
+                    else:
+                        jet_info = [0, 0, 0, 0, 0, 0, 0]
+                    event_jets.append(jet_info)
+                all_jets.append(event_jets)
+            return np.array(all_jets)
             
         dataloaders[dataloader_name].jet_breit = _take_leading_jet(jets)
         if store_all_jets:
-            dataloaders[dataloader_name].all_jets_breit = _take_all_jets(jets, max_num_jets).transpose(0, 2, 1)
+            dataloaders[dataloader_name].all_jets_breit = _take_all_jets(jets, max_num_jets)
+
             def calculate_zjet(jet_data, event):
                 Q_array = np.sqrt(np.exp(event[:,0]))
 
@@ -952,7 +992,6 @@ def cluster_breit(dataloaders, clustering_algorithm = "kt", store_all_jets = Fal
                 jet_py = ak.mask(jet_py, mask)
                 jet_pz = ak.mask(jet_pz, mask)
                 jet_E = ak.mask(jet_E, mask)
-                # jet_E = jet_data["E"]
                 numerator = n[3]*jet_E- n[0]*jet_px - n[1]*jet_py - n[2]*jet_pz
                 counts = ak.num(numerator)
                 Q_array = np.repeat(Q_array, counts)
@@ -962,7 +1001,6 @@ def cluster_breit(dataloaders, clustering_algorithm = "kt", store_all_jets = Fal
                 jet_data = np.concatenate((jet_data, z_jet), axis=2)
                 return jet_data
             dataloaders[dataloader_name].all_jets_breit = calculate_zjet(dataloaders[dataloader_name].all_jets_breit, dataloaders[dataloader_name].event)
-        
     
     
 def plot_event(flags, dataloaders, data_weights, version, nbins=10):
