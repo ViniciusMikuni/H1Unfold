@@ -64,13 +64,17 @@ observable_names = {
     'jet_breit_pt': r'Breit frame Jet $p_{T}$ [GeV]',
     'deltaphi':r"$\Delta\phi^{jet}$ [rad]",
     'jet_tau10':r'$\mathrm{ln}(\lambda_1^1)$',
+    'zjet':r'Lab frame $z_{jet}$',
+    'zjet_breit':r'Breit frame $z_{jet}$'
 }
 
 dedicated_binning = {
     'jet_pt': np.logspace(np.log10(10),np.log10(100),7),
     'jet_breit_pt': np.logspace(np.log10(10),np.log10(50),7),
     'deltaphi': np.linspace(0, 1, 8),
-    'jet_tau10': np.array([-4.00,-3.15,-2.59,-2.18,-1.86,-1.58,-1.29,-1.05,-0.81,-0.61,0.00])
+    'jet_tau10': np.array([-4.00,-3.15,-2.59,-2.18,-1.86,-1.58,-1.29,-1.05,-0.81,-0.61,0.00]),
+    'zjet' : np.linspace(0.2, 1, 10),
+    'zjet_breit' : np.linspace(0.2, 1, 10)
 }
 
 def get_log(var):
@@ -79,6 +83,8 @@ def get_log(var):
     if 'deltaphi' in var:
         return True, True
     if 'tau' in var:
+        return False, False
+    if 'zjet' in var:
         return False, False
     else:
         print(f"ERROR: {var} not present!")
@@ -91,6 +97,10 @@ def get_ylim(var):
         return 1e-3, 50
     if 'tau' in var:
         return 0, 1.2
+    if var == 'zjet':
+        return 0,5
+    if var == 'zjet_breit':
+        return 0,3
     else:
         print("ERROR")
 
