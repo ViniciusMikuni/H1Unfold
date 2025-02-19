@@ -907,6 +907,49 @@ def cluster_breit(dataloaders):
         jets["phi"] = np.arctan2(jets["py"],jets["px"])
         jets["eta"] = np.arcsinh(jets["pz"]/jets["pt"])
         jets = fastjet.sorted_by_pt(jets)
+
+
+        def calculate_eec(jets, event):
+
+            # inelasticity 
+            y = event[:, 1]
+
+            scattered_electron_momentum = np.sqrt(scattered_electron["px"]**2 + scattered_electron["py"]**2 + scattered_electron["pz"]**2)
+            scattered_electron_theta = np.arccos(scattered_electron["pz"]/scattered_electron_momentum)
+
+            # calculate Bjorken x (invariant wrt frames) using the ISigma method from table 1 in https://arxiv.org/pdf/2110.05505
+            x_B = scattered_electron["E"] * np.divide( 1 + np.cos(scattered_electron_theta), 2*y*920 ) # also need to divide by E_proton
+
+            # proton four-momentum in Breit frame
+            Q = np.sqrt(np.exp(event[:,0]))
+            P = np.divide(Q, 2*x_B) * np.array([1, 0, 0, 1], dtype=np.float32)
+
+            # Proton polar angle
+            theta_P = np.arccos(P[3] / np.linalg.norm(P))
+
+            # normalization for EEC in DIS
+            px_sum = np.sum(jet.constituents().px())
+            py_sum = np.sum(jet.constituents().py())
+            pz_sum = np.sum(jet.constituents().pz())
+            E_sum = np.sum(jet.constituents().E())
+            # z, delta_theta = [], []
+            entry = []
+
+            P_dot_psum = P[3]*E_sum - P[0]*px_sum - P[1]*py_sum - P[2]*pz_sum
+
+            for constituent in jet.constituents():
+
+                P_dot_pc = P[3]*constituent.E() - P[0]*constituent.px() - P[1]*constituent.py() - P[2]*constituent.pz()
+                z = P_dot_pc / P_dot_psum
+
+                pt = constituent.pt()
+                eta = constituent.eta()
+                phi = constituent.phi()
+                theta_c = 2 * np.arctan(np.exp(-eta))
+                
+                entry.append( (theta_P - theta_c)/z )
+
+        # dataloaders[dataloader_name].all_jets_breit = calculate_eec(jets, dataloaders[dataloader_name].event)
         
 
         def _take_leading_jet(jets):
