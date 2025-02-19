@@ -17,7 +17,7 @@ var_names = ['weights','mc_weights','jet_pt',
 
 
 def get_sample_names(niter, use_sys, sys_list = ['sys0','sys1','sys5','sys7','sys11'],
-                     nominal = 'Rapgap',period = 'Eplus0607',reco=False):
+                     nominal = 'Rapgap',period = 'Eplus0607',reco=False,bootstrap=False,nboot=1):
     add_string = '_reco' if reco else ''
     mc_file_names = {
         'Rapgap':f'Rapgap_{period}_unfolded_{niter}{add_string}.h5',
@@ -29,6 +29,10 @@ def get_sample_names(niter, use_sys, sys_list = ['sys0','sys1','sys5','sys7','sy
     if use_sys:
         for sys in sys_list:
             mc_file_names[f'{sys}'] = f'{nominal}_{period}_{sys}_unfolded_{niter}{add_string}.h5'
+
+    if bootstrap:
+        mc_file_names['bootstrap'] = f'{nominal}_{period}_unfolded_{niter}_boot.h5'
+            
     return mc_file_names
 
 
@@ -45,6 +49,9 @@ def parse_arguments():
     parser.add_argument('--sys', action='store_true', default=False,help='Load systematic variations')
     parser.add_argument('--blind', action='store_true', default=False,help='Show the results based on closure instead of data')
     parser.add_argument('--niter', type=int, default=4, help='Omnifold iteration to load')
+    parser.add_argument('--bootstrap', action='store_true', default=False,help='Load models for bootstrapping')
+    parser.add_argument('--nboot', type=int, default=50, help='Number of bootstrap models to load')
+
     parser.add_argument('--verbose', action='store_true', default=False,help='Increase print level')
     
     flags = parser.parse_args()
@@ -59,24 +66,20 @@ def get_dataloaders(flags,mc_file_names):
     dataloaders = {}
     
     for mc in mc_file_names:
+        if flags.verbose: print(mc)        
         dataloaders[mc] = {}
         with h5.File(os.path.join(flags.data_folder,mc_file_names[mc]),'r') as fh5:
-            for var in var_names:
-                if var in fh5.keys():
-                    dataloaders[mc][var] = fh5[var][:]
-            if 'closure_weights' in fh5.keys():
-                dataloaders[mc]['closure_weights'] = fh5['closure_weights'][:]
-
+            for var in fh5.keys():
+                dataloaders[mc][var] = fh5[var][:]
     return dataloaders
-
-
 
                                                                             
 def main():
 
     flags = parse_arguments()
     opt=utils.LoadJson(flags.config)
-    mc_files = get_sample_names(niter=flags.niter,use_sys=flags.sys,reco=flags.reco)
+    mc_files = get_sample_names(niter=flags.niter,use_sys=flags.sys,
+                                reco=flags.reco,bootstrap=flags.bootstrap,nboot=flags.nboot)
     if flags.verbose:
         print(f'Will load the following files : {mc_files.keys()}')
         
