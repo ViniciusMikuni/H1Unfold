@@ -904,7 +904,7 @@ def plot_eec(flags, dataloaders, data_weights, version, frame = "lab"):
     # Set plot limits and save
     ax.set_ylim(0, 5)
     fig.savefig(f'../plots/{version}_eec_{frame}.pdf')
-    
+
 
 def cluster_breit(dataloaders):
     import fastjet
@@ -1001,7 +1001,9 @@ def cluster_breit(dataloaders):
         jets = fastjet.sorted_by_pt(jets)
 
 
-        def calculate_eec(jets, event):
+        def calculate_eec(jet_hardest, event):
+
+            jet = jets[0] # start with just the hardest jet
 
             # inelasticity 
             y = event[:, 1]
@@ -1041,7 +1043,7 @@ def cluster_breit(dataloaders):
                 
                 entry.append( (theta_P - theta_c)/z )
 
-        dataloaders[dataloader_name].all_jets_breit = calculate_eec(jets, dataloaders[dataloader_name].event)
+        dataloaders[dataloader_name].all_jets_breit = calculate_eec(jets[0], dataloaders[dataloader_name].event)
         
 
         def _take_leading_jet(jets):
