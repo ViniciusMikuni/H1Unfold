@@ -80,7 +80,6 @@ def main():
         print(f'Will load the following files : {mc_files.keys()}')
         
     dataloaders = get_dataloaders(flags,mc_files)
-
     weights = {}
     for dataset in dataloaders:
         if flags.verbose and hvd.rank()==0:
@@ -97,8 +96,8 @@ def main():
     undo_standardizing(flags,dataloaders)
     num_part = dataloaders['Rapgap'].part.shape[1]
     
-    cluster_breit(dataloaders)
     cluster_jets(dataloaders)
+    cluster_breit(dataloaders)
     gather_data(dataloaders)
     plot_particles(flags,dataloaders,weights,opt['NAME'],num_part = num_part)
     plot_jet_pt(flags,dataloaders,weights,opt['NAME'],lab_frame=False)
@@ -106,6 +105,8 @@ def main():
     
     plot_deltaphi(flags,dataloaders,weights,opt['NAME'])
     plot_tau(flags,dataloaders,weights,opt['NAME'])
+    plot_zjet(flags,dataloaders,weights,opt['NAME'], frame = "lab")
+    plot_zjet(flags,dataloaders,weights,opt['NAME'], frame = "breit")
     plot_event(flags,dataloaders,weights,opt['NAME'])    
 
 

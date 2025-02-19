@@ -31,7 +31,6 @@ def parse_arguments():
     parser.add_argument('--niter', type=int, default=4, help='Omnifold iteration to load')
     parser.add_argument('--nmax', type=int, default=20_000_000, help='Maximum number of events to load')
     parser.add_argument('--verbose', action='store_true', default=False,help='Increase print level')
-    
     flags = parser.parse_args()
 
     return flags
@@ -91,11 +90,12 @@ def main():
     undo_standardizing(flags,dataloaders)
     #num_part = dataloaders['Rapgap'].part.shape[1]
     
-    cluster_breit(dataloaders)
     cluster_jets(dataloaders)
+    cluster_breit(dataloaders)
     del dataloaders[flags.file].part, dataloaders[flags.file].mask
     gc.collect()
     gather_data(dataloaders)
+
     replace_string = f"unfolded_{flags.niter}"
     if flags.reco:
         replace_string += '_reco'
@@ -115,12 +115,9 @@ def main():
             dset = fh5.create_dataset('jet_breit_pt', data=dataloaders[flags.file].jet_breit[:,0])
             dset = fh5.create_dataset('deltaphi', data=get_deltaphi(dataloaders[flags.file].jet, dataloaders[flags.file].event))
             dset = fh5.create_dataset('jet_tau10', data=dataloaders[flags.file].jet[:,4])
-
-
-
+            dset = fh5.create_dataset('zjet', data=dataloaders[flags.file].all_jets[:, :, 9])
+            dset = fh5.create_dataset('zjet_breit', data=dataloaders[flags.file].all_jets_breit[:, :, 7])
     
-    
-
 if __name__ == '__main__':
     main()
 
