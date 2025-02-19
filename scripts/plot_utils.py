@@ -960,7 +960,7 @@ def cluster_breit(dataloaders):
             counts = ak.num(numerator)
             Q_array = np.repeat(Q_array, counts)
             z_jet = ak.flatten(numerator)/Q_array
-            z_jet = np.array(ak.fill_none(ak.unflatten(z_jet, counts), np.nan))
+            z_jet = np.array(ak.fill_none(ak.unflatten(z_jet, counts), 0))
             z_jet = z_jet.reshape(z_jet.shape[0], z_jet.shape[1], 1)
             jet_data = np.concatenate((jet_data, z_jet), axis=2)
             return jet_data
@@ -1061,11 +1061,24 @@ def plot_observable(flags, var, dataloaders, version):
     info = utils.ObservableInfo(var)
 
     def compute_histogram(dataset_name, weights=None,density=True):
-        valid_indices = dataloaders[dataset_name]['jet_pt'] > 0
-        data = dataloaders[dataset_name][var][valid_indices]
+        if len(dataloaders[dataset_name][var].shape) > 1:
+            multiple_jets_per_event = True
+            valid_indices = dataloaders[dataset_name][var]>0
+            data = ak.mask(dataloaders[dataset_name][var], valid_indices)
+            data = ak.drop_none(data)
+            num_jets_per_event = ak.count(data, axis = 1)
+            data = ak.flatten(data)
+        else:
+            multiple_jets_per_event = False
+            valid_indices = dataloaders[dataset_name]['jet_pt'] > 0
+            data = dataloaders[dataset_name][var][valid_indices]
         if weights is not None:
-            weights = weights[valid_indices]
-        return np.histogram(data, bins=binning, density=density, weights=weights)
+            if multiple_jets_per_event:
+                weights = np.repeat(weights, num_jets_per_event, axis=0)
+            else:
+                weights = weights[valid_indices]
+        counts, bins = np.histogram(data, bins=binning, density=density, weights=weights)
+        return ak.to_numpy(counts), bins
 
     # Determine weight name
     weight_name = 'closure_weights' if flags.blind else 'weights'
@@ -1123,24 +1136,50 @@ def plot_observable(flags, var, dataloaders, version):
                     
         total_unc = np.sqrt(total_unc)
 
-
-        
     # Prepare weights and data for plotting
-    weights = {
-        data_name: (dataloaders['Rapgap']['mc_weights'] * dataloaders['Rapgap'][weight_name])[dataloaders['Rapgap']['jet_pt'] > 0],
-        'Rapgap': dataloaders['Rapgap']['mc_weights'][dataloaders['Rapgap']['jet_pt'] > 0],
-        'Djangoh': dataloaders['Djangoh']['mc_weights'][dataloaders['Djangoh']['jet_pt'] > 0],
-    }
+    weights = {}
+    feed_dict = {}
 
-    feed_dict = {
-        data_name: dataloaders['Rapgap'][var][dataloaders['Rapgap']['jet_pt'] > 0],
-        'Rapgap': dataloaders['Rapgap'][var][dataloaders['Rapgap']['jet_pt'] > 0],
-        'Djangoh': dataloaders['Djangoh'][var][dataloaders['Djangoh']['jet_pt'] > 0],
-    }
+    if len(dataloaders['Rapgap'][var].shape) > 1:
+        Rapgap_mask = dataloaders["Rapgap"][var]>0
+        Rapgap_data = ak.drop_none(ak.mask(dataloaders["Rapgap"][var], Rapgap_mask))
+        num_Rapgap_jets_per_event = ak.count(Rapgap_data, axis=1)
+        Rapgap_data = ak.flatten(Rapgap_data)
+
+        weights[data_name] = np.repeat(dataloaders['Rapgap']['mc_weights'] * dataloaders['Rapgap'][weight_name], num_Rapgap_jets_per_event, axis=0)
+        weights['Rapgap'] = np.repeat(dataloaders['Rapgap']['mc_weights'], num_Rapgap_jets_per_event, axis=0)
+        feed_dict[data_name] = Rapgap_data
+        feed_dict['Rapgap'] = Rapgap_data
+    else:
+        weights[data_name] = (dataloaders['Rapgap']['mc_weights'] * dataloaders['Rapgap'][weight_name])[dataloaders['Rapgap']['jet_pt'] > 0]
+        weights['Rapgap'] = dataloaders['Rapgap']['mc_weights'][dataloaders['Rapgap']['jet_pt'] > 0]
+        feed_dict[data_name] = dataloaders['Rapgap'][var][dataloaders['Rapgap']['jet_pt'] > 0]
+        feed_dict['Rapgap'] = dataloaders['Rapgap'][var][dataloaders['Rapgap']['jet_pt'] > 0]
+    
+    if len(dataloaders['Djangoh'][var].shape) > 1:
+        Djangoh_mask = dataloaders["Djangoh"][var]>0
+        Djangoh_data = ak.drop_none(ak.mask(dataloaders["Djangoh"][var], Djangoh_mask))
+        num_Djangoh_jets_per_event = ak.count(Djangoh_data, axis=1)
+        Djangoh_data = ak.flatten(Djangoh_data)
+
+        weights['Djangoh'] = np.repeat(dataloaders['Djangoh']['mc_weights'], num_Djangoh_jets_per_event, axis=0)
+        feed_dict['Djangoh'] = Djangoh_data
+    else:
+        weights['Djangoh'] = dataloaders['Djangoh']['mc_weights'][dataloaders['Djangoh']['jet_pt'] > 0]
+        feed_dict['Djangoh'] = dataloaders['Djangoh'][var][dataloaders['Djangoh']['jet_pt'] > 0]
 
     if flags.reco:
-        weights['data'] = np.ones_like(dataloaders['data'][var][dataloaders['data']['jet_pt'] > 0])
-        feed_dict['data'] = dataloaders['data'][var][dataloaders['data']['jet_pt'] > 0]
+        if len(dataloaders['data'][var].shape) > 1:
+            data_mask = dataloaders["data"][var]>0
+            data = ak.drop_none(ak.mask(dataloaders["data"][var], data_mask))
+            data = ak.flatten(data)
+            weights['data'] = np.ones_like(data)
+
+            feed_dict['data'] = data
+        else:
+
+            weights['data'] = np.ones_like(dataloaders['data'][var][dataloaders['data']['jet_pt'] > 0])
+            feed_dict['data'] = dataloaders['data'][var][dataloaders['data']['jet_pt'] > 0]
     
     # Generate histogram plot
     fig, ax = utils.HistRoutine(
