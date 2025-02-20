@@ -39,6 +39,7 @@ if __name__ == "__main__":
     parser.add_argument('--start', type=int,default=0, help='Which omnifold iteration to start with')
     parser.add_argument('--verbose', action='store_true', default=False,help='Display additional information during training')
     parser.add_argument('--n_eventMax', type=int,default=5_000_000, help='Maximum number of events to load')
+    parser.add_argument('--jobNum', type=int, default=0, help="SBATCH job number, for jobarrays")
 
     flags = parser.parse_args()
 
@@ -53,6 +54,9 @@ if __name__ == "__main__":
         message=r"Callback method `on_train_batch_end` is slow compared to the batch time",
         category=UserWarning,
     )
+    if flags.jobNum > 0:
+        tf.random.set_seed(1234*flags.jobNum)
+        np.random.seed(1234*flags.jobNum)
 
     opt=utils.LoadJson(flags.config)
     version = opt['NAME']
@@ -83,9 +87,10 @@ if __name__ == "__main__":
             print("Running booststrap with ID: {}".format(flags.nstrap))
             np.random.seed(flags.nstrap*hvd.rank())
             print(80*"#")
-        data.weight = np.random.poisson(1,data.weight.shape[0])        
-        
-        
+        data.weight = np.random.poisson(1, data.weight.shape[0])
+
+    version += f'_job{flags.jobNum}'
+
     K.clear_session()
     mfold = Multifold(
         version = version,

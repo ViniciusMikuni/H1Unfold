@@ -345,7 +345,8 @@ class Multifold():
             if iteration < 1:
                 model_e = tf.keras.models.clone_model(model)  # clones original model layers and architecture
                 model_e.set_weights(self.model1.get_weights())  #actually clones weights. 
-                # self.model1 has custom wights (base, pre-train, or fine-tune)
+                # self.model1 has custom wights (reset for 'baselen', pre-loaded for pre-train and fine-tune)
+                # always using model1 here is not an error. We do not want to load step2, even when eval step2
 
                 if stepn == 1:
                     self.step1_models.append(model_e)
