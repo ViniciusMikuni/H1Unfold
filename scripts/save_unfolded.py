@@ -99,11 +99,13 @@ def main():
     
     cluster_jets(dataloaders)
     cluster_breit(dataloaders)
+    cluster_breit(dataloaders, clustering_type="centauro")
+    calculate_Delta_zjet(dataloaders)
     del dataloaders[flags.file].part, dataloaders[flags.file].mask
     gc.collect()
     gather_data(dataloaders)
 
-    replace_string = f"unfolded_{flags.niter}"
+    replace_string = f"unfolded_{flags.niter}_testingGPUs"
     if flags.reco:
         replace_string += '_reco'
     if flags.bootstrap:
@@ -130,6 +132,8 @@ def main():
             dset = fh5.create_dataset('jet_tau10', data=dataloaders[flags.file].all_jets[:,:,4])
             dset = fh5.create_dataset('zjet', data=dataloaders[flags.file].all_jets[:, :, 9])
             dset = fh5.create_dataset('zjet_breit', data=dataloaders[flags.file].all_jets_breit[:, :, 7])
+            dset = fh5.create_dataset('zjet_centauro', data=dataloaders[flags.file].all_jets_breit_centauro[:, :, 7])
+            dset = fh5.create_dataset('Delta_zjet', data=dataloaders[flags.file].Delta_zjet)
     
 if __name__ == '__main__':
     main()
