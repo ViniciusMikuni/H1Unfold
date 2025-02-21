@@ -981,7 +981,7 @@ def cluster_breit(dataloaders):
 
     
     def _take_leading_jet(jets):
-    """Extract features of the leading jet."""
+        """Extract features of the leading jet."""
         if not jets:
             return np.zeros(10)
 
@@ -1027,6 +1027,9 @@ def cluster_breit(dataloaders):
 
     def calculate_eec(jet, i, event, scattered_electron):
 
+        import math
+        from pprint import pprint
+
         # inelasticity y and Q
         y = event[:, 1]
         Q = np.sqrt(np.exp(event[:,0]))
@@ -1036,29 +1039,43 @@ def cluster_breit(dataloaders):
         # Bjorken x (invariant wrt frames) using the ISigma method from table 1 in https://arxiv.org/pdf/2110.05505
         x_B = scattered_electron["E"] * np.divide( 1 + np.cos(scattered_electron_theta), 2*y*920 ) # also need to divide by E_proton
 
-        # proton 4-momentum & polar angle for event i
-        P = np.divide(Q[i], 2*x_B[i]) * np.array([1, 0, 0, 1], dtype=np.float32)
-        theta_P = np.arccos(P[3] / np.linalg.norm(P))
+        # Bjorken x (invariant wrt frames) using
 
-        # normalization for EEC in DIS
-        px_sum = np.sum(jet.constituents().px())
-        py_sum = np.sum(jet.constituents().py())
-        pz_sum = np.sum(jet.constituents().pz())
-        E_sum = np.sum(jet.constituents().E())
+        # Breit frame proton 4-momentum & polar angle for event i
+        P = np.divide(Q[i], 2*x_B[i]) * np.array([1, 0, 0, 1], dtype=np.float32)
+        theta_P = math.acos( P[2] / np.linalg.norm(P) )  # arccos( p_z / |p| )
+
+        # convert jet constituents from pt-eta-phi-mass to cartesian...
+        cons_px, cons_py, cons_pz, cons_E = [], [], [], []
+        for cons in jet.constituents():
+            cons_px.append( cons.pt() * math.cos(cons.phi()) )
+            cons_py.append( cons.pt() * math.sin(cons.phi()) )
+            cons_pz.append( cons.pt() * math.sinh(cons.eta()) )
+            cons_E.append( math.sqrt( cons.m()**2 + cons.pt()**2 * math.cosh(cons.eta())**2 ) )
+
+        # denomenator of the normalization for EEC in DIS
+        px_sum = np.sum(cons_px)
+        py_sum = np.sum(cons_py)
+        pz_sum = np.sum(cons_pz)
+        E_sum = np.sum(cons_E)
         P_dot_psum = P[3]*E_sum - P[0]*px_sum - P[1]*py_sum - P[2]*pz_sum
 
         entries = []  # a list of EEC entries for the leading jet in event i
-        for constituent in jet.constituents():
+        for i, cons in enumerate( jet.constituents()):
 
-            P_dot_pc = P[3]*constituent.E() - P[0]*constituent.px() - P[1]*constituent.py() - P[2]*constituent.pz()
-            z = P_dot_pc / P_dot_psum
-            pt = constituent.pt()
-            eta = constituent.eta()
-            phi = constituent.phi()
-            theta_c = 2 * np.arctan(np.exp(-eta))
-            entries.append( (theta_P - theta_c)/z )
+            P_dot_pc = P[3]*cons_E[i] - P[0]*cons_px[i] - P[1]*cons_py[i] - P[2]*cons_pz[i]
+            z = P_dot_pc / P_dot_psum # normalization factor
+            pt = cons.pt()
+            eta = cons.eta()
+            phi = cons.phi()
+            theta_c = 2 * math.atan( math.exp(-eta) )
+            entries.append( (theta_P - theta_c) / z )
+
+        print("EEC entries: ", entries)
+        input()
 
         jet.eec = entries
+
     
     jetdef = fastjet.JetDefinition(fastjet.kt_algorithm, 1.0)
 
@@ -1081,7 +1098,7 @@ def cluster_breit(dataloaders):
             ]
 
             cluster = fastjet.ClusterSequence(particles, jetdef)
-            sorted_jets = fastjet.sorted_by_pt(cluster.inclusive_jets(ptmin=10))
+            sorted_jets = fastjet.sorted_by_pt(cluster.inclusive_jets(ptmin=0))
             # Calculate EEC only for the leading jet
             calculate_eec(sorted_jets[0], i, data.event, electron_momentum)
 
