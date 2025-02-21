@@ -983,7 +983,7 @@ def cluster_breit(dataloaders):
     def _take_leading_jet(jets):
         """Extract features of the leading jet."""
         if not jets:
-            return np.zeros(10)
+            return np.zeros(5)
 
         leading_jet = jets[0]
         return np.array([
@@ -991,39 +991,13 @@ def cluster_breit(dataloaders):
             leading_jet.eta(),
             (leading_jet.phi() + np.pi) % (2 * np.pi) - np.pi,
             leading_jet.E(),
-            leading_jet.tau_11,
-            leading_jet.tau_11p5,
-            leading_jet.tau_12,
-            leading_jet.tau_20,
-            leading_jet.ptD,
-            leading_jet.zjet
+            leading_jet.eec,
+            # leading_jet.tau_11p5,
+            # leading_jet.tau_12,
+            # leading_jet.tau_20,
+            # leading_jet.ptD,
+            # leading_jet.zjet
         ])
-
-    def _take_all_jets(jets):
-        max_num_jets = 4
-
-        if not jets:
-            return np.zeros((max_num_jets, 10))
-        jet_array = []
-        for i in range(max_num_jets):
-            if i < len(jets):
-                jet_info = [
-                            jet.pt(),
-                            jet.eta(),
-                            (jet.phi() + np.pi) % (2 * np.pi) - np.pi,
-                            jet.E(),
-                            jet.tau_11,
-                            jet.tau_11p5,
-                            jet.tau_12,
-                            jet.tau_20,
-                            jet.ptD,
-                            jet.zjet
-                        ]
-            else:
-                jet_info = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-            jet_array.append(jet_info)
-
-        return np.array(jet_array)
 
     def calculate_eec(jet, i, event, scattered_electron):
 
