@@ -980,70 +980,119 @@ def cluster_breit(dataloaders):
         return boosted_vectors
 
     
+    def _take_leading_jet(jets):
+    """Extract features of the leading jet."""
+        if not jets:
+            return np.zeros(10)
+
+        leading_jet = jets[0]
+        return np.array([
+            leading_jet.pt(),
+            leading_jet.eta(),
+            (leading_jet.phi() + np.pi) % (2 * np.pi) - np.pi,
+            leading_jet.E(),
+            leading_jet.tau_11,
+            leading_jet.tau_11p5,
+            leading_jet.tau_12,
+            leading_jet.tau_20,
+            leading_jet.ptD,
+            leading_jet.zjet
+        ])
+
+    def _take_all_jets(jets):
+        max_num_jets = 4
+
+        if not jets:
+            return np.zeros((max_num_jets, 10))
+        jet_array = []
+        for i in range(max_num_jets):
+            if i < len(jets):
+                jet_info = [
+                            jet.pt(),
+                            jet.eta(),
+                            (jet.phi() + np.pi) % (2 * np.pi) - np.pi,
+                            jet.E(),
+                            jet.tau_11,
+                            jet.tau_11p5,
+                            jet.tau_12,
+                            jet.tau_20,
+                            jet.ptD,
+                            jet.zjet
+                        ]
+            else:
+                jet_info = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            jet_array.append(jet_info)
+
+        return np.array(jet_array)
+
+    def calculate_eec(jet, i, event, scattered_electron):
+
+        # inelasticity y and Q
+        y = event[:, 1]
+        Q = np.sqrt(np.exp(event[:,0]))
+        scattered_electron_momentum = np.sqrt(scattered_electron["px"]**2 + scattered_electron["py"]**2 + scattered_electron["pz"]**2)
+        scattered_electron_theta = np.arccos(scattered_electron["pz"]/scattered_electron_momentum)
+
+        # Bjorken x (invariant wrt frames) using the ISigma method from table 1 in https://arxiv.org/pdf/2110.05505
+        x_B = scattered_electron["E"] * np.divide( 1 + np.cos(scattered_electron_theta), 2*y*920 ) # also need to divide by E_proton
+
+        # proton 4-momentum & polar angle for event i
+        P = np.divide(Q[i], 2*x_B[i]) * np.array([1, 0, 0, 1], dtype=np.float32)
+        theta_P = np.arccos(P[3] / np.linalg.norm(P))
+
+        # normalization for EEC in DIS
+        px_sum = np.sum(jet.constituents().px())
+        py_sum = np.sum(jet.constituents().py())
+        pz_sum = np.sum(jet.constituents().pz())
+        E_sum = np.sum(jet.constituents().E())
+        P_dot_psum = P[3]*E_sum - P[0]*px_sum - P[1]*py_sum - P[2]*pz_sum
+
+        entries = []  # a list of EEC entries for the leading jet in event i
+        for constituent in jet.constituents():
+
+            P_dot_pc = P[3]*constituent.E() - P[0]*constituent.px() - P[1]*constituent.py() - P[2]*constituent.pz()
+            z = P_dot_pc / P_dot_psum
+            pt = constituent.pt()
+            eta = constituent.eta()
+            phi = constituent.phi()
+            theta_c = 2 * np.arctan(np.exp(-eta))
+            entries.append( (theta_P - theta_c)/z )
+
+        jet.eec = entries
+    
     jetdef = fastjet.JetDefinition(fastjet.kt_algorithm, 1.0)
+
     for dataloader_name, data in dataloaders.items():
         
         electron_momentum = _convert_electron_kinematics(data.event)
         cartesian = _convert_kinematics(data.part, data.event, data.mask)        
         boosted_vectors = boost_particles(cartesian, electron_momentum)
-        events = []
+        list_of_jets = []
+        # list_of_all_jets = []
 
-        for event in boosted_vectors:
-            events.append([{"px": part_vec.px, "py": part_vec.py, "pz": part_vec.pz, "E": part_vec.E} for part_vec in event])
-        
-        array = ak.Array(events)
-        cluster = fastjet.ClusterSequence(array, jetdef)
-        jets = cluster.inclusive_jets(min_pt=5)
-        
-        jets["pt"] = -np.sqrt(jets["px"]**2 + jets["py"]**2)
-        jets["phi"] = np.arctan2(jets["py"],jets["px"])
-        jets["eta"] = np.arcsinh(jets["pz"]/jets["pt"])
-        jets = fastjet.sorted_by_pt(jets)
+        # jets["pt"] = -np.sqrt(jets["px"]**2 + jets["py"]**2)
+        # jets["phi"] = np.arctan2(jets["py"],jets["px"])
+        # jets["eta"] = np.arcsinh(jets["pz"]/jets["pt"])
 
+        for i, event in enumerate(boosted_vectors):
+            particles = [
+                fastjet.PseudoJet(part_vec.E, part_vec.px, part_vec.py, part_vec.pz)
+                for part_vec in event if np.abs(part_vec.E) != 0
+            ]
 
-        def calculate_eec(jet_hardest, event):
+            cluster = fastjet.ClusterSequence(particles, jetdef)
+            sorted_jets = fastjet.sorted_by_pt(cluster.inclusive_jets(ptmin=10))
+            # Calculate EEC only for the leading jet
+            calculate_eec(sorted_jets[0], i, data.event, electron_momentum)
 
-            jet = jets[0] # start with just the hardest jet
+            # Take the leading jet's features
+            leading_jet = _take_leading_jet(sorted_jets)
+            list_of_jets.append(leading_jet)
 
-            # inelasticity 
-            y = event[:, 1]
-
-            scattered_electron_momentum = np.sqrt(scattered_electron["px"]**2 + scattered_electron["py"]**2 + scattered_electron["pz"]**2)
-            scattered_electron_theta = np.arccos(scattered_electron["pz"]/scattered_electron_momentum)
-
-            # calculate Bjorken x (invariant wrt frames) using the ISigma method from table 1 in https://arxiv.org/pdf/2110.05505
-            x_B = scattered_electron["E"] * np.divide( 1 + np.cos(scattered_electron_theta), 2*y*920 ) # also need to divide by E_proton
-
-            # proton four-momentum in Breit frame
-            Q = np.sqrt(np.exp(event[:,0]))
-            P = np.divide(Q, 2*x_B) * np.array([1, 0, 0, 1], dtype=np.float32)
-
-            # Proton polar angle
-            theta_P = np.arccos(P[3] / np.linalg.norm(P))
-
-            # normalization for EEC in DIS
-            px_sum = np.sum(jet.constituents().px())
-            py_sum = np.sum(jet.constituents().py())
-            pz_sum = np.sum(jet.constituents().pz())
-            E_sum = np.sum(jet.constituents().E())
-            # z, delta_theta = [], []
-            entry = []
-
-            P_dot_psum = P[3]*E_sum - P[0]*px_sum - P[1]*py_sum - P[2]*pz_sum
-
-            for constituent in jet.constituents():
-
-                P_dot_pc = P[3]*constituent.E() - P[0]*constituent.px() - P[1]*constituent.py() - P[2]*constituent.pz()
-                z = P_dot_pc / P_dot_psum
-
-                pt = constituent.pt()
-                eta = constituent.eta()
-                phi = constituent.phi()
-                theta_c = 2 * np.arctan(np.exp(-eta))
-                
-                entry.append( (theta_P - theta_c)/z )
-
-        dataloaders[dataloader_name].all_jets_breit = calculate_eec(jets[0], dataloaders[dataloader_name].event)
+        # Store the jet features in the dataloader
+        data.jet = np.array(list_of_jets, dtype=np.float32)
+        # data.all_jets = np.array(list_of_all_jets, dtype=np.float32)
+        #print(f"----------------- Done working with {dataloader_name} -------------------")
         
 
         def _take_leading_jet(jets):
