@@ -33,6 +33,7 @@ def parse_arguments():
     parser.add_argument('--bootstrap', action='store_true', default=False,help='Load models for bootstrapping')
     parser.add_argument('--nboot', type=int, default=50, help='Number of bootstrap models to load')
     parser.add_argument('--verbose', action='store_true', default=False,help='Increase print level')
+    parser.add_argument('--eec', action='store_true', default=False,help='Get EEC')
     flags = parser.parse_args()
 
     return flags
@@ -98,7 +99,7 @@ def main():
 
     
     cluster_jets(dataloaders)
-    cluster_breit(dataloaders)
+    cluster_breit(flags,dataloaders)
     del dataloaders[flags.file].part, dataloaders[flags.file].mask
     gc.collect()
     gather_data(dataloaders)
@@ -130,6 +131,7 @@ def main():
             dset = fh5.create_dataset('jet_tau10', data=dataloaders[flags.file].all_jets[:,:,4])
             dset = fh5.create_dataset('zjet', data=dataloaders[flags.file].all_jets[:, :, 9])
             dset = fh5.create_dataset('zjet_breit', data=dataloaders[flags.file].all_jets_breit[:, :, 7])
+            dset = fh5.create_dataset('eec', data=dataloaders[flags.file].eec[:, :, 1])
     
 if __name__ == '__main__':
     main()

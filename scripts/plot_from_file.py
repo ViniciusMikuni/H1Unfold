@@ -12,8 +12,9 @@ import h5py as h5
 
 utils.SetStyle()
 
-var_names = ['weights','mc_weights','jet_pt',
-             'jet_breit_pt','deltaphi','jet_tau10', 'zjet', 'zjet_breit']
+var_names = [#'weights','mc_weights','jet_pt',
+             #'jet_breit_pt','deltaphi','jet_tau10', 'zjet', 'zjet_breit', 
+             'eec']
 
 
 def get_sample_names(niter, use_sys, sys_list = ['sys0','sys1','sys5','sys7','sys11'],
@@ -51,6 +52,7 @@ def parse_arguments():
     parser.add_argument('--niter', type=int, default=4, help='Omnifold iteration to load')
     parser.add_argument('--bootstrap', action='store_true', default=False,help='Load models for bootstrapping')
     parser.add_argument('--nboot', type=int, default=50, help='Number of bootstrap models to load')
+    parser.add_argument('--eec', action='store_true', default=False,help='Get EEC')
 
     parser.add_argument('--verbose', action='store_true', default=False,help='Increase print level')
     
@@ -88,7 +90,7 @@ def main():
     for var in var_names:
         if 'weight' in var:continue
         plot_observable(flags,var,dataloaders,opt['NAME'])
-        
+
     
 if __name__ == '__main__':
     main()

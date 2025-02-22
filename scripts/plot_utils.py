@@ -906,7 +906,7 @@ def plot_eec(flags, dataloaders, data_weights, version, frame = "lab"):
     fig.savefig(f'../plots/{version}_eec_{frame}.pdf')
 
 
-def cluster_breit(dataloaders):
+def cluster_breit(flags,dataloaders):
     import fastjet
     import awkward as ak
     import vector
@@ -978,31 +978,27 @@ def cluster_breit(dataloaders):
 
             boosted_vectors.append(boosted_event_vectors)
         return boosted_vectors
-
     
-    def _take_leading_jet(jets):
-        """Extract features of the leading jet."""
-        if not jets:
-            return np.zeros(5)
 
-        leading_jet = jets[0]
-        return np.array([
-            leading_jet.pt(),
-            leading_jet.eta(),
-            (leading_jet.phi() + np.pi) % (2 * np.pi) - np.pi,
-            leading_jet.E(),
-            leading_jet.eec,
-            # leading_jet.tau_11p5,
-            # leading_jet.tau_12,
-            # leading_jet.tau_20,
-            # leading_jet.ptD,
-            # leading_jet.zjet
-        ])
+    def _take_leading_jet_eec(eec):
+        max_num_parts = 150
+
+        if not eec:
+            return np.zeros((max_num_parts,1))
+
+        eec_array = []
+        for i in range(max_num_parts):
+            if i < len(eec):
+                eec_info = eec[i]
+            else:
+                eec_info = [0]
+            eec_array.append(eec_info)
+
+        return np.array(eec_array)
 
     def calculate_eec(jet, i, event, scattered_electron):
 
         import math
-        from pprint import pprint
 
         # inelasticity y and Q
         y = event[:, 1]
@@ -1013,7 +1009,7 @@ def cluster_breit(dataloaders):
         # Bjorken x (invariant wrt frames) using the ISigma method from table 1 in https://arxiv.org/pdf/2110.05505
         x_B = scattered_electron["E"] * np.divide( 1 + np.cos(scattered_electron_theta), 2*y*920 ) # also need to divide by E_proton
 
-        # Bjorken x (invariant wrt frames) using
+        # Bjorken x (invariant wrt frames) using 2312.07655
 
         # Breit frame proton 4-momentum & polar angle for event i
         P = np.divide(Q[i], 2*x_B[i]) * np.array([1, 0, 0, 1], dtype=np.float32)
@@ -1039,52 +1035,59 @@ def cluster_breit(dataloaders):
 
             P_dot_pc = P[3]*cons_E[i] - P[0]*cons_px[i] - P[1]*cons_py[i] - P[2]*cons_pz[i]
             z = P_dot_pc / P_dot_psum # normalization factor
-            pt = cons.pt()
-            eta = cons.eta()
-            phi = cons.phi()
-            theta_c = 2 * math.atan( math.exp(-eta) )
+            theta_c = 2 * math.atan( math.exp( - cons.eta() ) )
             entries.append( (theta_P - theta_c) / z )
+        # print("EEC entries: ", entries)
+        # input()
+        # jet.eec = entries
+        return entries
 
-        print("EEC entries: ", entries)
-        input()
-
-        jet.eec = entries
-
-    
     jetdef = fastjet.JetDefinition(fastjet.kt_algorithm, 1.0)
 
     for dataloader_name, data in dataloaders.items():
-        
         electron_momentum = _convert_electron_kinematics(data.event)
         cartesian = _convert_kinematics(data.part, data.event, data.mask)        
         boosted_vectors = boost_particles(cartesian, electron_momentum)
-        list_of_jets = []
-        # list_of_all_jets = []
-
         # jets["pt"] = -np.sqrt(jets["px"]**2 + jets["py"]**2)
         # jets["phi"] = np.arctan2(jets["py"],jets["px"])
         # jets["eta"] = np.arcsinh(jets["pz"]/jets["pt"])
 
-        for i, event in enumerate(boosted_vectors):
-            particles = [
-                fastjet.PseudoJet(part_vec.E, part_vec.px, part_vec.py, part_vec.pz)
-                for part_vec in event if np.abs(part_vec.E) != 0
-            ]
+        if flags.eec:
+            list_of_eec = []
+            for i, event in enumerate(boosted_vectors):
+                particles = [
+                    fastjet.PseudoJet(part_vec.E, part_vec.px, part_vec.py, part_vec.pz)
+                    for part_vec in event if np.abs(part_vec.E) != 0
+                ]
 
-            cluster = fastjet.ClusterSequence(particles, jetdef)
-            sorted_jets = fastjet.sorted_by_pt(cluster.inclusive_jets(ptmin=0))
-            # Calculate EEC only for the leading jet
-            calculate_eec(sorted_jets[0], i, data.event, electron_momentum)
+                cluster = fastjet.ClusterSequence(particles, jetdef)
+                sorted_jets = fastjet.sorted_by_pt(cluster.inclusive_jets(ptmin=0))
+                # Calculate EEC only for the leading jet
+                eec = calculate_eec(sorted_jets[0], i, data.event, electron_momentum)
 
-            # Take the leading jet's features
-            leading_jet = _take_leading_jet(sorted_jets)
-            list_of_jets.append(leading_jet)
+                # Take the leading jet's features
+                leading_jet_eec = _take_leading_jet_eec(eec)
+                list_of_eec.append(leading_jet_eec)
 
-        # Store the jet features in the dataloader
-        data.jet = np.array(list_of_jets, dtype=np.float32)
-        # data.all_jets = np.array(list_of_all_jets, dtype=np.float32)
-        #print(f"----------------- Done working with {dataloader_name} -------------------")
+            # Store the jet features in the dataloader
+            data.eec = np.array(list_of_eec, dtype=np.float32)
+            # data.all_jets = np.array(list_of_all_jets, dtype=np.float32)
+            #print(f"----------------- Done working with {dataloader_name} -------------------")
+
         
+        events = []
+
+        for event in boosted_vectors:
+            events.append([{"px": part_vec.px, "py": part_vec.py, "pz": part_vec.pz, "E": part_vec.E} for part_vec in event])
+        
+        array = ak.Array(events)
+        cluster = fastjet.ClusterSequence(array, jetdef)
+        jets = cluster.inclusive_jets(min_pt=5)
+        
+        jets["pt"] = -np.sqrt(jets["px"]**2 + jets["py"]**2)
+        jets["phi"] = np.arctan2(jets["py"],jets["px"])
+        jets["eta"] = np.arcsinh(jets["pz"]/jets["pt"])
+        jets = fastjet.sorted_by_pt(jets)
 
         def _take_leading_jet(jets):
             jet = np.zeros((data.event.shape[0],4))
