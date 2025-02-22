@@ -88,6 +88,8 @@ def get_log(var):
         return False, False
     if 'zjet' in var:
         return False, False
+    if 'eec' in var:
+        return False, False
     else:
         print(f"ERROR: {var} not present!")
 
@@ -99,6 +101,8 @@ def get_ylim(var):
         return 1e-3, 50
     if 'tau' in var:
         return 0, 1.2
+    if 'eec' in var:
+        return 0, 50
     if var == 'zjet':
         return 0,8
     if var == 'zjet_breit':

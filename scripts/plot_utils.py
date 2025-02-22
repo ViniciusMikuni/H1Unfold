@@ -815,15 +815,15 @@ def plot_zjet(flags, dataloaders, data_weights, version, frame = "lab"):
     fig.savefig(f'../plots/{version}_zjet_{frame}.pdf')
 
 
-def plot_eec(flags, dataloaders, data_weights, version, frame = "lab"):
+def plot_eec(flags, dataloaders, data_weights, version, frame = "breit"):
     import numpy as np
     import utils
 
-    def compute_histogram(dataset_name, weights=None, frame="lab"):
+    def compute_histogram(dataset_name, weights=None, frame="breit"):
         if frame == "breit":
-            mask = dataloaders[dataset_name].all_jets[:, :, 9]>0
-            data = ak.drop_none(ak.mask(dataloaders[dataset_name].all_jets[:, :, 9], mask))
-            num_jets_per_event = ak.count(data, axis=1)
+            mask = dataloaders[dataset_name].eec[:, :, 0]>-1
+            data = ak.drop_none(ak.mask(dataloaders[dataset_name].eec[:, :, 0], mask))
+            num_jets_per_event = 1 #ak.count(data, axis=1)
             data = ak.flatten(data)
 
         if weights is not None:
@@ -861,13 +861,13 @@ def plot_eec(flags, dataloaders, data_weights, version, frame = "lab"):
         total_unc = np.sqrt(total_unc)
 
     # Prepare weights and data for plotting
-    Rapgap_mask = dataloaders["Rapgap"].all_jets_breit[:, :, 7]>0
-    Rapgap_data = ak.drop_none(ak.mask(dataloaders["Rapgap"].all_jets_breit[:, :, 7], Rapgap_mask))
+    Rapgap_mask = dataloaders["Rapgap"].eec[:, :, 0]>0
+    Rapgap_data = ak.drop_none(ak.mask(dataloaders["Rapgap"].eec[:, :, 0], Rapgap_mask))
     num_Rapgap_jets_per_event = ak.count(Rapgap_data, axis=1)
     Rapgap_data = ak.flatten(Rapgap_data)
 
-    Djangoh_mask = dataloaders["Djangoh"].all_jets_breit[:, :, 7]>0
-    Djangoh_data = ak.drop_none(ak.mask(dataloaders["Djangoh"].all_jets_breit[:, :, 7], Djangoh_mask))
+    Djangoh_mask = dataloaders["Djangoh"].eec[:, :, 0]>0
+    Djangoh_data = ak.drop_none(ak.mask(dataloaders["Djangoh"].eec[:, :, 0], Djangoh_mask))
     num_Djangoh_jets_per_event = ak.count(Djangoh_data, axis=1)
     Djangoh_data = ak.flatten(Djangoh_data)
 
@@ -884,8 +884,8 @@ def plot_eec(flags, dataloaders, data_weights, version, frame = "lab"):
     }
 
     if flags.reco:
-        data_mask = dataloaders["data"].all_jets_breit[:, :, 7]>0
-        data = ak.drop_none(ak.mask(dataloaders["data"].all_jets_breit[:, :, 7], data_mask))
+        data_mask = dataloaders["data"].eec[:, :, 0]>0
+        data = ak.drop_none(ak.mask(dataloaders["data"].eec[:, :, 0], data_mask))
         data = ak.flatten(data)
 
 
@@ -1338,9 +1338,10 @@ def plot_observable(flags, var, dataloaders, version):
     feed_dict = {}
 
     if len(dataloaders['Rapgap'][var].shape) > 1:
-        Rapgap_mask = dataloaders["Rapgap"]["jet_pt"]>0
-        Rapgap_data = ak.drop_none(ak.mask(dataloaders["Rapgap"][var], Rapgap_mask))
-        num_Rapgap_jets_per_event = ak.count(Rapgap_data, axis=1)
+        # Rapgap_mask = dataloaders["Rapgap"]["jet_pt"]>0
+        # Rapgap_data = ak.drop_none(ak.mask(dataloaders["Rapgap"][var], Rapgap_mask))
+        Rapgap_data = ak.drop_none( dataloaders["Rapgap"][var])
+        num_Rapgap_jets_per_event = 1 #ak.count(Rapgap_data, axis=1)
         Rapgap_data = ak.flatten(Rapgap_data)
 
         weights[data_name] = np.repeat(dataloaders['Rapgap']['mc_weights'] * dataloaders['Rapgap'][weight_name], num_Rapgap_jets_per_event, axis=0)
@@ -1348,22 +1349,23 @@ def plot_observable(flags, var, dataloaders, version):
         feed_dict[data_name] = Rapgap_data
         feed_dict['Rapgap'] = Rapgap_data
     else:
-        weights[data_name] = (dataloaders['Rapgap']['mc_weights'] * dataloaders['Rapgap'][weight_name])[dataloaders['Rapgap']['jet_pt'] > 0]
-        weights['Rapgap'] = dataloaders['Rapgap']['mc_weights'][dataloaders['Rapgap']['jet_pt'] > 0]
-        feed_dict[data_name] = dataloaders['Rapgap'][var][dataloaders['Rapgap']['jet_pt'] > 0]
-        feed_dict['Rapgap'] = dataloaders['Rapgap'][var][dataloaders['Rapgap']['jet_pt'] > 0]
+        weights[data_name] = (dataloaders['Rapgap']['mc_weights'] * dataloaders['Rapgap'][weight_name])#[dataloaders['Rapgap']['jet_pt'] > 0]
+        weights['Rapgap'] = dataloaders['Rapgap']['mc_weights']#[dataloaders['Rapgap']['jet_pt'] > 0]
+        feed_dict[data_name] = dataloaders['Rapgap'][var]#[dataloaders['Rapgap']['jet_pt'] > 0]
+        feed_dict['Rapgap'] = dataloaders['Rapgap'][var]#[dataloaders['Rapgap']['jet_pt'] > 0]
     
     if len(dataloaders['Djangoh'][var].shape) > 1:
-        Djangoh_mask = dataloaders["Djangoh"]["jet_pt"]>0
-        Djangoh_data = ak.drop_none(ak.mask(dataloaders["Djangoh"][var], Djangoh_mask))
-        num_Djangoh_jets_per_event = ak.count(Djangoh_data, axis=1)
+        # Djangoh_mask = dataloaders["Djangoh"]["jet_pt"]>0
+        # Djangoh_data = ak.drop_none(ak.mask(dataloaders["Djangoh"][var], Djangoh_mask))
+        Djangoh_data = ak.drop_none(dataloaders["Djangoh"][var])
+        num_Djangoh_jets_per_event = 1#ak.count(Djangoh_data, axis=1)
         Djangoh_data = ak.flatten(Djangoh_data)
 
         weights['Djangoh'] = np.repeat(dataloaders['Djangoh']['mc_weights'], num_Djangoh_jets_per_event, axis=0)
         feed_dict['Djangoh'] = Djangoh_data
     else:
-        weights['Djangoh'] = dataloaders['Djangoh']['mc_weights'][dataloaders['Djangoh']['jet_pt'] > 0]
-        feed_dict['Djangoh'] = dataloaders['Djangoh'][var][dataloaders['Djangoh']['jet_pt'] > 0]
+        weights['Djangoh'] = dataloaders['Djangoh']['mc_weights']#[dataloaders['Djangoh']['jet_pt'] > 0]
+        feed_dict['Djangoh'] = dataloaders['Djangoh'][var]#[dataloaders['Djangoh']['jet_pt'] > 0]
 
     if flags.reco:
         if len(dataloaders['data'][var].shape) > 1:
