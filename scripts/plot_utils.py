@@ -1341,15 +1341,12 @@ def plot_observable(flags, var, dataloaders, version):
     if var == 'eec':
 
         Rapgap_mask = dataloaders["Rapgap"]["eec"] != 0
-        print(Rapgap_mask)
-        print(dataloaders["Rapgap"][var], Rapgap_mask)
-        input()
         Rapgap_data = ak.drop_none(ak.mask(dataloaders["Rapgap"][var], Rapgap_mask))
-        Rapgap_data = ak.drop_none( dataloaders["Rapgap"][var])
-        print(Rapgap_data)
-        input()
         num_Rapgap_parts_per_event = ak.count(Rapgap_data, axis=1)
         Rapgap_data = ak.flatten(Rapgap_data)
+        print(num_Rapgap_parts_per_event)
+        print(Rapgap_data)
+        input()
 
         weights[data_name] = np.repeat(dataloaders['Rapgap']['mc_weights'] * dataloaders['Rapgap'][weight_name], num_Rapgap_parts_per_event, axis=0)
         weights['Rapgap'] = np.repeat(dataloaders['Rapgap']['mc_weights'], num_Rapgap_parts_per_event, axis=0)
@@ -1365,7 +1362,6 @@ def plot_observable(flags, var, dataloaders, version):
     if var == 'eec':
         Djangoh_mask = dataloaders["Djangoh"]["eec"] != [0]
         Djangoh_data = ak.drop_none(ak.mask(dataloaders["Djangoh"][var], Djangoh_mask))
-        Djangoh_data = ak.drop_none(dataloaders["Djangoh"][var])
         num_Djangoh_jets_per_event = ak.count(Djangoh_data, axis=1)
         Djangoh_data = ak.flatten(Djangoh_data)
 
