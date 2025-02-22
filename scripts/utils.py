@@ -102,7 +102,7 @@ def get_ylim(var):
     if 'tau' in var:
         return 0, 1.2
     if 'eec' in var:
-        return 0, 50
+        return 0, 1
     if var == 'zjet':
         return 0,8
     if var == 'zjet_breit':
