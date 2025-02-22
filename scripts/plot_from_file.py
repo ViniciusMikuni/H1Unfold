@@ -12,7 +12,8 @@ import h5py as h5
 
 utils.SetStyle()
 
-var_names = [#'weights','mc_weights','jet_pt',
+var_names = [#'weights','mc_weights',
+             'jet_pt',
              #'jet_breit_pt','deltaphi','jet_tau10', 'zjet', 'zjet_breit', 
              'eec']
 

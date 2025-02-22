@@ -65,7 +65,8 @@ observable_names = {
     'deltaphi':r"$\Delta\phi^{jet}$ [rad]",
     'jet_tau10':r'$\mathrm{ln}(\lambda_1^1)$',
     'zjet':r'$z^{jet}$',
-    'zjet_breit':r'$z^{jet}$ Breit frame'
+    'zjet_breit':r'$z^{jet}$ Breit frame',
+    'eec':r'$EEC$ Breit frame'
 }
 
 dedicated_binning = {
@@ -74,7 +75,8 @@ dedicated_binning = {
     'deltaphi': np.linspace(0, 1, 8),
     'jet_tau10': np.array([-4.00,-3.15,-2.59,-2.18,-1.86,-1.58,-1.29,-1.05,-0.81,-0.61,0.00]),
     'zjet' : np.linspace(0.2, 1, 10),
-    'zjet_breit' : np.linspace(0.2, 1, 10)
+    'zjet_breit' : np.linspace(0.2, 1, 10),
+    'eec' : np.linspace(-1, 1, 40),
 }
 
 def get_log(var):
