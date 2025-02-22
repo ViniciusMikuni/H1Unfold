@@ -981,7 +981,7 @@ def cluster_breit(flags,dataloaders):
     
 
     def _take_leading_jet_eec(eec):
-        max_num_parts = 150
+        max_num_parts = 200
 
         if not eec:
             return np.zeros((max_num_parts,1))
@@ -989,10 +989,13 @@ def cluster_breit(flags,dataloaders):
         eec_array = []
         for i in range(max_num_parts):
             if i < len(eec):
-                eec_info = eec[i]
+                eec_info = [eec[i]]
             else:
                 eec_info = [0]
             eec_array.append(eec_info)
+        
+        print(eec_array)
+        input()
 
         return np.array(eec_array)
 
@@ -1068,6 +1071,8 @@ def cluster_breit(flags,dataloaders):
                 # Take the leading jet's features
                 leading_jet_eec = _take_leading_jet_eec(eec)
                 list_of_eec.append(leading_jet_eec)
+            print(list_of_eec)
+            input()
 
             # Store the jet features in the dataloader
             data.eec = np.array(list_of_eec, dtype=np.float32)
