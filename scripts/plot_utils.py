@@ -1399,7 +1399,7 @@ def plot_observable(flags, var, dataloaders, version):
         weights['Djangoh'] = np.repeat(dataloaders['Djangoh']['mc_weights'], num_Djangoh_jets_per_event, axis=0)
         feed_dict['Djangoh'] = Djangoh_data
 
-    elif len(dataloaders['Djangoh'][var].shape > 1:
+    elif len(dataloaders['Djangoh'][var].shape) > 1:
         Djangoh_mask = dataloaders["Djangoh"]["jet_pt"]>0
         Djangoh_data = ak.drop_none(ak.mask(dataloaders["Djangoh"][var], Djangoh_mask))
         num_Djangoh_jets_per_event = ak.count(Djangoh_data, axis=1)
