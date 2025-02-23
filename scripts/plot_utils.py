@@ -1016,16 +1016,16 @@ def cluster_breit(flags,dataloaders):
         scattered_electron_theta = np.arccos(scattered_electron["pz"]/scattered_electron_momentum)
 
         # Bjorken x (invariant wrt frames) using the ISigma method from table 1 in https://arxiv.org/pdf/2110.05505
-        # x_B = scattered_electron["E"] * np.divide( 1 + np.cos(scattered_electron_theta), 2*y*920 ) # also need to divide by E_proton
+        x_B = scattered_electron["E"] * np.divide( 1 + np.cos(scattered_electron_theta), 2*y*920 ) # also need to divide by E_proton
 
-        # Bjorken x (invariant wrt frames) using 2312.07655
-        P = np.array([0, 0, 920, 920], dtype=np.float32) # 920 GeV is proton beam energy in lab frame
-        P_dot_q = P[3]*q[3] - P[0]*q[0] - P[1]*q[1] - P[2]*q[2]
-        x_B =  Q2[i] / (2 * P_dot_q)  # for event i
+        # Bjorken x (invariant wrt frames) using 2312.07655 (I think equivalent with the above..)
+        # P = np.array([0, 0, 920, 920], dtype=np.float32) # 920 GeV is proton beam energy in lab frame
+        # P_dot_q = P[3]*q[3] - P[0]*q[0] - P[1]*q[1] - P[2]*q[2]
+        # x_B =  Q2[i] / (2 * P_dot_q)  # for event i
 
         # Breit frame proton 4-momentum & polar angle for event i
-        # P = np.divide(Q[i], 2*x_B[i]) * np.array([1, 0, 0, 1], dtype=np.float32)
-        P = ( Q[i] / 2 * x_B) * np.array([1, 0, 0, 1], dtype=np.float32)
+        P = np.divide(Q[i], 2*x_B[i]) * np.array([1, 0, 0, 1], dtype=np.float32)
+        # P = ( Q[i] / 2 * x_B) * np.array([1, 0, 0, 1], dtype=np.float32)
         theta_P = math.acos( P[2] / np.linalg.norm(P) )  # arccos( p_z / |p| )
 
         # convert jet constituents from pt-eta-phi-mass to cartesian...
@@ -1047,13 +1047,14 @@ def cluster_breit(flags,dataloaders):
         for i, cons in enumerate( jet.constituents()):
 
             theta_c = 2 * math.atan( math.exp( - cons.eta() ) )
-            delta_theta = x_B * ( cons_E[i] / P[3] ) * (theta_P - theta_c)
-            entries.append( math.log( math.tan( abs(delta_theta/2) ) ) ) # following def in 2312.07655
+            # delta_theta =  theta_P - theta_c
+            # print(delta_theta)
+            # entries.append( x_B * (cons_E[i] / P[3]) * math.log( math.tan( abs(delta_theta/2) ) ) ) # following def in 2312.07655
 
-            # P_dot_pc = P[3]*cons_E[i] - P[0]*cons_px[i] - P[1]*cons_py[i] - P[2]*cons_pz[i]
-            # z = P_dot_pc / P_dot_psum # normalization factor
-            # theta_c = 2 * math.atan( math.exp( - cons.eta() ) )
-            # entries.append( (theta_P - theta_c) / z ) # following def in 2102.05669
+            P_dot_pc = P[3]*cons_E[i] - P[0]*cons_px[i] - P[1]*cons_py[i] - P[2]*cons_pz[i]
+            z = P_dot_pc / P_dot_psum # normalization factor
+            theta_c = 2 * math.atan( math.exp( - cons.eta() ) )
+            entries.append( math.cos(theta_P - theta_c) / z ) # following def in 2102.05669
 
         # print("EEC entries: ", entries)
         # input()
