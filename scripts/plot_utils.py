@@ -1054,7 +1054,7 @@ def cluster_breit(flags,dataloaders):
             P_dot_pc = P[3]*cons_E[i] - P[0]*cons_px[i] - P[1]*cons_py[i] - P[2]*cons_pz[i]
             z = P_dot_pc / P_dot_psum # normalization factor
             theta_c = 2 * math.atan( math.exp( - cons.eta() ) )
-            entries.append( math.cos(theta_P - theta_c) / z ) # following def in 2102.05669
+            entries.append( ( math.cos(theta_P) - math.cos(theta_c) ) / z ) # following def in 2102.05669
 
         # print("EEC entries: ", entries)
         # input()
