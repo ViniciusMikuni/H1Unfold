@@ -242,6 +242,7 @@ def make_error_boxes(ax, xdata, ydata, xerror, yerror, facecolor='r',
     artists = ax.errorbar(xdata, ydata, xerr=xerror, yerr=yerror,
                           fmt='None', ecolor='k')
 
+
 def PlotRoutine(feed_dict,xlabel='',ylabel='',reference_name='gen',plot_ratio = False):
     if plot_ratio:
         assert reference_name in feed_dict.keys(), "ERROR: Don't know the reference distribution"

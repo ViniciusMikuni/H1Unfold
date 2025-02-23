@@ -983,7 +983,7 @@ def cluster_breit(flags,dataloaders):
         eec_array = []
         for i in range(max_num_parts):
             if i < len(eec):
-                eec_info = [eec[i]]
+                eec_info = [ eec[i] ]  # make it a one-element list for plotting purpose
             else:
                 eec_info = [0]
             eec_array.append(eec_info)
@@ -1068,20 +1068,19 @@ def cluster_breit(flags,dataloaders):
             # data.all_jets = np.array(list_of_all_jets, dtype=np.float32)
             #print(f"----------------- Done working with {dataloader_name} -------------------")
 
-        
-        events = []
-
-        for event in boosted_vectors:
-            events.append([{"px": part_vec.px, "py": part_vec.py, "pz": part_vec.pz, "E": part_vec.E} for part_vec in event])
-        
-        array = ak.Array(events)
-        cluster = fastjet.ClusterSequence(array, jetdef)
-        jets = cluster.inclusive_jets(min_pt=5)
-        
-        jets["pt"] = -np.sqrt(jets["px"]**2 + jets["py"]**2)
-        jets["phi"] = np.arctan2(jets["py"],jets["px"])
-        jets["eta"] = np.arcsinh(jets["pz"]/jets["pt"])
-        jets = fastjet.sorted_by_pt(jets)
+        else: # no need to keep constituents
+            events = []
+            for event in boosted_vectors:
+                events.append([{"px": part_vec.px, "py": part_vec.py, "pz": part_vec.pz, "E": part_vec.E} for part_vec in event])
+            
+            array = ak.Array(events)
+            cluster = fastjet.ClusterSequence(array, jetdef)
+            jets = cluster.inclusive_jets(min_pt=5)
+            
+            jets["pt"] = -np.sqrt(jets["px"]**2 + jets["py"]**2)
+            jets["phi"] = np.arctan2(jets["py"],jets["px"])
+            jets["eta"] = np.arcsinh(jets["pz"]/jets["pt"])
+            jets = fastjet.sorted_by_pt(jets)
 
         def _take_leading_jet(jets):
             jet = np.zeros((data.event.shape[0],4))
