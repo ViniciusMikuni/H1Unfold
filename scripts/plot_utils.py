@@ -1046,7 +1046,7 @@ def cluster_breit(flags,dataloaders):
         entries = []  # a list of EEC entries for the leading jet in event i
         for i, cons in enumerate( jet.constituents()):
 
-            theta_c = 2 * math.atan( math.exp( - cons.eta() ) )
+            # theta_c = 2 * math.atan( math.exp( - cons.eta() ) )
             # delta_theta =  theta_P - theta_c
             # print(delta_theta)
             # entries.append( x_B * (cons_E[i] / P[3]) * math.log( math.tan( abs(delta_theta/2) ) ) ) # following def in 2312.07655
