@@ -1152,30 +1152,30 @@ def cluster_breit(flags,dataloaders):
             max_num_jets = 4
             dataloaders[dataloader_name].all_jets_breit = _take_all_jets(jets, max_num_jets)
 
-        def calculate_zjet(jet_data, event):
-            Q_array = np.sqrt(np.exp(event[:,0]))
+            def calculate_zjet(jet_data, event):
+                Q_array = np.sqrt(np.exp(event[:,0]))
 
-            n = np.array([0, 0, 1, 1], dtype=np.float32)
-            z_jet = []
+                n = np.array([0, 0, 1, 1], dtype=np.float32)
+                z_jet = []
 
-            jet_px = jet_data[:, :, 4]
-            jet_py = jet_data[:, :, 5]
-            jet_pz = jet_data[:, :, 6]
-            jet_E = jet_data[:, :, 3]
-            mask = (jet_px!=0) & (jet_py!=0) & (jet_pz!=0) & (jet_E!=0)
-            jet_px = ak.mask(jet_px, mask)
-            jet_py = ak.mask(jet_py, mask)
-            jet_pz = ak.mask(jet_pz, mask)
-            jet_E = ak.mask(jet_E, mask)
-            numerator = n[3]*jet_E- n[0]*jet_px - n[1]*jet_py - n[2]*jet_pz
-            counts = ak.num(numerator)
-            Q_array = np.repeat(Q_array, counts)
-            z_jet = ak.flatten(numerator)/Q_array
-            z_jet = np.array(ak.fill_none(ak.unflatten(z_jet, counts), 0))
-            z_jet = z_jet.reshape(z_jet.shape[0], z_jet.shape[1], 1)
-            jet_data = np.concatenate((jet_data, z_jet), axis=2)
-            return jet_data
-        dataloaders[dataloader_name].all_jets_breit = calculate_zjet(dataloaders[dataloader_name].all_jets_breit, dataloaders[dataloader_name].event)
+                jet_px = jet_data[:, :, 4]
+                jet_py = jet_data[:, :, 5]
+                jet_pz = jet_data[:, :, 6]
+                jet_E = jet_data[:, :, 3]
+                mask = (jet_px!=0) & (jet_py!=0) & (jet_pz!=0) & (jet_E!=0)
+                jet_px = ak.mask(jet_px, mask)
+                jet_py = ak.mask(jet_py, mask)
+                jet_pz = ak.mask(jet_pz, mask)
+                jet_E = ak.mask(jet_E, mask)
+                numerator = n[3]*jet_E- n[0]*jet_px - n[1]*jet_py - n[2]*jet_pz
+                counts = ak.num(numerator)
+                Q_array = np.repeat(Q_array, counts)
+                z_jet = ak.flatten(numerator)/Q_array
+                z_jet = np.array(ak.fill_none(ak.unflatten(z_jet, counts), 0))
+                z_jet = z_jet.reshape(z_jet.shape[0], z_jet.shape[1], 1)
+                jet_data = np.concatenate((jet_data, z_jet), axis=2)
+                return jet_data
+            dataloaders[dataloader_name].all_jets_breit = calculate_zjet(dataloaders[dataloader_name].all_jets_breit, dataloaders[dataloader_name].event)
     
     
 def plot_event(flags, dataloaders, data_weights, version, nbins=10):
