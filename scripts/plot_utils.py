@@ -1047,7 +1047,8 @@ def cluster_breit(flags,dataloaders):
         for i, cons in enumerate( jet.constituents()):
 
             theta_c = 2 * math.atan( math.exp( - cons.eta() ) )
-            entries.append( x_B * (cons_E[i] / P[3] ) * (theta_P - theta_c) ) # following def in 2312.07655
+            delta_theta = x_B * ( cons_E[i] / P[3] ) * (theta_P - theta_c)
+            entries.append( math.log( math.tan( abs(delta_theta/2) ) ) ) # following def in 2312.07655
 
             # P_dot_pc = P[3]*cons_E[i] - P[0]*cons_px[i] - P[1]*cons_py[i] - P[2]*cons_pz[i]
             # z = P_dot_pc / P_dot_psum # normalization factor
