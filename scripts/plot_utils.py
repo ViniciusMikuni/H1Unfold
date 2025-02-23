@@ -52,7 +52,6 @@ def get_version(dataset,flags,opt):
     # return reference_name, version
 
 
-
 def evaluate_model(flags,opt,dataset,dataloaders,version=None,bootstrap = False,nboot=0):
     if version is None:
         version = get_version(dataset,flags,opt)
@@ -70,7 +69,6 @@ def evaluate_model(flags,opt,dataset,dataloaders,version=None,bootstrap = False,
     unfolded_weights = mfold.reweight(dataloaders[dataset].gen,mfold.model2_ema,batch_size=1000)
     #return unfolded_weights
     return hvd.allgather(tf.constant(unfolded_weights)).numpy()
-
 
 
 def undo_standardizing(flags,dataloaders):
@@ -240,8 +238,6 @@ def cluster_jets(dataloaders):
         #data.jet = np.array(list_of_jets, dtype=np.float32)
         data.all_jets = np.array(list_of_all_jets, dtype=np.float32)
         #print(f"----------------- Done working with {dataloader_name} -------------------")
-
-
 
 
 def plot_particles(flags, dataloaders, data_weights, version, num_part, nbins=10):
@@ -612,8 +608,6 @@ def plot_jet_pt(flags, dataloaders, data_weights, version,lab_frame=True):
     tag = 'lab' if lab_frame else 'breit'
     
     fig.savefig(f'../plots/{version}_jet_pt_{tag}.pdf')
-
-    
 
 
 def plot_tau(flags, dataloaders, data_weights, version):
@@ -1251,20 +1245,27 @@ def plot_event(flags, dataloaders, data_weights, version, nbins=10):
         # Save the plot
         fig.savefig(f'../plots/{version}_event_{feature}.pdf')        
 
+
 def plot_observable(flags, var, dataloaders, version):
     info = utils.ObservableInfo(var)
 
     def compute_histogram(dataset_name, weights=None,density=True):
         if len(dataloaders[dataset_name][var].shape) > 1:
             multiple_jets_per_event = True
-            valid_indices = dataloaders[dataset_name]['eec'] != 0
+            if flags.eec:
+                valid_indices = dataloaders[dataset_name]['eec'] != 0
+            else:
+                valid_indices = dataloaders[dataset_name]['jet_pt']>0
             data = ak.mask(dataloaders[dataset_name][var], valid_indices)
             data = ak.drop_none(data)
             num_jets_per_event = ak.count(data, axis = 1)
             data = ak.flatten(data)
         else:
             multiple_jets_per_event = False
-            valid_indices = dataloaders[dataset_name]['eec'] != 0
+            if flags.eec:
+                valid_indices = dataloaders[dataset_name]['eec'] != 0
+            else:
+                valid_indices = dataloaders[dataset_name]['jet_pt']>0
             data = dataloaders[dataset_name][var][valid_indices]
         if weights is not None:
             if multiple_jets_per_event:
@@ -1337,19 +1338,26 @@ def plot_observable(flags, var, dataloaders, version):
     weights = {}
     feed_dict = {}
 
-    # if len(dataloaders['Rapgap'][var]).shape) > 1:
-    if var == 'eec':
-
+    if flags.eec:
+    # if var == 'eec':
         Rapgap_mask = dataloaders["Rapgap"]["eec"] != 0
         Rapgap_data = ak.drop_none(ak.mask(dataloaders["Rapgap"][var], Rapgap_mask))
         num_Rapgap_parts_per_event = ak.count(Rapgap_data, axis=1)
         Rapgap_data = ak.flatten(Rapgap_data)
-        print(num_Rapgap_parts_per_event)
-        print(Rapgap_data)
-        input()
 
         weights[data_name] = np.repeat(dataloaders['Rapgap']['mc_weights'] * dataloaders['Rapgap'][weight_name], num_Rapgap_parts_per_event, axis=0)
         weights['Rapgap'] = np.repeat(dataloaders['Rapgap']['mc_weights'], num_Rapgap_parts_per_event, axis=0)
+        feed_dict[data_name] = Rapgap_data
+        feed_dict['Rapgap'] = Rapgap_data
+
+    elif len(dataloaders['Rapgap'][var]).shape) > 1:
+        Rapgap_mask = dataloaders["Rapgap"]["jet_pt"]>0
+        Rapgap_data = ak.drop_none(ak.mask(dataloaders["Rapgap"][var], Rapgap_mask))
+        num_Rapgap_jets_per_event = ak.count(Rapgap_data, axis=1)
+        Rapgap_data = ak.flatten(Rapgap_data)
+
+        weights[data_name] = np.repeat(dataloaders['Rapgap']['mc_weights'] * dataloaders['Rapgap'][weight_name], num_Rapgap_jets_per_event, axis=0)
+        weights['Rapgap'] = np.repeat(dataloaders['Rapgap']['mc_weights'], num_Rapgap_jets_per_event, axis=0)
         feed_dict[data_name] = Rapgap_data
         feed_dict['Rapgap'] = Rapgap_data
     else:
@@ -1358,9 +1366,18 @@ def plot_observable(flags, var, dataloaders, version):
         feed_dict[data_name] = dataloaders['Rapgap'][var][dataloaders['Rapgap']['jet_pt'] > 0]
         feed_dict['Rapgap'] = dataloaders['Rapgap'][var][dataloaders['Rapgap']['jet_pt'] > 0]
     
-    # if len(dataloaders['Djangoh'][var].shape) > 1:
-    if var == 'eec':
+    if flags.eec:
+    # if var == 'eec':
         Djangoh_mask = dataloaders["Djangoh"]["eec"] != [0]
+        Djangoh_data = ak.drop_none(ak.mask(dataloaders["Djangoh"][var], Djangoh_mask))
+        num_Djangoh_jets_per_event = ak.count(Djangoh_data, axis=1)
+        Djangoh_data = ak.flatten(Djangoh_data)
+
+        weights['Djangoh'] = np.repeat(dataloaders['Djangoh']['mc_weights'], num_Djangoh_jets_per_event, axis=0)
+        feed_dict['Djangoh'] = Djangoh_data
+
+    elif len(dataloaders['Djangoh'][var].shape) > 1:
+        Djangoh_mask = dataloaders["Djangoh"]["jet_pt"]>0
         Djangoh_data = ak.drop_none(ak.mask(dataloaders["Djangoh"][var], Djangoh_mask))
         num_Djangoh_jets_per_event = ak.count(Djangoh_data, axis=1)
         Djangoh_data = ak.flatten(Djangoh_data)
