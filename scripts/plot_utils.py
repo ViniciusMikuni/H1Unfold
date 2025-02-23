@@ -1092,90 +1092,89 @@ def cluster_breit(flags,dataloaders):
             # data.all_jets = np.array(list_of_all_jets, dtype=np.float32)
             #print(f"----------------- Done working with {dataloader_name} -------------------")
 
-        else: # no need to keep constituents
-            events = []
-            for event in boosted_vectors:
-                events.append([{"px": part_vec.px, "py": part_vec.py, "pz": part_vec.pz, "E": part_vec.E} for part_vec in event])
+        events = []
+        for event in boosted_vectors:
+            events.append([{"px": part_vec.px, "py": part_vec.py, "pz": part_vec.pz, "E": part_vec.E} for part_vec in event])
+        
+        array = ak.Array(events)
+        cluster = fastjet.ClusterSequence(array, jetdef)
+        jets = cluster.inclusive_jets(min_pt=5)
+        
+        jets["pt"] = -np.sqrt(jets["px"]**2 + jets["py"]**2)
+        jets["phi"] = np.arctan2(jets["py"],jets["px"])
+        jets["eta"] = np.arcsinh(jets["pz"]/jets["pt"])
+        jets = fastjet.sorted_by_pt(jets)
+
+        def _take_leading_jet(jets):
+            jet = np.zeros((data.event.shape[0],4))
+            jet[:,0] = -np.array(list(itertools.zip_longest(*jets.pt.to_list(), fillvalue=0))).T[:,0]
+            jet[:,1] = np.array(list(itertools.zip_longest(*jets.eta.to_list(), fillvalue=0))).T[:,0]
+            jet[:,2] = np.array(list(itertools.zip_longest(*jets.phi.to_list(), fillvalue=0))).T[:,0]
+            jet[:,3] = np.array(list(itertools.zip_longest(*jets.E.to_list(), fillvalue=0))).T[:,0]
+            return jet
+
+
+        def _take_all_jets(jets,maxjets = 5):
             
-            array = ak.Array(events)
-            cluster = fastjet.ClusterSequence(array, jetdef)
-            jets = cluster.inclusive_jets(min_pt=5)
+            jet = np.zeros((data.event.shape[0],maxjets,7))
+            jet[:,:,0] = -np.array(list(itertools.zip_longest(*jets.pt.to_list(), fillvalue=0))).T[:,:maxjets]
+            jet[:,:,1] = np.array(list(itertools.zip_longest(*jets.eta.to_list(), fillvalue=0))).T[:,:maxjets]
+            jet[:,:,2] = np.array(list(itertools.zip_longest(*jets.phi.to_list(), fillvalue=0))).T[:,:maxjets]
+            jet[:,:,3] = np.array(list(itertools.zip_longest(*jets.E.to_list(), fillvalue=0))).T[:,:maxjets]
+            jet[:,:,4] = np.array(list(itertools.zip_longest(*jets.px.to_list(), fillvalue=0))).T[:,:maxjets]
+            jet[:,:,5] = np.array(list(itertools.zip_longest(*jets.py.to_list(), fillvalue=0))).T[:,:maxjets]
+            jet[:,:,6] = np.array(list(itertools.zip_longest(*jets.pz.to_list(), fillvalue=0))).T[:,:maxjets]
+            return jet
+        
+        # def _take_all_jets(jets, max_num_jets):
+        #     all_jets = []
+        #     for event in jets:
+        #         event_jets = []
+        #         for i in range(max_num_jets):
+        #             if i < len(event):
+        #                 jet_info = [-event[i].pt,
+        #                             event[i].eta,
+        #                             event[i].phi,
+        #                             event[i].E,
+        #                             event[i].px,
+        #                             event[i].py,
+        #                             event[i].pz
+        #                         ]
+        #             else:
+        #                 jet_info = [0, 0, 0, 0, 0, 0, 0]
+        #             event_jets.append(jet_info)
+        #         all_jets.append(event_jets)
+        #     return np.array(all_jets)
             
-            jets["pt"] = -np.sqrt(jets["px"]**2 + jets["py"]**2)
-            jets["phi"] = np.arctan2(jets["py"],jets["px"])
-            jets["eta"] = np.arcsinh(jets["pz"]/jets["pt"])
-            jets = fastjet.sorted_by_pt(jets)
+        #dataloaders[dataloader_name].jet_breit = _take_leading_jet(jets)
 
-            def _take_leading_jet(jets):
-                jet = np.zeros((data.event.shape[0],4))
-                jet[:,0] = -np.array(list(itertools.zip_longest(*jets.pt.to_list(), fillvalue=0))).T[:,0]
-                jet[:,1] = np.array(list(itertools.zip_longest(*jets.eta.to_list(), fillvalue=0))).T[:,0]
-                jet[:,2] = np.array(list(itertools.zip_longest(*jets.phi.to_list(), fillvalue=0))).T[:,0]
-                jet[:,3] = np.array(list(itertools.zip_longest(*jets.E.to_list(), fillvalue=0))).T[:,0]
-                return jet
+        max_num_jets = 4
+        dataloaders[dataloader_name].all_jets_breit = _take_all_jets(jets, max_num_jets)
 
+        def calculate_zjet(jet_data, event):
+            Q_array = np.sqrt(np.exp(event[:,0]))
 
-            def _take_all_jets(jets,maxjets = 5):
-                
-                jet = np.zeros((data.event.shape[0],maxjets,7))
-                jet[:,:,0] = -np.array(list(itertools.zip_longest(*jets.pt.to_list(), fillvalue=0))).T[:,:maxjets]
-                jet[:,:,1] = np.array(list(itertools.zip_longest(*jets.eta.to_list(), fillvalue=0))).T[:,:maxjets]
-                jet[:,:,2] = np.array(list(itertools.zip_longest(*jets.phi.to_list(), fillvalue=0))).T[:,:maxjets]
-                jet[:,:,3] = np.array(list(itertools.zip_longest(*jets.E.to_list(), fillvalue=0))).T[:,:maxjets]
-                jet[:,:,4] = np.array(list(itertools.zip_longest(*jets.px.to_list(), fillvalue=0))).T[:,:maxjets]
-                jet[:,:,5] = np.array(list(itertools.zip_longest(*jets.py.to_list(), fillvalue=0))).T[:,:maxjets]
-                jet[:,:,6] = np.array(list(itertools.zip_longest(*jets.pz.to_list(), fillvalue=0))).T[:,:maxjets]
-                return jet
-            
-            # def _take_all_jets(jets, max_num_jets):
-            #     all_jets = []
-            #     for event in jets:
-            #         event_jets = []
-            #         for i in range(max_num_jets):
-            #             if i < len(event):
-            #                 jet_info = [-event[i].pt,
-            #                             event[i].eta,
-            #                             event[i].phi,
-            #                             event[i].E,
-            #                             event[i].px,
-            #                             event[i].py,
-            #                             event[i].pz
-            #                         ]
-            #             else:
-            #                 jet_info = [0, 0, 0, 0, 0, 0, 0]
-            #             event_jets.append(jet_info)
-            #         all_jets.append(event_jets)
-            #     return np.array(all_jets)
-                
-            #dataloaders[dataloader_name].jet_breit = _take_leading_jet(jets)
+            n = np.array([0, 0, 1, 1], dtype=np.float32)
+            z_jet = []
 
-            max_num_jets = 4
-            dataloaders[dataloader_name].all_jets_breit = _take_all_jets(jets, max_num_jets)
-
-            def calculate_zjet(jet_data, event):
-                Q_array = np.sqrt(np.exp(event[:,0]))
-
-                n = np.array([0, 0, 1, 1], dtype=np.float32)
-                z_jet = []
-
-                jet_px = jet_data[:, :, 4]
-                jet_py = jet_data[:, :, 5]
-                jet_pz = jet_data[:, :, 6]
-                jet_E = jet_data[:, :, 3]
-                mask = (jet_px!=0) & (jet_py!=0) & (jet_pz!=0) & (jet_E!=0)
-                jet_px = ak.mask(jet_px, mask)
-                jet_py = ak.mask(jet_py, mask)
-                jet_pz = ak.mask(jet_pz, mask)
-                jet_E = ak.mask(jet_E, mask)
-                numerator = n[3]*jet_E- n[0]*jet_px - n[1]*jet_py - n[2]*jet_pz
-                counts = ak.num(numerator)
-                Q_array = np.repeat(Q_array, counts)
-                z_jet = ak.flatten(numerator)/Q_array
-                z_jet = np.array(ak.fill_none(ak.unflatten(z_jet, counts), 0))
-                z_jet = z_jet.reshape(z_jet.shape[0], z_jet.shape[1], 1)
-                jet_data = np.concatenate((jet_data, z_jet), axis=2)
-                return jet_data
-            dataloaders[dataloader_name].all_jets_breit = calculate_zjet(dataloaders[dataloader_name].all_jets_breit, dataloaders[dataloader_name].event)
+            jet_px = jet_data[:, :, 4]
+            jet_py = jet_data[:, :, 5]
+            jet_pz = jet_data[:, :, 6]
+            jet_E = jet_data[:, :, 3]
+            mask = (jet_px!=0) & (jet_py!=0) & (jet_pz!=0) & (jet_E!=0)
+            jet_px = ak.mask(jet_px, mask)
+            jet_py = ak.mask(jet_py, mask)
+            jet_pz = ak.mask(jet_pz, mask)
+            jet_E = ak.mask(jet_E, mask)
+            numerator = n[3]*jet_E- n[0]*jet_px - n[1]*jet_py - n[2]*jet_pz
+            counts = ak.num(numerator)
+            Q_array = np.repeat(Q_array, counts)
+            z_jet = ak.flatten(numerator)/Q_array
+            z_jet = np.array(ak.fill_none(ak.unflatten(z_jet, counts), 0))
+            z_jet = z_jet.reshape(z_jet.shape[0], z_jet.shape[1], 1)
+            jet_data = np.concatenate((jet_data, z_jet), axis=2)
+            return jet_data
+        dataloaders[dataloader_name].all_jets_breit = calculate_zjet(dataloaders[dataloader_name].all_jets_breit, dataloaders[dataloader_name].event)
     
     
 def plot_event(flags, dataloaders, data_weights, version, nbins=10):
