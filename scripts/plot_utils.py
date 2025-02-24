@@ -1055,9 +1055,9 @@ def cluster_breit(flags,dataloaders):
 
             # Following def in 2312.07655
             theta_c = 2 * math.atan( math.exp( - cons.eta() ) )
-            delta_theta =  theta_P - theta_c
-            # entries.append( x_B * (cons_E[i] / P[3]) * math.log( math.tan( abs(delta_theta/2) ) ) ) 
-            entries.append( x_B * (cons_E[i] / P[3]) * delta_theta/2 ) 
+            delta_theta =  theta_P - theta_c  # want cons polar angle wrt the proton
+            entries.append( x_B * (cons_E[i] / P[3]) * math.log( math.tan( abs(delta_theta/2) ) ) ) 
+            # entries.append( x_B * (cons_E[i] / P[3]) * delta_theta/2 ) 
 
         # print("EEC entries: ", entries)
         # input()
@@ -1449,7 +1449,8 @@ def plot_observable(flags, var, dataloaders, version):
 
     # Set plot limits and save
     ax.set_ylim(info.ylow, info.yhigh)
-    fig.savefig(f'../plots/{version}_{var}.pdf')
+    # fig.savefig(f'../plots/{version}_{var}.pdf')
+    fig.savefig(f'/plots/{version}_{var}.pdf')
 
 
         
