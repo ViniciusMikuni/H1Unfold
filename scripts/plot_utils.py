@@ -999,10 +999,10 @@ def cluster_breit(flags,dataloaders):
             if i < len(eec):
                 eec_info = [ eec[i] ]  # make it a one-element list for plotting purpose
             else:
-                eec_info = [0]
+                eec_info = [0] # zero padding for multigpu
             eec_array.append(eec_info)
 
-        return np.array(eec_array)
+        return np.array(eec_array) # for event i
 
     def calculate_eec(jet, q, i, event, scattered_electron):
 
@@ -1015,17 +1015,18 @@ def cluster_breit(flags,dataloaders):
         scattered_electron_momentum = np.sqrt(scattered_electron["px"]**2 + scattered_electron["py"]**2 + scattered_electron["pz"]**2)
         scattered_electron_theta = np.arccos(scattered_electron["pz"]/scattered_electron_momentum)
 
-        # Bjorken x (invariant wrt frames) using the ISigma method from table 1 in https://arxiv.org/pdf/2110.05505
-        x_B = scattered_electron["E"] * np.divide( 1 + np.cos(scattered_electron_theta), 2*y*920 ) # also need to divide by E_proton
-
-        # Bjorken x (invariant wrt frames) using 2312.07655 (I think equivalent with the above..)
-        # P = np.array([0, 0, 920, 920], dtype=np.float32) # 920 GeV is proton beam energy in lab frame
-        # P_dot_q = P[3]*q[3] - P[0]*q[0] - P[1]*q[1] - P[2]*q[2]
-        # x_B =  Q2[i] / (2 * P_dot_q)  # for event i
-
+        # Bjorken x using the ISigma method from table 1 in https://arxiv.org/pdf/2110.05505
+        # x_B = scattered_electron["E"] * np.divide( 1 + np.cos(scattered_electron_theta), 2*y*920 ) # also need to divide by E_proton
         # Breit frame proton 4-momentum & polar angle for event i
-        P = np.divide(Q[i], 2*x_B[i]) * np.array([1, 0, 0, 1], dtype=np.float32)
-        # P = ( Q[i] / 2 * x_B) * np.array([1, 0, 0, 1], dtype=np.float32)
+        # P = np.divide(Q[i], 2*x_B[i]) * np.array([1, 0, 0, 1], dtype=np.float32)
+        # theta_P = math.acos( P[2] / np.linalg.norm(P) )  # arccos( p_z / |p| )
+
+        # Bjorken x using 2312.07655 (seems equivalent with the above..)
+        P = np.array([0, 0, 920, 920], dtype=np.float32) # 920 GeV is proton beam energy in lab frame
+        P_dot_q = P[3]*q[3] - P[0]*q[0] - P[1]*q[1] - P[2]*q[2]
+        x_B =  Q2[i] / (2 * P_dot_q)  # for event i
+        # Breit frame proton 4-momentum & polar angle for event i
+        P = ( Q[i] / 2 * x_B) * np.array([1, 0, 0, 1], dtype=np.float32)
         theta_P = math.acos( P[2] / np.linalg.norm(P) )  # arccos( p_z / |p| )
 
         # convert jet constituents from pt-eta-phi-mass to cartesian...
@@ -1034,7 +1035,7 @@ def cluster_breit(flags,dataloaders):
             cons_px.append( cons.pt() * math.cos(cons.phi()) )
             cons_py.append( cons.pt() * math.sin(cons.phi()) )
             cons_pz.append( cons.pt() * math.sinh(cons.eta()) )
-            cons_E.append( math.sqrt( cons.m()**2 + cons.pt()**2 * math.cosh(cons.eta())**2 ) )
+            cons_E.append( math.sqrt( cons.m()**2 + cons.pt()**2 * math.cosh(cons.eta())**2 ) ) # from google..
 
         # denomenator of the normalization for EEC in DIS
         px_sum = np.sum(cons_px)
@@ -1046,15 +1047,17 @@ def cluster_breit(flags,dataloaders):
         entries = []  # a list of EEC entries for the leading jet in event i
         for i, cons in enumerate( jet.constituents()):
 
+            # Following def in 2102.05669
+            # P_dot_pc = P[3]*cons_E[i] - P[0]*cons_px[i] - P[1]*cons_py[i] - P[2]*cons_pz[i]
+            # z = P_dot_pc / P_dot_psum # normalization factor
             # theta_c = 2 * math.atan( math.exp( - cons.eta() ) )
-            # delta_theta =  theta_P - theta_c
-            # print(delta_theta)
-            # entries.append( x_B * (cons_E[i] / P[3]) * math.log( math.tan( abs(delta_theta/2) ) ) ) # following def in 2312.07655
+            # entries.append( ( math.cos(theta_P) - math.cos(theta_c) ) / z ) # following def in 2102.05669
 
-            P_dot_pc = P[3]*cons_E[i] - P[0]*cons_px[i] - P[1]*cons_py[i] - P[2]*cons_pz[i]
-            z = P_dot_pc / P_dot_psum # normalization factor
+            # Following def in 2312.07655
             theta_c = 2 * math.atan( math.exp( - cons.eta() ) )
-            entries.append( ( math.cos(theta_P) - math.cos(theta_c) ) / z ) # following def in 2102.05669
+            delta_theta =  theta_P - theta_c
+            # entries.append( x_B * (cons_E[i] / P[3]) * math.log( math.tan( abs(delta_theta/2) ) ) ) 
+            entries.append( x_B * (cons_E[i] / P[3]) * delta_theta/2 ) 
 
         # print("EEC entries: ", entries)
         # input()
@@ -1090,7 +1093,7 @@ def cluster_breit(flags,dataloaders):
                 list_of_eec.append(leading_jet_eec)
 
             # Store the jet features in the dataloader
-            data.eec = np.array(list_of_eec, dtype=np.float32)
+            data.eec = np.array(list_of_eec, dtype=np.float32)  # (n_event, n_max_parts, 1)
             # data.all_jets = np.array(list_of_all_jets, dtype=np.float32)
             #print(f"----------------- Done working with {dataloader_name} -------------------")
 
