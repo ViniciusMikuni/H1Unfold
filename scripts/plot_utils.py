@@ -95,7 +95,8 @@ def cluster_jets(dataloaders):
     """
     import fastjet
     import numpy as np
-
+    if hvd.rank() == 0:
+        print("Lab clustering fastjet: ", fastjet.__file__)
     jetdef = fastjet.JetDefinition(fastjet.kt_algorithm, 1.0)
 
     def _convert_kinematics(part, event, mask):
@@ -930,6 +931,8 @@ def cluster_breit(dataloaders, clustering_type = "kt"):
             subprocess.run([f"rm {breit_file_name} {jet_file_name}"], shell=True)
 
         else:
+            if hvd.rank() == 0:
+                print("Breit kt clustering fastjet: ",fastjet.__file__)
             jetdef = fastjet.JetDefinition(fastjet.kt_algorithm, 1.0)
             array = ak.Array(events)
             cluster = fastjet.ClusterSequence(array, jetdef)
