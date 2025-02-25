@@ -105,7 +105,7 @@ def main():
     gc.collect()
     gather_data(dataloaders)
 
-    replace_string = f"unfolded_{flags.niter}_testingGPUs"
+    replace_string = f"unfolded_{flags.niter}"
     if flags.reco:
         replace_string += '_reco'
     if flags.bootstrap:
