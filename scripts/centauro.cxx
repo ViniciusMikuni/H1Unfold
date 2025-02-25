@@ -7,12 +7,9 @@
 #include "fastjet/contrib/Centauro.hh"
 #include "fastjet/EECambridgePlugin.hh"
 
-#include "TH1D.h"
-#include "TFile.h"
-#include "TMath.h"
-#include "TTreeReader.h"
-#include "TTreeReaderArray.h"
-#include "TCanvas.h"
+#include "H5Cpp.h"
+
+using namespace H5;
 
 int main(int argc, char* argv[])
 {
@@ -57,7 +54,7 @@ int main(int argc, char* argv[])
         std::cout<<"Output file is "<<outputFileName<<std::endl;
     }
 
-    Double_t jet_radius;
+    double jet_radius;
     if (args.find("--jet_radius") == args.end())
     {
         jet_radius = 0.8;
@@ -70,82 +67,103 @@ int main(int argc, char* argv[])
     }
 
 
-    TFile *breit_file = TFile::Open(inputFileName.c_str());
+    H5File file(inputFileName, H5F_ACC_RDONLY);
 
-    TTreeReader particle_tree("particles", breit_file);
-    TTreeReaderArray<Double_t> px(particle_tree, "px");
-    TTreeReaderArray<Double_t> py(particle_tree, "py");
-    TTreeReaderArray<Double_t> pz(particle_tree, "pz");
-    TTreeReaderArray<Double_t> energy(particle_tree, "energy");
-
+    DataSet dataset = file.openDataSet("breit_particles");
     fastjet::contrib::CentauroPlugin *centauro_plugin = new fastjet::contrib::CentauroPlugin(jet_radius);
     
-    std::vector<Double_t> jet_eta;
-    std::vector<Double_t> jet_px;
-    std::vector<Double_t> jet_py;
-    std::vector<Double_t> jet_pz;
-    std::vector<Double_t> jet_E;
-    std::vector<Double_t> jet_phi;
-    std::vector<Double_t> jet_pt;
-    
+    // Get dataspace and dimensions
+    DataSpace dataspace = dataset.getSpace();
+    hsize_t dims[3];  // Expecting a 3D dataset
+    dataspace.getSimpleExtentDims(dims, nullptr);
 
-    TFile* file = TFile::Open(outputFileName.c_str(), "RECREATE");
-    TTree* tree = new TTree("jets", "");
+    hsize_t num_events = dims[0];
+    hsize_t num_particles = dims[1];
 
-    tree->Branch("eta", &jet_eta);
-    tree->Branch("px", &jet_px);
-    tree->Branch("py", &jet_py);
-    tree->Branch("pz", &jet_pz);
-    tree->Branch("E", &jet_E);
-    tree->Branch("pt", &jet_pt);
-    tree->Branch("phi", &jet_phi);
 
-    while (particle_tree.Next()) 
-    {
+    // Vector to store the number of jets per event
+    std::vector<size_t> jet_counts(num_events, 0);
+
+    // Read each event and cluster jets
+    hsize_t offset[3] = {0, 0, 0};
+    hsize_t count[3] = {1, num_particles, 4};
+    DataSpace memspace(2, &dims[1]);
+
+    std::vector<std::vector<std::vector<double>>> jet_data(num_events); // 3D structure
+
+    for (hsize_t i = 0; i < num_events; i++) {
+        offset[0] = i;
+        dataspace.selectHyperslab(H5S_SELECT_SET, count, offset);
+
+        // Read event particles
+        std::vector<double> event_data(num_particles * 4);
+        dataset.read(event_data.data(), PredType::NATIVE_DOUBLE, memspace, dataspace);
+
+        // Convert to PseudoJets
         std::vector<fastjet::PseudoJet> particle_vector;
-        for (int i = 0; i < px.GetSize(); i++)
-        {
-            fastjet::PseudoJet particle(px[i], py[i], pz[i], energy[i]);
-            particle_vector.push_back(particle);
+        for (size_t j = 0; j < num_particles; j++) {
+            double px = event_data[j * 4 + 0];
+            double py = event_data[j * 4 + 1];
+            double pz = event_data[j * 4 + 2];
+            double E = event_data[j * 4 + 3];
+            if (E>0)
+            {
+                fastjet::PseudoJet particle(
+                    px,
+                    py,
+                    pz,
+                    E
+                );
+                particle_vector.push_back(particle);
+            }
+            
         }
-        
+
+        // Perform clustering
         fastjet::JetDefinition jet_def(centauro_plugin);
         fastjet::ClusterSequence clust_seq(particle_vector, jet_def);
 
-        std::vector<fastjet::PseudoJet> jets = clust_seq.inclusive_jets(0);
-        // std::vector<fastjet::PseudoJet> jets;
-        // for(auto& jet : all_jets)
-        // {
-            // jets.push_back(jet);
-            // std::vector<fastjet::PseudoJet> constituents = jet.constituents();
+        std::vector<fastjet::PseudoJet> jets = sorted_by_pt(clust_seq.inclusive_jets(0));
 
-            // if(constituents.size() > 0)
-            // {
-            //     jets.push_back(jet);
-            // }
-        // }
-
-        std::vector<fastjet::PseudoJet> sortedJets = sorted_by_pt(jets);
-        jet_eta.clear();
-        jet_px.clear();
-        jet_py.clear();
-        jet_pz.clear();
-        jet_E.clear();
-        jet_pt.clear();
-        jet_phi.clear();
-        
-        for (unsigned int i=0; i<sortedJets.size(); i++){
-            const fastjet::PseudoJet &jet = sortedJets[i];
-            jet_eta.push_back(jet.pseudorapidity());
-            jet_px.push_back(jet.px());
-            jet_py.push_back(jet.py());
-            jet_pz.push_back(jet.pz());
-            jet_E.push_back(jet.E());
-            jet_pt.push_back(-1*jet.pt());
-            jet_phi.push_back(jet.phi());
+        // Store jet attributes
+        std::vector<std::vector<double>> event_jets;
+        for (const auto &jet : jets) {
+            event_jets.push_back({
+                jet.pt(), jet.eta(), jet.phi(), jet.E(),
+                jet.px(), jet.py(), jet.pz()
+            });
         }
-        tree->Fill();
+
+        jet_counts[i] = event_jets.size();
+        jet_data[i] = event_jets;
     }
-    tree->Write();
-    file->Close();
+
+    // Find the max number of jets across all events
+    hsize_t max_jets = 0;
+    for (size_t i = 0; i < num_events; i++) {
+        max_jets = std::max(max_jets, static_cast<hsize_t>(jet_counts[i]));
+    }
+
+    // Prepare zero-padded 3D array for HDF5
+    std::vector<double> flat_data(num_events * max_jets * 7, 0.0);
+    for (size_t i = 0; i < num_events; i++) {
+        for (size_t j = 0; j < jet_data[i].size(); j++) {
+            for (size_t k = 0; k < 7; k++) {
+                flat_data[i * max_jets * 7 + j * 7 + k] = jet_data[i][j][k];
+            }
+        }
+    }
+
+    H5File output_file(outputFileName, H5F_ACC_TRUNC);
+
+    hsize_t output_dims[3] = {num_events, max_jets, 7};
+    DataSpace output_dataspace(3, output_dims);
+
+    DataSet output_dataset = output_file.createDataSet(
+        "jets", PredType::NATIVE_DOUBLE, output_dataspace
+    );
+
+    // Write zero-padded 3D array to HDF5
+    output_dataset.write(flat_data.data(), PredType::NATIVE_DOUBLE);
+    
 }

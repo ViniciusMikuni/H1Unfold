@@ -9,8 +9,8 @@ import warnings
 import awkward as ak
 import uproot
 import subprocess
-
-
+import json
+import h5py as h5
 
 def get_sample_names(use_sys, sys_list = ['sys0','sys1','sys5','sys7','sys11'],
                      nominal = 'Rapgap',period = 'Eplus0607'):
@@ -899,58 +899,37 @@ def cluster_breit(dataloaders, clustering_type = "kt"):
             events.append([{"px": part_vec.px, "py": part_vec.py, "pz": part_vec.pz, "E": part_vec.E} for part_vec in event])
         
         if clustering_type == "centauro":
+            # Saving Breit particles to an h5 file so we can cluster in C++ with Centauro
             px, py, pz, energy = [], [], [], []
+            max_num_particles = len(max(events, key=len))
+
             for event in events:
                 px.append([particle_vector["px"] for particle_vector in event])
                 py.append([particle_vector["py"] for particle_vector in event])
                 pz.append([particle_vector["pz"] for particle_vector in event])
                 energy.append([particle_vector["E"] for particle_vector in event])
-            px = ak.Array(px)
-            py = ak.Array(py)
-            pz = ak.Array(pz)
-            energy = ak.Array(energy)
-            breit_file_name = f"breit_particles_{dataloader_name}_{hvd.rank()}.root"
-            jet_file_name = f"centauro_jets_{dataloader_name}_{hvd.rank()}.root"
-            with uproot.recreate(breit_file_name) as file:
-                file["particles"] = {"px": px, "py": py, "pz": pz, "energy": energy}
+
+            breit_particles = np.zeros((len(events),max_num_particles,4))
+            breit_particles[:,:,0] = np.array(list(itertools.zip_longest(*px, fillvalue=0))).T[:,:max_num_particles]
+            breit_particles[:,:,1] = np.array(list(itertools.zip_longest(*py, fillvalue=0))).T[:,:max_num_particles]
+            breit_particles[:,:,2] = np.array(list(itertools.zip_longest(*pz, fillvalue=0))).T[:,:max_num_particles]
+            breit_particles[:,:,3] = np.array(list(itertools.zip_longest(*energy, fillvalue=0))).T[:,:max_num_particles]
             
-            print(f"cp ./run_centauro.sh ./run_centauro_{hvd.rank()}.sh")
+            breit_file_name = f"breit_particles_{dataloader_name[:-3]}_{hvd.rank()}.h5"
+            jet_file_name = f"centauro_jets_{dataloader_name[:-3]}_{hvd.rank()}.h5"
+            with h5.File(breit_file_name,'w') as fh5:
+                dset = fh5.create_dataset('breit_particles', data=breit_particles)
+            
+            # To use multiple GPUs, make a copy of the scripts for each GPU
             subprocess.run([f"cp ./run_centauro.sh ./run_centauro_{hvd.rank()}.sh"], shell=True)
-            print(f"./run_centauro_{hvd.rank()}.sh --input {breit_file_name} --output {jet_file_name} --jet_radius {1.0} --GPU_ID {hvd.rank()}")
             subprocess.run([f"./run_centauro_{hvd.rank()}.sh --input {breit_file_name} --output {jet_file_name} --jet_radius {1.0} --GPU_ID {hvd.rank()}"], shell=True)
             subprocess.run([f"rm ./run_centauro_{hvd.rank()}.sh"], shell=True)
-            with uproot.open(f"{jet_file_name}:jets") as out:
-                jets = out.arrays(["pt", "eta", "phi", "E", "px", "py", "pz"])
-            def transform_events(events):
-                transformed_events = []
-                
-                for event in events:
-                    jets = []
-                    for i in range(len(event["pt"])):
-                        pt = event["pt"][i]
-                        eta = event["eta"][i]
-                        px = event["px"][i]
-                        py = event["py"][i]
-                        pz = event["pz"][i]
-                        E = event["E"][i]
-                        phi = event["phi"][i]
-                        
-                        
-                        jet = {
-                            "px": px,
-                            "py": py,
-                            "pz": pz,
-                            "E": E,
-                            "pt": pt,
-                            "phi": phi,
-                            "eta": eta
-                        }
-                        jets.append(ak.Record(jet))
 
-                    transformed_events.append(ak.Array(jets))
-                
-                return ak.Array(transformed_events)
-            jets = transform_events(jets)
+            # The Centauro jets are already zero padded so we don't need anymore processing
+            # Take the first 40 jets, which should be more than enough
+            with h5.File(jet_file_name, "r") as f:
+                dataloaders[dataloader_name].all_jets_breit_centauro = f["jets"][:, :40]
+            subprocess.run([f"rm {breit_file_name} {jet_file_name}"], shell=True)
 
         else:
             jetdef = fastjet.JetDefinition(fastjet.kt_algorithm, 1.0)
@@ -1007,9 +986,8 @@ def cluster_breit(dataloaders, clustering_type = "kt"):
         #dataloaders[dataloader_name].jet_breit = _take_leading_jet(jets)
 
         max_num_jets = 4
-        if clustering_type == "centauro":
-            dataloaders[dataloader_name].all_jets_breit_centauro = _take_all_jets(jets, 40)
-        else:
+        
+        if clustering_type != "centauro":
             dataloaders[dataloader_name].all_jets_breit = _take_all_jets(jets, max_num_jets)
         def calculate_zjet(jet_data, event):
             Q_array = np.sqrt(np.exp(event[:,0]))
@@ -1233,7 +1211,6 @@ def plot_observable(flags, var, dataloaders, version):
             Rapgap_mask = dataloaders["Rapgap"][var]>0
         else:
             Rapgap_mask = dataloaders["Rapgap"]["jet_pt"]>0
-        print(len(dataloaders["Rapgap"][var]))
         Rapgap_data = ak.drop_none(ak.mask(dataloaders["Rapgap"][var], Rapgap_mask))
         num_Rapgap_jets_per_event = ak.count(Rapgap_data, axis=1)
         Rapgap_data = ak.flatten(Rapgap_data)

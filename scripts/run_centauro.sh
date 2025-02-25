@@ -1,10 +1,10 @@
 #!/bin/bash
-source /home/ucr/root_install/bin/thisroot.sh
 
-input_file_name="dummy_input.root"
-output_file_name="dummy_output.root"
+input_file_name="dummy_input.h5"
+output_file_name="dummy_output.h5"
 jet_radius=1.0
 GPU_ID=0
+
 while [ True ]; do
 if [ "$1" = "--input" ]; then
    input_file_name=$2
@@ -22,11 +22,12 @@ else
    break
 fi
 done
-echo ${input_file_name}
-echo ${output_file_name}
-echo ${jet_radius}
 cp ./centauro.cxx ./centauro_${GPU_ID}.cxx
-g++ centauro_${GPU_ID}.cxx -o centauro_${GPU_ID} `/home/ryan/fastjet-install/bin/fastjet-config --cxxflags --libs --plugins` `root-config --cflags --glibs` -lCentauro
-echo ./centauro_${GPU_ID} --input "${input_file_name}" --output "${output_file_name}" --jet_radius "${jet_radius}"
+g++ centauro_${GPU_ID}.cxx -o centauro_${GPU_ID} \
+    -I/global/common/software/nersc9/tensorflow/2.15.0/include/ \
+    -L/global/common/software/nersc9/tensorflow/2.15.0/lib/ \
+    `/global/cfs/cdirs/m3246/rmilton/fastjet-3.4.3-install/bin/fastjet-config --cxxflags --libs --plugins` \
+    -lhdf5_cpp -lhdf5 -lCentauro
+export LD_LIBRARY_PATH=/global/common/software/nersc9/tensorflow/2.15.0/lib:$LD_LIBRARY_PATH
 ./centauro_${GPU_ID} --input "${input_file_name}" --output "${output_file_name}" --jet_radius "${jet_radius}"
 rm ./centauro_${GPU_ID} ./centauro_${GPU_ID}.cxx
