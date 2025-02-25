@@ -997,7 +997,7 @@ def cluster_breit(flags,dataloaders):
         eec_array = []
         for i in range(max_num_parts):
             if i < len(eec):
-                eec_info = [ eec[i], E_wgt ]  # make it a one-element list for plotting purpose
+                eec_info = [ eec[i], E_wgt[i] ]  # make it a one-element list for plotting purpose
             else:
                 eec_info = [0, 0] # zero padding for multigpu
             eec_array.append(eec_info)
