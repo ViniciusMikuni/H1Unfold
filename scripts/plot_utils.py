@@ -1045,6 +1045,7 @@ def cluster_breit(flags,dataloaders):
         P_dot_psum = P[3]*E_sum - P[0]*px_sum - P[1]*py_sum - P[2]*pz_sum
 
         entries = []  # a list of EEC entries for the leading jet in event i
+        # tan = []
         for i, cons in enumerate( jet.constituents()):
 
             # Following def in 2102.05669
@@ -1054,10 +1055,14 @@ def cluster_breit(flags,dataloaders):
             # entries.append( ( math.cos(theta_P) - math.cos(theta_c) ) / z ) # following def in 2102.05669
 
             # Following def in 2312.07655
-            theta_c = 2 * math.atan( math.exp( - cons.eta() ) )
+            theta_c = 2 * math.atan( math.exp( - cons.eta() ) )  # from google..
             delta_theta =  theta_P - theta_c  # want cons polar angle wrt the proton
-            entries.append( x_B * (cons_E[i] / P[3]) * math.log( math.tan( abs(delta_theta/2) ) ) ) 
+
+            if x_B * (cons_E[i] / P[3]) != 0 :
+                entries.append( x_B * (cons_E[i] / P[3]) * math.log( math.tan( abs(delta_theta) ) ) ) 
+            # entries.append( x_B * (cons_E[i] / P[3]) * math.tan(delta_theta) ) 
             # entries.append( x_B * (cons_E[i] / P[3]) * delta_theta/2 ) 
+            # tan.append(math.tan( abs(delta_theta) ))
 
         # print("EEC entries: ", entries)
         # input()
@@ -1371,6 +1376,8 @@ def plot_observable(flags, var, dataloaders, version):
         Rapgap_data = ak.drop_none(ak.mask(dataloaders["Rapgap"][var], Rapgap_mask))
         num_Rapgap_parts_per_event = ak.count(Rapgap_data, axis=1)
         Rapgap_data = ak.flatten(Rapgap_data)
+        # print("EEC array to plot: ", Rapgap_data)
+        # input()
 
         weights[data_name] = np.repeat(dataloaders['Rapgap']['mc_weights'] * dataloaders['Rapgap'][weight_name], num_Rapgap_parts_per_event, axis=0)
         weights['Rapgap'] = np.repeat(dataloaders['Rapgap']['mc_weights'], num_Rapgap_parts_per_event, axis=0)
@@ -1399,6 +1406,8 @@ def plot_observable(flags, var, dataloaders, version):
         Djangoh_data = ak.drop_none(ak.mask(dataloaders["Djangoh"][var], Djangoh_mask))
         num_Djangoh_jets_per_event = ak.count(Djangoh_data, axis=1)
         Djangoh_data = ak.flatten(Djangoh_data)
+        # print("EEC array to plot: ", Rapgap_data)
+        # input()
 
         weights['Djangoh'] = np.repeat(dataloaders['Djangoh']['mc_weights'], num_Djangoh_jets_per_event, axis=0)
         feed_dict['Djangoh'] = Djangoh_data
@@ -1450,7 +1459,7 @@ def plot_observable(flags, var, dataloaders, version):
     # Set plot limits and save
     ax.set_ylim(info.ylow, info.yhigh)
     # fig.savefig(f'../plots/{version}_{var}.pdf')
-    fig.savefig(f'/plots/{version}_{var}.pdf')
+    fig.savefig(f'plots/{version}_{var}.pdf')
 
 
         

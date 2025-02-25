@@ -76,7 +76,7 @@ dedicated_binning = {
     'jet_tau10': np.array([-4.00,-3.15,-2.59,-2.18,-1.86,-1.58,-1.29,-1.05,-0.81,-0.61,0.00]),
     'zjet' : np.linspace(0.2, 1, 10),
     'zjet_breit' : np.linspace(0.2, 1, 10),
-    'eec' : np.linspace(-1, 1, 40),
+    'eec' : np.linspace(-4, 0.5, 20),
 }
 
 def get_log(var):
@@ -102,7 +102,7 @@ def get_ylim(var):
     if 'tau' in var:
         return 0, 1.2
     if 'eec' in var:
-        return 0, 1
+        return 0, 2.5
     if var == 'zjet':
         return 0,8
     if var == 'zjet_breit':

@@ -76,8 +76,8 @@ dedicated_binning = {
     'jet_eta':np.linspace(-1,2.5,8),
     'jet_phi':np.linspace(-3.14,3.14,8),
 
-    'gen_eec':np.linspace(-1,1,20),
-    'eec':np.linspace(-1,1,20),
+    'gen_eec':np.linspace(-10,10,80),
+    'eec':np.linspace(-10,10,80),
 
 
     'gen_jet_charge':np.array([-1.00,-0.88,-0.76,-0.62,-0.47,-0.33,-0.21,-0.11,-0.03,0.03,0.11,0.19,0.29,0.41,0.56,0.70,0.84,1.00]),
