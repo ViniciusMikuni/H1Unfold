@@ -20,8 +20,8 @@ def get_sample_names(niter, use_sys, sys_list = ['sys0','sys1','sys5','sys7','sy
                      nominal = 'Rapgap',period = 'Eplus0607',reco=False,bootstrap=False,nboot=1):
     add_string = '_reco' if reco else ''
     mc_file_names = {
-        'Rapgap':f'Rapgap_{period}_unfolded_{niter}{add_string}_chargefixed.h5',
-        'Djangoh':f'Djangoh_{period}_unfolded_{niter}{add_string}_chargefixed.h5',
+        'Rapgap':f'Rapgap_{period}_unfolded_{niter}{add_string}.h5',
+        'Djangoh':f'Djangoh_{period}_unfolded_{niter}{add_string}.h5',
     }
     if reco:
         mc_file_names['data'] = f'data_{period}_unfolded_{niter}{add_string}.h5'
