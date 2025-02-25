@@ -7,9 +7,7 @@ import utils
 import horovod.tensorflow as hvd
 import warnings
 import awkward as ak
-import uproot
 import subprocess
-import json
 import h5py as h5
 
 def get_sample_names(use_sys, sys_list = ['sys0','sys1','sys5','sys7','sys11'],
@@ -1220,6 +1218,7 @@ def plot_observable(flags, var, dataloaders, version):
         feed_dict[data_name] = Rapgap_data
         feed_dict['Rapgap'] = Rapgap_data
     else:
+        # Need to use the ~np.isnan mask to make this work for Delta z
         weights[data_name] = (dataloaders['Rapgap']['mc_weights'] * dataloaders['Rapgap'][weight_name])[~np.isnan(dataloaders['Rapgap'][var])]
         weights['Rapgap'] = dataloaders['Rapgap']['mc_weights'][~np.isnan(dataloaders['Rapgap'][var])]
         feed_dict[data_name] = dataloaders['Rapgap'][var][~np.isnan(dataloaders['Rapgap'][var])]
@@ -1230,7 +1229,6 @@ def plot_observable(flags, var, dataloaders, version):
             Djangoh_mask = dataloaders["Djangoh"][var]>0
         else:
             Djangoh_mask = dataloaders["Djangoh"]["jet_pt"]>0
-        print(len(dataloaders["Djangoh"][var]))
         Djangoh_data = ak.drop_none(ak.mask(dataloaders["Djangoh"][var], Djangoh_mask))
         num_Djangoh_jets_per_event = ak.count(Djangoh_data, axis=1)
         Djangoh_data = ak.flatten(Djangoh_data)
