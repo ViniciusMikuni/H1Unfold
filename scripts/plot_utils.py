@@ -1021,12 +1021,13 @@ def cluster_breit(flags,dataloaders):
         # P = np.divide(Q[i], 2*x_B[i]) * np.array([1, 0, 0, 1], dtype=np.float32)
         # theta_P = math.acos( P[2] / np.linalg.norm(P) )  # arccos( p_z / |p| )
 
+        ##### IMPORTANT: assuming [px, py, pz, E] here #####
         # Bjorken x using 2312.07655 (seems equivalent with the above..)
         P = np.array([0, 0, 920, 920], dtype=np.float32) # 920 GeV is proton beam energy in lab frame
         P_dot_q = P[3]*q[3] - P[0]*q[0] - P[1]*q[1] - P[2]*q[2]
         x_B =  Q2[i] / (2 * P_dot_q)  # for event i
         # Breit frame proton 4-momentum & polar angle for event i
-        P = ( Q[i] / 2 * x_B) * np.array([1, 0, 0, 1], dtype=np.float32)
+        P = ( Q[i] / 2 * x_B) * np.array([0, 0, 1, 1], dtype=np.float32)
         theta_P = math.acos( P[2] / np.linalg.norm(P) )  # arccos( p_z / |p| )
 
         # convert jet constituents from pt-eta-phi-mass to cartesian...
