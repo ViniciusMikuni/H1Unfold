@@ -988,23 +988,23 @@ def cluster_breit(flags,dataloaders):
         return boosted_vectors
     
 
-    def _take_leading_jet_eec(eec):
+    def _take_eec(eec, E_wgt):
         max_num_parts = 200
 
         if not eec:
-            return np.zeros((max_num_parts,1))
+            return np.zeros((max_num_parts,2))
 
         eec_array = []
         for i in range(max_num_parts):
             if i < len(eec):
-                eec_info = [ eec[i] ]  # make it a one-element list for plotting purpose
+                eec_info = [ eec[i], E_wgt ]  # make it a one-element list for plotting purpose
             else:
-                eec_info = [0] # zero padding for multigpu
+                eec_info = [0, 0] # zero padding for multigpu
             eec_array.append(eec_info)
 
         return np.array(eec_array) # for event i
 
-    def calculate_eec(jet, q, i, event, scattered_electron):
+    def calculate_eec(parts, q, i, event, scattered_electron):
 
         import math
 
@@ -1021,22 +1021,26 @@ def cluster_breit(flags,dataloaders):
         # P = np.divide(Q[i], 2*x_B[i]) * np.array([1, 0, 0, 1], dtype=np.float32)
         # theta_P = math.acos( P[2] / np.linalg.norm(P) )  # arccos( p_z / |p| )
 
-        ##### IMPORTANT: assuming [px, py, pz, E] here #####
+        ##### IMPORTANT: [px, py, pz, E] #####
         # Bjorken x using 2312.07655 (seems equivalent with the above..)
         P = np.array([0, 0, 920, 920], dtype=np.float32) # 920 GeV is proton beam energy in lab frame
         P_dot_q = P[3]*q[3] - P[0]*q[0] - P[1]*q[1] - P[2]*q[2]
         x_B =  Q2[i] / (2 * P_dot_q)  # for event i
         # Breit frame proton 4-momentum & polar angle for event i
-        P = ( Q[i] / 2 * x_B) * np.array([0, 0, 1, 1], dtype=np.float32)
-        theta_P = math.acos( P[2] / np.linalg.norm(P) )  # arccos( p_z / |p| )
+        P = Q[i] / (2 * x_B) * np.array([0, 0, 1, 1], dtype=np.float32)
+        theta_P = math.acos( 1 )  # arccos( p_z / |p3| ), just zero here
 
-        # convert jet constituents from pt-eta-phi-mass to cartesian...
+        # ONLY needed when doing jets: convert jet constituents from pt-eta-phi-mass to cartesian...
         cons_px, cons_py, cons_pz, cons_E = [], [], [], []
-        for cons in jet.constituents():
-            cons_px.append( cons.pt() * math.cos(cons.phi()) )
-            cons_py.append( cons.pt() * math.sin(cons.phi()) )
-            cons_pz.append( cons.pt() * math.sinh(cons.eta()) )
-            cons_E.append( math.sqrt( cons.m()**2 + cons.pt()**2 * math.cosh(cons.eta())**2 ) ) # from google..
+        for part in parts:
+            cons_px.append( part.px )
+            cons_py.append( part.py )
+            cons_pz.append( part.pz )
+            cons_E.append( part.E )  # from google..
+            # cons_px.append( cons.pt() * math.cos(cons.phi()) )
+            # cons_py.append( cons.pt() * math.sin(cons.phi()) )
+            # cons_pz.append( cons.pt() * math.sinh(cons.eta()) )
+            # cons_E.append( math.sqrt( cons.m()**2 + cons.pt()**2 * math.cosh(cons.eta())**2 ) ) # from google..
 
         # denomenator of the normalization for EEC in DIS
         px_sum = np.sum(cons_px)
@@ -1045,9 +1049,9 @@ def cluster_breit(flags,dataloaders):
         E_sum = np.sum(cons_E)
         P_dot_psum = P[3]*E_sum - P[0]*px_sum - P[1]*py_sum - P[2]*pz_sum
 
-        entries = []  # a list of EEC entries for the leading jet in event i
-        # tan = []
-        for i, cons in enumerate( jet.constituents()):
+        entries, E_wgt = [], []  # a list of EEC entries for the leading jet in event i
+        # for i, cons in enumerate( parts):
+        for part in parts:
 
             # Following def in 2102.05669
             # P_dot_pc = P[3]*cons_E[i] - P[0]*cons_px[i] - P[1]*cons_py[i] - P[2]*cons_pz[i]
@@ -1056,19 +1060,18 @@ def cluster_breit(flags,dataloaders):
             # entries.append( ( math.cos(theta_P) - math.cos(theta_c) ) / z ) # following def in 2102.05669
 
             # Following def in 2312.07655
-            theta_c = 2 * math.atan( math.exp( - cons.eta() ) )  # from google..
-            delta_theta =  theta_P - theta_c  # want cons polar angle wrt the proton
+            theta_c = math.atan( math.sqrt(part.px**2 + part.py**2) / part.pz) 
+            # theta_c = 2 * math.atan( math.exp( - cons.eta() ) )  # from google..
+            delta_theta =  theta_c - theta_P   # want cons polar angle wrt the proton
 
-            if x_B * (cons_E[i] / P[3]) != 0 :
-                entries.append( x_B * (cons_E[i] / P[3]) * math.log( math.tan( abs(delta_theta) ) ) ) 
-            # entries.append( x_B * (cons_E[i] / P[3]) * math.tan(delta_theta) ) 
-            # entries.append( x_B * (cons_E[i] / P[3]) * delta_theta/2 ) 
-            # tan.append(math.tan( abs(delta_theta) ))
+            # if x_B * (cons_E[i] / P[3]) != 0 :
+            entries.append(  math.log( math.tan( abs(delta_theta) ) ) ) 
+            E_wgt.append( x_B * (part.E / P[3]) )
 
         # print("EEC entries: ", entries)
         # input()
         # jet.eec = entries
-        return entries
+        return entries, E_wgt
 
     jetdef = fastjet.JetDefinition(fastjet.kt_algorithm, 1.0)
 
@@ -1081,32 +1084,33 @@ def cluster_breit(flags,dataloaders):
         # jets["phi"] = np.arctan2(jets["py"],jets["px"])
         # jets["eta"] = np.arcsinh(jets["pz"]/jets["pt"])
 
+        events = []
+        for event in boosted_vectors:
+            events.append([{"px": part_vec.px, "py": part_vec.py, "pz": part_vec.pz, "E": part_vec.E} for part_vec in event])
+
         if flags.eec:
             list_of_eec = []
-            for i, event in enumerate(boosted_vectors):
-                particles = [
-                    fastjet.PseudoJet(part_vec.E, part_vec.px, part_vec.py, part_vec.pz)
-                    for part_vec in event if np.abs(part_vec.E) != 0
-                ]
-
-                cluster = fastjet.ClusterSequence(particles, jetdef)
-                sorted_jets = fastjet.sorted_by_pt(cluster.inclusive_jets(ptmin=0))
+            # for i, particles in enumerate(events):
+            for i, particles in enumerate(boosted_vectors):
+                # particles = [
+                #     fastjet.PseudoJet(part_vec.E, part_vec.px, part_vec.py, part_vec.pz)
+                #     for part_vec in particles if np.abs(part_vec.E) != 0
+                # ]
+                # cluster = fastjet.ClusterSequence(particles, jetdef)
+                # sorted_jets = fastjet.sorted_by_pt(cluster.inclusive_jets(ptmin=0))
                 # Calculate EEC only for the leading jet
-                eec = calculate_eec(sorted_jets[0], q[i], i, data.event, electron_momentum)
+                # eec = calculate_eec(sorted_jets[0], q[i], i, data.event, electron_momentum)
 
-                # Take the leading jet's features
-                leading_jet_eec = _take_leading_jet_eec(eec)
-                list_of_eec.append(leading_jet_eec)
+                eec, E_wgt = calculate_eec(particles, q[i], i, data.event, electron_momentum)
+
+                # Take the angles & energy weights
+                list_of_eec.append( _take_eec(eec, E_wgt) )
 
             # Store the jet features in the dataloader
             data.eec = np.array(list_of_eec, dtype=np.float32)  # (n_event, n_max_parts, 1)
             # data.all_jets = np.array(list_of_all_jets, dtype=np.float32)
             #print(f"----------------- Done working with {dataloader_name} -------------------")
 
-        events = []
-        for event in boosted_vectors:
-            events.append([{"px": part_vec.px, "py": part_vec.py, "pz": part_vec.pz, "E": part_vec.E} for part_vec in event])
-        
         array = ak.Array(events)
         cluster = fastjet.ClusterSequence(array, jetdef)
         jets = cluster.inclusive_jets(min_pt=5)
