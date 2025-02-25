@@ -813,7 +813,7 @@ def plot_zjet(flags, dataloaders, data_weights, version, frame = "lab"):
     ax.set_ylim(0, 5)
     fig.savefig(f'../plots/{version}_zjet_{frame}.pdf')
 
-def cluster_breit(dataloaders, clustering_type = "kt"):
+def cluster_breit(dataloaders, clustering_type = "kt", fastjet_config=""):
     import fastjet
     import awkward as ak
     import vector
@@ -898,6 +898,11 @@ def cluster_breit(dataloaders, clustering_type = "kt"):
             events.append([{"px": part_vec.px, "py": part_vec.py, "pz": part_vec.pz, "E": part_vec.E} for part_vec in event])
         
         if clustering_type == "centauro":
+            if fastjet_config == "":
+                raise ValueError("fastjet_config needs to be set when using Centauro!")
+            else:
+                if hvd.rank()==0:
+                    print(f"Using fastjet at {fastjet_config} for Centauro") 
             # Saving Breit particles to an h5 file so we can cluster in C++ with Centauro
             px, py, pz, energy = [], [], [], []
             max_num_particles = len(max(events, key=len))
@@ -921,7 +926,7 @@ def cluster_breit(dataloaders, clustering_type = "kt"):
             
             # To use multiple GPUs, make a copy of the scripts for each GPU
             subprocess.run([f"cp ./run_centauro.sh ./run_centauro_{hvd.rank()}.sh"], shell=True)
-            subprocess.run([f"./run_centauro_{hvd.rank()}.sh --input {breit_file_name} --output {jet_file_name} --jet_radius {1.0} --GPU_ID {hvd.rank()}"], shell=True)
+            subprocess.run([f"./run_centauro_{hvd.rank()}.sh --input {breit_file_name} --output {jet_file_name} --jet_radius {1.0} --GPU_ID {hvd.rank()} --fastjet_config_path {fastjet_config}"], shell=True)
             subprocess.run([f"rm ./run_centauro_{hvd.rank()}.sh"], shell=True)
 
             # The Centauro jets are already zero padded so we don't need anymore processing

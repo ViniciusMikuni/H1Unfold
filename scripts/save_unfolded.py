@@ -33,6 +33,7 @@ def parse_arguments():
     parser.add_argument('--bootstrap', action='store_true', default=False,help='Load models for bootstrapping')
     parser.add_argument('--nboot', type=int, default=50, help='Number of bootstrap models to load')
     parser.add_argument('--verbose', action='store_true', default=False,help='Increase print level')
+    parser.add_argument('--fastjet_config_path', type=str, default="/global/cfs/cdirs/m3246/rmilton/fastjet-3.4.3-install/bin/fastjet-config", help="Path to your fastjet-config")
     flags = parser.parse_args()
 
     return flags
@@ -99,7 +100,7 @@ def main():
     
     cluster_jets(dataloaders)
     cluster_breit(dataloaders)
-    cluster_breit(dataloaders, clustering_type="centauro")
+    cluster_breit(dataloaders, clustering_type="centauro", fastjet_config = flags.fastjet_config_path)
     calculate_Delta_zjet(dataloaders)
     del dataloaders[flags.file].part, dataloaders[flags.file].mask
     gc.collect()
