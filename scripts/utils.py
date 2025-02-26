@@ -9,6 +9,7 @@ import os
 import json,yaml
 import options
 import tensorflow as tf
+import math
 
 line_style = {
     'Baseline':'dotted',
@@ -66,7 +67,8 @@ observable_names = {
     'jet_tau10':r'$\mathrm{ln}(\lambda_1^1)$',
     'zjet':r'$z^{jet}$',
     'zjet_breit':r'$z^{jet}$ Breit frame',
-    'eec':r'$EEC$ Breit frame'
+    'eec':r'$EEC$ Breit frame',
+    'theta':r'$\eta$ Breit frame',
 }
 
 dedicated_binning = {
@@ -77,6 +79,7 @@ dedicated_binning = {
     'zjet' : np.linspace(0.2, 1, 10),
     'zjet_breit' : np.linspace(0.2, 1, 10),
     'eec' : np.linspace(-0.5, 0.5, 50),
+    'theta' : np.linspace(-2, 2, 30),
 }
 
 def get_log(var):
@@ -90,6 +93,8 @@ def get_log(var):
         return False, False
     if 'eec' in var:
         return False, True
+    if 'theta' in var:
+        return False, False
     else:
         print(f"ERROR: {var} not present!")
 
@@ -103,6 +108,8 @@ def get_ylim(var):
         return 0, 1.2
     if 'eec' in var:
         return 1e-5, 10
+    if 'theta' in var:
+        return 0, 1
     if var == 'zjet':
         return 0,8
     if var == 'zjet_breit':
@@ -334,23 +341,30 @@ def HistRoutine(feed_dict,
     xaxis = 0.5 * (binning[:-1] + binning[1:])  # Bin centers
 
     # Compute reference histogram
-    # Compute reference histogram
+    print('reference_name: ', reference_name)
+    # input()
     ref_weights = weights[reference_name] if weights else None
-    ref_E_weights = weights[reference_name+'_E_wgt'] if weights else None
-    reference_hist, _ = np.histogram(feed_dict[reference_name], bins=binning, density=True, weights=ref_weights*ref_E_weights)
-    # reference_hist, _ = np.histogram(reference_hist, bins=binning, density=True, weights=ref_E_weights)
+    ref_E_weights = weights[reference_name+'_E_wgt'] if weights else None # unfolded per-particle energy weighting
+    E_hist, _ = np.histogram(ref_E_weights, bins=binning, density=True, weights=ref_weights)
+    reference_hist, _ = np.histogram(feed_dict[reference_name], bins=binning, density=True, weights=ref_weights)
+    reference_hist = np.multiply( reference_hist, E_hist)
 
     max_y = 0
 
     # Plot each distribution
     for plot_name, data in feed_dict.items():
+        print('plot name: ', plot_name)
+        # input()
         plot_style = ref_plot_style if plot_name == reference_name else other_plot_style
         plot_weights = weights[plot_name] if weights else None
         plot_E_weights = weights[plot_name+'_E_wgt'] if weights else None # unfolded per-particle energy weighting
+        plot_E_hist, _ = np.histogram(plot_E_weights, bins=binning, density=True, weights=plot_weights)
+        data, _ = np.histogram(data, bins=binning, density=True, weights=plot_weights)
+        data = np.multiply(data, plot_E_hist)
 
         # Plot histogram
         dist, _, _ = ax0.hist(
-            data, bins=binning, density=True, weights=plot_weights * plot_E_weights,
+            data, bins=binning, density=True, #weights=plot_weights*plot_E_hist,# * plot_E_weights,
             label=options.name_translate[plot_name],
             color=options.colors[plot_name],
             **plot_style

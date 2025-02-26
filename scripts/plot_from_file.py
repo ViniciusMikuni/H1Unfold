@@ -15,7 +15,7 @@ utils.SetStyle()
 var_names = [#'weights','mc_weights',
              #'jet_pt',
              #'jet_breit_pt','deltaphi','jet_tau10', 'zjet', 'zjet_breit', 
-             'eec']
+             'theta']
 # if flags.eec:
 #     var_names = ['eec']
 
