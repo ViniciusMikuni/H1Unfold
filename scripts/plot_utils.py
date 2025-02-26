@@ -997,7 +997,7 @@ def cluster_breit(flags,dataloaders):
         eec_array = []
         for i in range(max_num_parts):
             if i < len(eec):
-                eec_info = [ eec[i], E_wgt[i] ]  # make it a one-element list for plotting purpose
+                eec_info = [ eec[i], E_wgt[i] ]  # make it a list for plotting purpose
             else:
                 eec_info = [0, 0] # zero padding for multigpu
             eec_array.append(eec_info)
@@ -1378,16 +1378,21 @@ def plot_observable(flags, var, dataloaders, version):
     if flags.eec:
     # if var == 'eec':
         Rapgap_mask = dataloaders["Rapgap"]["eec"] != 0
-        Rapgap_data = ak.drop_none(ak.mask(dataloaders["Rapgap"][var], Rapgap_mask))
+        Rapgap_data = ak.drop_none(ak.mask(dataloaders["Rapgap"]["eec"], Rapgap_mask))
         num_Rapgap_parts_per_event = ak.count(Rapgap_data, axis=1)
         Rapgap_data = ak.flatten(Rapgap_data)
-        # print("EEC array to plot: ", Rapgap_data)
-        # input()
         Rapgap_E_wgt = ak.drop_none(ak.mask(dataloaders["Rapgap"]['E_wgt'], Rapgap_mask))
         Rapgap_E_wgt = ak.flatten(Rapgap_E_wgt)
 
-        weights[data_name] = np.repeat(dataloaders['Rapgap']['mc_weights'] * dataloaders['Rapgap'][weight_name], num_Rapgap_parts_per_event, axis=0)
-        weights[data_name] = np.multiply(weights[data_name], Rapgap_E_wgt) # per particle energy weighting
+        Djangoh_mask = dataloaders["Djangoh"]["eec"] != [0]
+        Djangoh_data = ak.drop_none(ak.mask(dataloaders["Djangoh"]["eec"], Djangoh_mask))
+        num_Djangoh_parts_per_event = ak.count(Djangoh_data, axis=1)
+        Djangoh_E_wgt = ak.drop_none(ak.mask(dataloaders["Djangoh"]['E_wgt'], Djangoh_mask))
+        Djangoh_E_wgt = ak.flatten(Djangoh_E_wgt)
+
+        weights[data_name] = np.repeat(dataloaders['Rapgap']['mc_weights'] * dataloaders['Rapgap'][weight_name], num_Djangoh_parts_per_event, axis=0)
+        weights[data_name] = np.multiply(weights[data_name], Djangoh_E_wgt) # per particle energy weighting
+
         weights['Rapgap'] = np.repeat(dataloaders['Rapgap']['mc_weights'], num_Rapgap_parts_per_event, axis=0)
         weights['Rapgap'] = np.multiply(weights['Rapgap'], Rapgap_E_wgt) # per particle energy weighting
         feed_dict[data_name] = Rapgap_data
@@ -1412,15 +1417,15 @@ def plot_observable(flags, var, dataloaders, version):
     if flags.eec:
     # if var == 'eec':
         Djangoh_mask = dataloaders["Djangoh"]["eec"] != [0]
-        Djangoh_data = ak.drop_none(ak.mask(dataloaders["Djangoh"][var], Djangoh_mask))
-        num_Djangoh_jets_per_event = ak.count(Djangoh_data, axis=1)
+        Djangoh_data = ak.drop_none(ak.mask(dataloaders["Djangoh"]["eec"], Djangoh_mask))
+        num_Djangoh_parts_per_event = ak.count(Djangoh_data, axis=1)
         Djangoh_data = ak.flatten(Djangoh_data)
         # print("EEC array to plot: ", Rapgap_data)
         # input()
         Djangoh_E_wgt = ak.drop_none(ak.mask(dataloaders["Djangoh"]['E_wgt'], Djangoh_mask))
         Djangoh_E_wgt = ak.flatten(Djangoh_E_wgt)
 
-        weights['Djangoh'] = np.repeat(dataloaders['Djangoh']['mc_weights'], num_Djangoh_jets_per_event, axis=0)
+        weights['Djangoh'] = np.repeat(dataloaders['Djangoh']['mc_weights'], num_Djangoh_parts_per_event, axis=0)
         weights['Djangoh'] = np.multiply(weights['Djangoh'], Djangoh_E_wgt)
         feed_dict['Djangoh'] = Djangoh_data
 
