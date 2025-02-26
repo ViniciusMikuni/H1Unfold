@@ -1387,6 +1387,7 @@ def plot_observable(flags, var, dataloaders, version):
         Rapgap_E_wgt = ak.flatten(Rapgap_E_wgt)
 
         weights[data_name] = np.repeat(dataloaders['Rapgap']['mc_weights'] * dataloaders['Rapgap'][weight_name], num_Rapgap_parts_per_event, axis=0)
+        weights[data_name] = np.multiply(weights[data_name], Rapgap_E_wgt) # per particle energy weighting
         weights['Rapgap'] = np.repeat(dataloaders['Rapgap']['mc_weights'], num_Rapgap_parts_per_event, axis=0)
         weights['Rapgap'] = np.multiply(weights['Rapgap'], Rapgap_E_wgt) # per particle energy weighting
         feed_dict[data_name] = Rapgap_data
