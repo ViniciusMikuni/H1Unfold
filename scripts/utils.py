@@ -334,8 +334,11 @@ def HistRoutine(feed_dict,
     xaxis = 0.5 * (binning[:-1] + binning[1:])  # Bin centers
 
     # Compute reference histogram
+    # Compute reference histogram
     ref_weights = weights[reference_name] if weights else None
-    reference_hist, _ = np.histogram(feed_dict[reference_name], bins=binning, density=True, weights=ref_weights)
+    ref_E_weights = weights[reference_name+'_E_wgt'] if weights else None
+    reference_hist, _ = np.histogram(feed_dict[reference_name], bins=binning, density=True, weights=ref_weights*ref_E_weights)
+    # reference_hist, _ = np.histogram(reference_hist, bins=binning, density=True, weights=ref_E_weights)
 
     max_y = 0
 
@@ -343,10 +346,11 @@ def HistRoutine(feed_dict,
     for plot_name, data in feed_dict.items():
         plot_style = ref_plot_style if plot_name == reference_name else other_plot_style
         plot_weights = weights[plot_name] if weights else None
+        plot_E_weights = weights[plot_name+'_E_wgt'] if weights else None
 
         # Plot histogram
         dist, _, _ = ax0.hist(
-            data, bins=binning, density=True, weights=plot_weights,
+            data, bins=binning, density=True, weights=plot_weights*plot_E_weights,
             label=options.name_translate[plot_name],
             color=options.colors[plot_name],
             **plot_style
