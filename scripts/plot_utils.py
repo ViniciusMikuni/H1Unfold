@@ -1030,28 +1030,30 @@ def cluster_breit(flags,dataloaders):
         P = Q[i] / (2 * x_B) * np.array([0, 0, 1, 1], dtype=np.float32)
         theta_P = math.acos( 1 )  # arccos( p_z / |p3| ), just zero here
 
-        # ONLY needed when doing jets: convert jet constituents from pt-eta-phi-mass to cartesian...
+        # convert jet constituents from pt-eta-phi-mass to cartesian...
         cons_px, cons_py, cons_pz, cons_E = [], [], [], []
         for part in parts:
             cons_px.append( part.px )
             cons_py.append( part.py )
             cons_pz.append( part.pz )
             cons_E.append( part.E )  # from google..
-            # cons_px.append( cons.pt() * math.cos(cons.phi()) )
-            # cons_py.append( cons.pt() * math.sin(cons.phi()) )
-            # cons_pz.append( cons.pt() * math.sinh(cons.eta()) )
-            # cons_E.append( math.sqrt( cons.m()**2 + cons.pt()**2 * math.cosh(cons.eta())**2 ) ) # from google..
+        # if doing PseudoJets
+        # for cons in parts:
+        #     cons_px.append( cons.pt() * math.cos(cons.phi()) )
+        #     cons_py.append( cons.pt() * math.sin(cons.phi()) )
+        #     cons_pz.append( cons.pt() * math.sinh(cons.eta()) )
+        #     cons_E.append( math.sqrt( cons.m()**2 + cons.pt()**2 * math.cosh(cons.eta())**2 ) ) # from google..
 
         # denomenator of the normalization for EEC in DIS
-        px_sum = np.sum(cons_px)
-        py_sum = np.sum(cons_py)
-        pz_sum = np.sum(cons_pz)
-        E_sum = np.sum(cons_E)
-        P_dot_psum = P[3]*E_sum - P[0]*px_sum - P[1]*py_sum - P[2]*pz_sum
+        # px_sum = np.sum(cons_px)
+        # py_sum = np.sum(cons_py)
+        # pz_sum = np.sum(cons_pz)
+        # E_sum = np.sum(cons_E)
+        # P_dot_psum = P[3]*E_sum - P[0]*px_sum - P[1]*py_sum - P[2]*pz_sum
 
         entries, E_wgt = [], []  # a list of EEC entries for the leading jet in event i
         # for i, cons in enumerate( parts):
-        for part in parts:
+        for j, part in enumerate(parts):
 
             # Following def in 2102.05669
             # P_dot_pc = P[3]*cons_E[i] - P[0]*cons_px[i] - P[1]*cons_py[i] - P[2]*cons_pz[i]
@@ -1060,13 +1062,14 @@ def cluster_breit(flags,dataloaders):
             # entries.append( ( math.cos(theta_P) - math.cos(theta_c) ) / z ) # following def in 2102.05669
 
             # Following def in 2312.07655
-            theta_c = math.atan( math.sqrt(part.px**2 + part.py**2) / part.pz) 
+            theta_c = math.atan( math.sqrt(part.px**2 + part.py**2) / part.pz) #+ math.pi/2
             # theta_c = 2 * math.atan( math.exp( - cons.eta() ) )  # from google..
             delta_theta =  theta_c - theta_P   # want cons polar angle wrt the proton
 
             # if x_B * (cons_E[i] / P[3]) != 0 :
-            entries.append(  math.log( math.tan( abs(delta_theta) ) ) ) 
-            E_wgt.append( x_B**4 * (part.E / P[3]) )
+            if abs(delta_theta) != math.pi/2 and delta_theta>0:
+                entries.append(  math.log( math.tan( delta_theta ) ) ) 
+                E_wgt.append( x_B**4 * (part.E / P[3]) )
 
         # print("EEC entries: ", entries)
         # input()
@@ -1091,17 +1094,18 @@ def cluster_breit(flags,dataloaders):
         if flags.eec:
             list_of_eec = []
             # for i, particles in enumerate(events):
-            for i, particles in enumerate(boosted_vectors):
+            for i, event in enumerate(boosted_vectors):
                 # particles = [
                 #     fastjet.PseudoJet(part_vec.E, part_vec.px, part_vec.py, part_vec.pz)
-                #     for part_vec in particles if np.abs(part_vec.E) != 0
+                #     for part_vec in event if np.abs(part_vec.E) != 0
                 # ]
                 # cluster = fastjet.ClusterSequence(particles, jetdef)
                 # sorted_jets = fastjet.sorted_by_pt(cluster.inclusive_jets(ptmin=0))
                 # Calculate EEC only for the leading jet
                 # eec = calculate_eec(sorted_jets[0], q[i], i, data.event, electron_momentum)
 
-                eec, E_wgt = calculate_eec(particles, q[i], i, data.event, electron_momentum)
+                # 'event' is the list of particles in that event here
+                eec, E_wgt = calculate_eec(event, q[i], i, data.event, electron_momentum)
 
                 # Take the angles & energy weights
                 list_of_eec.append( _take_eec(eec, E_wgt) )
@@ -1378,23 +1382,19 @@ def plot_observable(flags, var, dataloaders, version):
     if flags.eec:
     # if var == 'eec':
         Rapgap_mask = dataloaders["Rapgap"]["eec"] != 0
-        Rapgap_data = ak.drop_none(ak.mask(dataloaders["Rapgap"]["eec"], Rapgap_mask))
+        Rapgap_data = ak.drop_none(ak.mask(dataloaders["Rapgap"][var], Rapgap_mask))
         num_Rapgap_parts_per_event = ak.count(Rapgap_data, axis=1)
         Rapgap_data = ak.flatten(Rapgap_data)
+
         Rapgap_E_wgt = ak.drop_none(ak.mask(dataloaders["Rapgap"]['E_wgt'], Rapgap_mask))
         Rapgap_E_wgt = ak.flatten(Rapgap_E_wgt)
 
-        Djangoh_mask = dataloaders["Djangoh"]["eec"] != [0]
-        Djangoh_data = ak.drop_none(ak.mask(dataloaders["Djangoh"]["eec"], Djangoh_mask))
-        num_Djangoh_parts_per_event = ak.count(Djangoh_data, axis=1)
-        Djangoh_E_wgt = ak.drop_none(ak.mask(dataloaders["Djangoh"]['E_wgt'], Djangoh_mask))
-        Djangoh_E_wgt = ak.flatten(Djangoh_E_wgt)
-
-        weights[data_name] = np.repeat(dataloaders['Rapgap']['mc_weights'] * dataloaders['Rapgap'][weight_name], num_Djangoh_parts_per_event, axis=0)
-        weights[data_name] = np.multiply(weights[data_name], Djangoh_E_wgt) # per particle energy weighting
-
         weights['Rapgap'] = np.repeat(dataloaders['Rapgap']['mc_weights'], num_Rapgap_parts_per_event, axis=0)
         weights['Rapgap'] = np.multiply(weights['Rapgap'], Rapgap_E_wgt) # per particle energy weighting
+        weights[data_name] = np.repeat(dataloaders['Rapgap']['mc_weights'] * dataloaders['Rapgap'][weight_name], num_Rapgap_parts_per_event, axis=0)
+        # Rapgap_E_wgt = np.multiply(np.repeat( dataloaders['Rapgap'][weight_name], num_Rapgap_parts_per_event, axis=0), Rapgap_E_wgt)
+        weights[data_name] = np.multiply(weights[data_name], Rapgap_E_wgt)
+
         feed_dict[data_name] = Rapgap_data
         feed_dict['Rapgap'] = Rapgap_data
 
@@ -1417,15 +1417,15 @@ def plot_observable(flags, var, dataloaders, version):
     if flags.eec:
     # if var == 'eec':
         Djangoh_mask = dataloaders["Djangoh"]["eec"] != [0]
-        Djangoh_data = ak.drop_none(ak.mask(dataloaders["Djangoh"]["eec"], Djangoh_mask))
-        num_Djangoh_parts_per_event = ak.count(Djangoh_data, axis=1)
+        Djangoh_data = ak.drop_none(ak.mask(dataloaders["Djangoh"][var], Djangoh_mask))
+        num_Djangoh_jets_per_event = ak.count(Djangoh_data, axis=1)
         Djangoh_data = ak.flatten(Djangoh_data)
         # print("EEC array to plot: ", Rapgap_data)
         # input()
         Djangoh_E_wgt = ak.drop_none(ak.mask(dataloaders["Djangoh"]['E_wgt'], Djangoh_mask))
         Djangoh_E_wgt = ak.flatten(Djangoh_E_wgt)
 
-        weights['Djangoh'] = np.repeat(dataloaders['Djangoh']['mc_weights'], num_Djangoh_parts_per_event, axis=0)
+        weights['Djangoh'] = np.repeat(dataloaders['Djangoh']['mc_weights'], num_Djangoh_jets_per_event, axis=0)
         weights['Djangoh'] = np.multiply(weights['Djangoh'], Djangoh_E_wgt)
         feed_dict['Djangoh'] = Djangoh_data
 
