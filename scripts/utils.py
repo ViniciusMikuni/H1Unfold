@@ -67,7 +67,8 @@ observable_names = {
     'zjet':r'$z^{jet}$',
     'zjet_breit':r'$z^{jet}$ Breit frame',
     'zjet_centauro':r'$z^{jet}$ Centauro',
-    'Delta_zjet':r'$\Delta z^{jet}$'
+    'Delta_zjet':r'$\Delta z^{jet}$',
+    'jet_centauro_pt': r'$p_{T}^{jet}$ [GeV] Centauro'
 }
 
 dedicated_binning = {
@@ -78,7 +79,8 @@ dedicated_binning = {
     'zjet' : np.linspace(0.2, 1, 11),
     'zjet_breit' : np.linspace(0.2, 1, 11), 
     'zjet_centauro' : np.linspace(0.2, 1, 11),
-    'Delta_zjet' : np.linspace(-.5, .5, 11)
+    'Delta_zjet' : np.linspace(-.5, .5, 11),
+    'jet_centauro_pt' : np.logspace(np.log10(.01),np.log10(30),10),
 }
 
 def get_log(var):
@@ -95,6 +97,8 @@ def get_log(var):
 
 
 def get_ylim(var):
+    if var == 'jet_centauro_pt':
+        return 1e-4, 5
     if 'pt' in var:
         return 1e-4, 1
     if 'deltaphi' in var:

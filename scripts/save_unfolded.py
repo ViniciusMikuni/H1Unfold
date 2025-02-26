@@ -134,6 +134,8 @@ def main():
             dset = fh5.create_dataset('zjet_breit', data=dataloaders[flags.file].all_jets_breit[:, :, 7])
             dset = fh5.create_dataset('zjet_centauro', data=dataloaders[flags.file].all_jets_breit_centauro[:, :, 7])
             dset = fh5.create_dataset('Delta_zjet', data=dataloaders[flags.file].Delta_zjet)
+            dset = fh5.create_dataset('jet_centauro_pt', data=dataloaders[flags.file].all_jets_breit_centauro[:, :, 0])
+            dset = fh5.create_dataset('jet_centauro_E', data=dataloaders[flags.file].all_jets_breit_centauro[:, :, 3])
     
 if __name__ == '__main__':
     main()

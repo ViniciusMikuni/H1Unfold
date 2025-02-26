@@ -1213,8 +1213,8 @@ def plot_observable(flags, var, dataloaders, version):
     feed_dict = {}
 
     if len(dataloaders['Rapgap'][var].shape) > 1:
-        if var == "zjet_centauro":
-            Rapgap_mask = dataloaders["Rapgap"][var]>0
+        if "centauro" in var:
+            Rapgap_mask = dataloaders["Rapgap"]["jet_centauro_E"]>0
         else:
             Rapgap_mask = dataloaders["Rapgap"]["jet_pt"]>0
         Rapgap_data = ak.drop_none(ak.mask(dataloaders["Rapgap"][var], Rapgap_mask))
@@ -1233,8 +1233,8 @@ def plot_observable(flags, var, dataloaders, version):
         feed_dict['Rapgap'] = dataloaders['Rapgap'][var][~np.isnan(dataloaders['Rapgap'][var])]
     
     if len(dataloaders['Djangoh'][var].shape) > 1:
-        if var == "zjet_centauro":
-            Djangoh_mask = dataloaders["Djangoh"][var]>0
+        if "centauro" in var:
+            Djangoh_mask = dataloaders["Djangoh"]["jet_centauro_E"]>0
         else:
             Djangoh_mask = dataloaders["Djangoh"]["jet_pt"]>0
         Djangoh_data = ak.drop_none(ak.mask(dataloaders["Djangoh"][var], Djangoh_mask))
