@@ -813,7 +813,7 @@ def plot_zjet(flags, dataloaders, data_weights, version, frame = "lab"):
     ax.set_ylim(0, 5)
     fig.savefig(f'../plots/{version}_zjet_{frame}.pdf')
 
-def cluster_breit(dataloaders, clustering_type = "kt", fastjet_config=""):
+def cluster_breit(dataloaders, clustering_type = "all", fastjet_config=""):
     import fastjet
     import awkward as ak
     import vector
@@ -897,7 +897,7 @@ def cluster_breit(dataloaders, clustering_type = "kt", fastjet_config=""):
         for event in boosted_vectors:
             events.append([{"px": part_vec.px, "py": part_vec.py, "pz": part_vec.pz, "E": part_vec.E} for part_vec in event])
         
-        if clustering_type == "centauro":
+        if clustering_type == "centauro" or clustering_type == "all":
             if fastjet_config == "":
                 raise ValueError("fastjet_config needs to be set when using Centauro!")
             else:
@@ -935,7 +935,7 @@ def cluster_breit(dataloaders, clustering_type = "kt", fastjet_config=""):
                 dataloaders[dataloader_name].all_jets_breit_centauro = f["jets"][:, :40]
             subprocess.run([f"rm {breit_file_name} {jet_file_name}"], shell=True)
 
-        else:
+        if clustering_type == "kt" or clustering_type == "all":
             if hvd.rank() == 0:
                 print("Breit kt clustering fastjet: ",fastjet.__file__)
             jetdef = fastjet.JetDefinition(fastjet.kt_algorithm, 1.0)
@@ -991,10 +991,7 @@ def cluster_breit(dataloaders, clustering_type = "kt", fastjet_config=""):
             
         #dataloaders[dataloader_name].jet_breit = _take_leading_jet(jets)
 
-        max_num_jets = 4
         
-        if clustering_type != "centauro":
-            dataloaders[dataloader_name].all_jets_breit = _take_all_jets(jets, max_num_jets)
         def calculate_zjet(jet_data, event):
             Q_array = np.sqrt(np.exp(event[:,0]))
 
@@ -1018,9 +1015,12 @@ def cluster_breit(dataloaders, clustering_type = "kt", fastjet_config=""):
             z_jet = z_jet.reshape(z_jet.shape[0], z_jet.shape[1], 1)
             jet_data = np.concatenate((jet_data, z_jet), axis=2)
             return jet_data
-        if clustering_type == "centauro":
+        
+        if clustering_type == "all" or clustering_type == "centauro":
             dataloaders[dataloader_name].all_jets_breit_centauro = calculate_zjet(dataloaders[dataloader_name].all_jets_breit_centauro, dataloaders[dataloader_name].event)
-        else:
+        if clustering_type == "all" or clustering_type == "kt":
+            max_num_jets = 4
+            dataloaders[dataloader_name].all_jets_breit = _take_all_jets(jets, max_num_jets)
             dataloaders[dataloader_name].all_jets_breit = calculate_zjet(dataloaders[dataloader_name].all_jets_breit, dataloaders[dataloader_name].event)
     
 def calculate_Delta_zjet(dataloaders):

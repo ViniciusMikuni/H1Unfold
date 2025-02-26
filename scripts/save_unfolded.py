@@ -99,8 +99,7 @@ def main():
 
     
     cluster_jets(dataloaders)
-    cluster_breit(dataloaders)
-    cluster_breit(dataloaders, clustering_type="centauro", fastjet_config = flags.fastjet_config_path)
+    cluster_breit(dataloaders, fastjet_config = flags.fastjet_config_path)
     calculate_Delta_zjet(dataloaders)
     del dataloaders[flags.file].part, dataloaders[flags.file].mask
     gc.collect()
