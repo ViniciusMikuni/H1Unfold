@@ -76,7 +76,7 @@ dedicated_binning = {
     'jet_tau10': np.array([-4.00,-3.15,-2.59,-2.18,-1.86,-1.58,-1.29,-1.05,-0.81,-0.61,0.00]),
     'zjet' : np.linspace(0.2, 1, 10),
     'zjet_breit' : np.linspace(0.2, 1, 10),
-    'eec' : np.linspace(-6, 6, 20),
+    'eec' : np.linspace(-0.5, 0.5, 50),
 }
 
 def get_log(var):
@@ -346,11 +346,11 @@ def HistRoutine(feed_dict,
     for plot_name, data in feed_dict.items():
         plot_style = ref_plot_style if plot_name == reference_name else other_plot_style
         plot_weights = weights[plot_name] if weights else None
-        plot_E_weights = weights[plot_name+'_E_wgt'] if weights else None
+        plot_E_weights = weights[plot_name+'_E_wgt'] if weights else None # unfolded per-particle energy weighting
 
         # Plot histogram
         dist, _, _ = ax0.hist(
-            data, bins=binning, density=True, weights=plot_weights*plot_E_weights,
+            data, bins=binning, density=True, weights=plot_weights * plot_E_weights,
             label=options.name_translate[plot_name],
             color=options.colors[plot_name],
             **plot_style
