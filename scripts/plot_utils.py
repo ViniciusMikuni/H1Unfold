@@ -1066,7 +1066,7 @@ def cluster_breit(flags,dataloaders):
 
             # if x_B * (cons_E[i] / P[3]) != 0 :
             entries.append(  math.log( math.tan( abs(delta_theta) ) ) ) 
-            E_wgt.append( x_B * (part.E / P[3]) )
+            E_wgt.append( x_B**4 * (part.E / P[3]) )
 
         # print("EEC entries: ", entries)
         # input()
