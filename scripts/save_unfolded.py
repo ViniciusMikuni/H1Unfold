@@ -132,6 +132,7 @@ def main():
             dset = fh5.create_dataset('zjet', data=dataloaders[flags.file].all_jets[:, :, 9])
             dset = fh5.create_dataset('zjet_breit', data=dataloaders[flags.file].all_jets_breit[:, :, 7])
             dset = fh5.create_dataset('eec', data=dataloaders[flags.file].eec[:, :, 0])
+            dset = fh5.create_dataset('E_wgt', data=dataloaders[flags.file].eec[:, :, 1]) # per particle energy weighting
     
 if __name__ == '__main__':
     main()
