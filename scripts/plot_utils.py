@@ -991,13 +991,13 @@ def cluster_breit(flags,dataloaders):
     def _take_eec(eec, E_wgt, theta):
         max_num_parts = 200
         if not eec:
-            return np.zeros((max_num_parts,3))
+            return (-100)*np.ones((max_num_parts,3))
         eec_array = []
         for i in range(max_num_parts):
-            if i < len(eec):
+            if i < len(theta):
                 eec_info = [ eec[i], E_wgt[i], theta[i] ]  # make it a list for plotting purpose
             else:
-                eec_info = [0, 0, 0] # zero padding for multigpu
+                eec_info = [-100, -100, -100] # zero padding for multigpu
             eec_array.append(eec_info)
         return np.array(eec_array) # for event i
 
@@ -1072,16 +1072,16 @@ def cluster_breit(flags,dataloaders):
             # theta_c = 2 * math.atan( math.exp( - part.eta() ) )
             # entries.append( ( math.cos(theta_P) - math.cos(theta_c) ) / z ) # following def in 2102.05669
 
-            # theta_c = math.atan( math.sqrt(part.px**2 + part.py**2) / part.pz) #+ math.pi/2
-            theta_c = 2 * math.atan( math.exp( - part.eta() ) )  # from google..
+            theta_c = math.atan( math.sqrt(part.px**2 + part.py**2) / part.pz) #+ math.pi/2
+            # theta_c = 2 * math.atan( math.exp( - part.eta() ) )  # from google..
             # theta_c = math.acos( part.pz / part.E )
             delta_theta =  theta_c - theta_P   # want part polar angle wrt the proton
 
             # if x_B * (part_E[i] / P[3]) != 0 :
             # if delta_theta < math.pi/2:
-            entries.append(   math.log( math.tan( delta_theta/2 ) ) ) 
-            E_wgt.append( x_B * (part.e() / P[3]) )
-            theta.append(part.eta())
+            entries.append(   math.log( math.tan( abs(delta_theta/2) ) ) ) 
+            E_wgt.append( x_B * (part.E / P[3]) )
+            theta.append(part.eta)
         # print(entries)
         # input()
 
@@ -1090,6 +1090,7 @@ def cluster_breit(flags,dataloaders):
     jetdef = fastjet.JetDefinition(fastjet.kt_algorithm, 1.0)
 
     for dataloader_name, data in dataloaders.items():
+        import math
         electron_momentum = _convert_electron_kinematics(data.event)
         cartesian = _convert_kinematics(data.part, data.event, data.mask)        
         boosted_vectors = boost_particles(cartesian, electron_momentum)
@@ -1098,25 +1099,23 @@ def cluster_breit(flags,dataloaders):
         # jets["phi"] = np.arctan2(jets["py"],jets["px"])
         # jets["eta"] = np.arcsinh(jets["pz"]/jets["pt"])
 
-        events = []
-        for event in boosted_vectors:
-            events.append([{"px": part_vec.px, "py": part_vec.py, "pz": part_vec.pz, "E": part_vec.E} for part_vec in event])
-
         if flags.eec:
             list_of_eec = []
             # for i, particles in enumerate(events):
             for i, event in enumerate(boosted_vectors):
-                particles = [
-                    fastjet.PseudoJet(part_vec.E, part_vec.px, part_vec.py, part_vec.pz)
-                    for part_vec in event if np.abs(part_vec.E) != 0
-                ]
+                # particles = [
+                #     fastjet.PseudoJet(part_vec.E, part_vec.px, part_vec.py, part_vec.pz)
+                #     for part_vec in event if np.abs(part_vec.E) != 0
+                # ]
                 # cluster = fastjet.ClusterSequence(particles, jetdef)
                 # sorted_jets = fastjet.sorted_by_pt(cluster.inclusive_jets(ptmin=0))
                 # Calculate EEC only for the leading jet
                 # eec = calculate_eec(sorted_jets[0], q[i], i, data.event, electron_momentum)
 
                 # 'event' is the list of particles in that event here
-                eec, E_wgt, theta = calculate_eec(particles, q[i], i, data.event, electron_momentum)
+                eec, E_wgt, theta = calculate_eec(event, q[i], i, data.event, electron_momentum)
+                # theta = [ -math.log(math.tan(0.5*math.atan(math.sqrt(part.px**2+part.py**2)/part.pz))) for part in event if np.abs(part.E) != 0] 
+                theta = [math.atan(math.sqrt(part.px**2+part.py**2)/part.pz) for part in event if np.abs(part.E) != 0] 
                 # Take the angles & energy weights
                 list_of_eec.append( _take_eec(eec, E_wgt, theta) )
                 # # 'event' is the list of particles in that event here
@@ -1128,6 +1127,10 @@ def cluster_breit(flags,dataloaders):
             data.eec = np.array(list_of_eec, dtype=np.float32)  # (n_event, n_max_parts, 1)
             # data.all_jets = np.array(list_of_all_jets, dtype=np.float32)
             #print(f"----------------- Done working with {dataloader_name} -------------------")
+
+        events = []
+        for event in boosted_vectors:
+            events.append([{"px": part_vec.px, "py": part_vec.py, "pz": part_vec.pz, "E": part_vec.E} for part_vec in event])
 
         array = ak.Array(events)
         cluster = fastjet.ClusterSequence(array, jetdef)
@@ -1397,7 +1400,7 @@ def plot_observable(flags, var, dataloaders, version):
     # if var == 'eec':
         print('data name: ', data_name)
         # input()
-        Rapgap_mask = dataloaders["Rapgap"]["eec"] != 0
+        Rapgap_mask = dataloaders["Rapgap"]["eec"] != -100 # != [0]
         Rapgap_data = ak.drop_none(ak.mask(dataloaders["Rapgap"][var], Rapgap_mask))
         num_Rapgap_parts_per_event = ak.count(Rapgap_data, axis=1)
         Rapgap_data = ak.flatten(Rapgap_data)
@@ -1433,7 +1436,7 @@ def plot_observable(flags, var, dataloaders, version):
     
     if flags.eec:
     # if var == 'eec':
-        Djangoh_mask = dataloaders["Djangoh"]["eec"] != [0]
+        Djangoh_mask = dataloaders["Djangoh"]["theta"] != -100 # != [0]
         Djangoh_data = ak.drop_none(ak.mask(dataloaders["Djangoh"][var], Djangoh_mask))
         num_Djangoh_jets_per_event = ak.count(Djangoh_data, axis=1)
         Djangoh_data = ak.flatten(Djangoh_data)
