@@ -68,7 +68,7 @@ observable_names = {
     'zjet':r'$z^{jet}$',
     'zjet_breit':r'$z^{jet}$ Breit frame',
     'eec':r'$EEC$ Breit frame',
-    'theta':r'$\eta$ Breit frame',
+    'theta':r'$E_{part}/E_{proton}$ Breit frame',
 }
 
 dedicated_binning = {
@@ -78,8 +78,8 @@ dedicated_binning = {
     'jet_tau10': np.array([-4.00,-3.15,-2.59,-2.18,-1.86,-1.58,-1.29,-1.05,-0.81,-0.61,0.00]),
     'zjet' : np.linspace(0.2, 1, 10),
     'zjet_breit' : np.linspace(0.2, 1, 10),
-    'eec' : np.linspace(-8, 10, 40),
-    'theta' : np.linspace(-1, 4, 20),
+    'eec' : np.linspace(-5, 8, 20),
+    'theta' : np.linspace(0, 10, 20),
     # 'theta' : np.linspace(1e-17, 1e-9, 10),
 }
 
@@ -110,7 +110,7 @@ def get_ylim(var):
     if 'eec' in var:
         return 1e-5, 10
     if 'theta' in var:
-        return 0, 1
+        return 0, 600
     if var == 'zjet':
         return 0,8
     if var == 'zjet_breit':
@@ -350,6 +350,8 @@ def HistRoutine(feed_dict,
 
     # Plot each distribution
     for plot_name, data in feed_dict.items():
+        print(np.min(data), np.max(data))
+        # input()
         plot_style = ref_plot_style if plot_name == reference_name else other_plot_style
         plot_weights = weights[plot_name] if weights else None
         plot_E_weights = weights[plot_name+'_E_wgt'] if weights else None # unfolded per-particle energy weighting

@@ -1005,33 +1005,32 @@ def cluster_breit(flags,dataloaders):
 
         import math
 
-        # inelasticity y and Q
-        y = event[:, 1]
+        ##### IMPORTANT: [px, py, pz, E] #####
+        y = event[:, 1] # inelasticity
         Q2 = np.exp(event[:,0])
         Q = np.sqrt( Q2 )
         scattered_electron_momentum = np.sqrt(scattered_electron["px"]**2 + scattered_electron["py"]**2 + scattered_electron["pz"]**2)
         scattered_electron_theta = np.arccos(scattered_electron["pz"]/scattered_electron_momentum)
 
         # Bjorken x using the ISigma method from table 1 in https://arxiv.org/pdf/2110.05505
-        # x_B = scattered_electron["E"] * np.divide( 1 + np.cos(scattered_electron_theta), 2*y*920 ) # also need to divide by E_proton
+        x_B = (scattered_electron["E"] * np.divide( 1 + np.cos(scattered_electron_theta), 2*y*920 ))[i] # also need to divide by E_proton
         # Breit frame proton 4-momentum & polar angle for event i
-        # P = np.divide(Q[i], 2*x_B[i]) * np.array([1, 0, 0, 1], dtype=np.float32)
+        P = np.divide(Q[i], 2*x_B) * np.array([0, 0, 1, 1], dtype=np.float32)
         # theta_P = math.acos( P[2] / np.linalg.norm(P) )  # arccos( p_z / |p| )
-        ##### IMPORTANT: [px, py, pz, E] #####
-        # Bjorken x using 2312.07655 (seems equivalent with the above..)
-        P = np.array([0, 0, 920, 920], dtype=np.float32) # 920 GeV is proton beam energy in lab frame
-        P_dot_q = P[3]*q[3] - P[0]*q[0] - P[1]*q[1] - P[2]*q[2]
-        x_B =  Q2[i] / (2 * P_dot_q)  # for event i
-        # Breit frame proton 4-momentum & polar angle for event i
-        P = Q[i] / (2 * x_B) * np.array([0, 0, 1, 1], dtype=np.float32)
+
+        # Bjorken x using 2312.07655
+        # P = np.array([0, 0, 920, 920], dtype=np.float32) # 920 GeV is proton beam energy in lab frame
+        # P_dot_q = P[3]*q[3] - P[0]*q[0] - P[1]*q[1] - P[2]*q[2]
+        # x_B =  Q2[i] / (2 * P_dot_q)  # for event i
+        # # Breit frame proton 4-momentum & polar angle for event i
+        # P = Q[i] / (2 * x_B) * np.array([0, 0, 1, 1], dtype=np.float32)
+
         theta_P = math.acos( 1 )  # arccos( p_z / |p3| ), just zero here
 
         entries = [math.log( math.tan( math.atan(math.exp(-part.eta)) )) for part in parts if np.abs(part.E) != 0]
-        E_wgt = [x_B * (part.E / P[3]) for part in parts if np.abs(part.E) != 0]
-        theta = [part.eta for part in parts if np.abs(part.E) != 0]
-
-        # theta = [x_B**4 * (part.E / P[3]) for part in parts if np.abs(part.E) != 0]
-        # E_wgt = [part.eta for part in parts if np.abs(part.E) != 0]
+        E_wgt = [(x_B**4)*(part.E / P[3])*1e15 for part in parts if np.abs(part.E) != 0]
+        # pseudo variable just to check the spectrum of various quantities
+        theta = [(x_B**4)*(part.E / P[3])*1e15 for part in parts if np.abs(part.E) != 0]
 
         return entries, E_wgt, theta
 
@@ -1058,9 +1057,7 @@ def cluster_breit(flags,dataloaders):
                 # eec = calculate_eec(sorted_jets[0], q[i], i, data.event, electron_momentum)
 
                 # 'event' is the list of particles in that event here
-                eec, E_wgt, theta = calculate_eec(event, q[i], i, data.event, electron_momentum)
-                # print(np.min(eec), np.max(eec))
-                # input()
+                eec, E_wgt, theta = calculate_eec(event, q[i], i, data.event, electron_momentum)  
                 # Take the angles & energy weights
                 list_of_eec.append( _take_eec(eec, E_wgt, theta) )
 
@@ -1337,7 +1334,7 @@ def plot_observable(flags, var, dataloaders, version):
     feed_dict = {}
 
     if flags.eec:
-        Rapgap_mask = dataloaders["Rapgap"]["theta"] != -100  
+        Rapgap_mask = dataloaders["Rapgap"]["eec"] != -100  
         Rapgap_data = ak.drop_none(ak.mask(dataloaders["Rapgap"][var], Rapgap_mask))
         num_Rapgap_parts_per_event = ak.count(Rapgap_data, axis=1)
         Rapgap_data = ak.flatten(Rapgap_data)
@@ -1369,7 +1366,7 @@ def plot_observable(flags, var, dataloaders, version):
         feed_dict['Rapgap'] = dataloaders['Rapgap'][var][dataloaders['Rapgap']['jet_pt'] > 0]
     
     if flags.eec:
-        Djangoh_mask = dataloaders["Djangoh"]["theta"] != -100 
+        Djangoh_mask = dataloaders["Djangoh"]["eec"] != -100 
         Djangoh_data = ak.drop_none(ak.mask(dataloaders["Djangoh"][var], Djangoh_mask))
         num_Djangoh_jets_per_event = ak.count(Djangoh_data, axis=1)
         Djangoh_data = ak.flatten(Djangoh_data)
