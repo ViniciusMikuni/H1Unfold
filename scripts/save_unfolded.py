@@ -29,7 +29,7 @@ def parse_arguments():
     #parser.add_argument('--load', action='store_true', default=False,help='Load unfolded weights')
     parser.add_argument('--file', default='Rapgap_Eplus0607_prep.h5',help='File to load')
     parser.add_argument('--niter', type=int, default=4, help='Omnifold iteration to load')
-    parser.add_argument('--nmax', type=int, default=2_000_000, help='Maximum number of events to load')
+    parser.add_argument('--nmax', type=int, default=10_000_000, help='Maximum number of events to load')
     parser.add_argument('--bootstrap', action='store_true', default=False,help='Load models for bootstrapping')
     parser.add_argument('--nboot', type=int, default=50, help='Number of bootstrap models to load')
     parser.add_argument('--verbose', action='store_true', default=False,help='Increase print level')

@@ -1,7 +1,7 @@
 import numpy as np
 
 colors = {
-    'data':'black',
+    'data':'darkolivegreen',
     'mc':'darkorange',
     'LO':'b', 
     'NLO':'g',

@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from matplotlib import gridspec
 from matplotlib.collections import PatchCollection
 from matplotlib.patches import Rectangle
+from matplotlib.patches import Patch
 import matplotlib.ticker as mtick
 import uproot
 import os
@@ -92,9 +93,9 @@ def get_log(var):
 
 def get_ylim(var):
     if 'pt' in var:
-        return 1e-4, 1
+        return 1e-4, 2
     if 'deltaphi' in var:
-        return 1e-3, 50
+        return 1e-3, 100
     if 'tau' in var:
         return 0, 1.2
     if var == 'zjet':
@@ -305,7 +306,7 @@ def HistRoutine(feed_dict,
     assert reference_name in feed_dict, "ERROR: Reference distribution not found in feed_dict."
 
     # Default styles for plots
-    ref_plot_style = {'histtype': 'stepfilled', 'alpha': 0.2}
+    ref_plot_style = {'histtype': 'stepfilled', 'alpha': 0.3}
     other_plot_style = {'histtype': 'step', 'linewidth': 2}
 
     # Set up the figure and axes
@@ -358,14 +359,24 @@ def HistRoutine(feed_dict,
                 markerfacecolor='none', markeredgewidth=3
             )
 
-            # Add uncertainties
-            if uncertainty is not None:
-                for ibin in range(len(binning)-1):
-                    xup = binning[ibin+1]
-                    xlow = binning[ibin]
-                    ax1.fill_between(np.array([xlow,xup]),
-                                     1.0 + uncertainty[ibin],1.0 -uncertainty[ibin],
-                                     alpha=0.3,color='k')
+    # Add uncertainties
+    if uncertainty is not None:
+        for ibin in range(len(binning)-1):
+            xup = binning[ibin+1]
+            xlow = binning[ibin]
+            ax1.fill_between(np.array([xlow,xup]),
+                             1.0 + uncertainty[ibin],1.0 -uncertainty[ibin],
+                             alpha=0.3,color='k')
+            
+        total_uncertainty_patch = Patch(facecolor='k', alpha=0.3, label='Total unc.')                
+        # Add it to the legend
+        handles, labels = ax0.get_legend_handles_labels()
+        handles.append(total_uncertainty_patch)
+        labels.append('Total unc.')
+        #ax0.legend(handles=handles, labels=labels)
+    else:
+        handles = None
+                    
                     
 
     # Adjust y-axis scale
@@ -382,7 +393,7 @@ def HistRoutine(feed_dict,
             ax1.set_xscale('log')
 
     # Add legend and format axes
-    ax0.legend(loc=label_loc, fontsize=16, ncol=2)
+    ax0.legend(handles=handles,loc=label_loc, fontsize=16, ncol=2)
     if plot_ratio:
         FormatFig(xlabel="", ylabel=ylabel, ax0=ax0)
         ax1.set_ylabel('Pred./Ref.')
