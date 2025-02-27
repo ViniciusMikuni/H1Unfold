@@ -1025,15 +1025,20 @@ def cluster_breit(dataloaders, clustering_type = "all", fastjet_config=""):
     
 def calculate_Delta_zjet(dataloaders):
     for dataloader in dataloaders:
-        kt_zjet = ak.mask(dataloaders[dataloader].all_jets[:, :, 9], dataloaders[dataloader].all_jets[:, :, 9]>0)
+        # Removing the zero energy jets
+        kt_zjet = ak.mask(dataloaders[dataloader].all_jets[:, :, 9], dataloaders[dataloader].all_jets[:, :, 3]>0)
         kt_zjet = ak.drop_none(kt_zjet)
-        centauro_zjet = ak.mask(dataloaders[dataloader].all_jets_breit_centauro[:, :, 7], dataloaders[dataloader].all_jets_breit_centauro[:, :, 7]>0)
+        centauro_zjet = ak.mask(dataloaders[dataloader].all_jets_breit_centauro[:, :, 7], dataloaders[dataloader].all_jets_breit_centauro[:, :, 3]>0)
         centauro_zjet = ak.drop_none(centauro_zjet)
+
+        # Getting the leading jet in each event (jet with highest zjet)
         kt_zjet_max = ak.max(kt_zjet, axis=1)
         centauro_zjet_max = ak.max(centauro_zjet, axis=1)
+        
         # Removing events where either kt or Centauro had no jets
         empty_jet_mask = (~ak.is_none(kt_zjet_max)) & (~ak.is_none(centauro_zjet_max))
         Delta_zjet = np.subtract(ak.mask(kt_zjet_max, empty_jet_mask), ak.mask(centauro_zjet_max, empty_jet_mask))
+        # Bad events (where there were no jets) will have nan as their Delta_z value
         Delta_zjet = ak.fill_none(Delta_zjet, np.nan)
         dataloaders[dataloader].Delta_zjet = Delta_zjet
 def plot_event(flags, dataloaders, data_weights, version, nbins=10):
@@ -1132,14 +1137,20 @@ def plot_observable(flags, var, dataloaders, version):
     def compute_histogram(dataset_name, weights=None,density=True):
         if len(dataloaders[dataset_name][var].shape) > 1:
             multiple_jets_per_event = True
-            valid_indices = dataloaders[dataset_name]['jet_pt']>0
+            if "centauro" in var:
+                valid_indices = dataloaders[dataset_name]['jet_centauro_E']>0
+            else:
+                valid_indices = dataloaders[dataset_name]['jet_pt']>0
             data = ak.mask(dataloaders[dataset_name][var], valid_indices)
             data = ak.drop_none(data)
             num_jets_per_event = ak.count(data, axis = 1)
             data = ak.flatten(data)
         else:
             multiple_jets_per_event = False
-            valid_indices = dataloaders[dataset_name]['jet_pt'] > 0
+            if var == "Delta_zjet":
+                valid_indices = ~np.isnan(dataloaders[dataset_name][var])
+            else:
+                valid_indices = dataloaders[dataset_name]['jet_pt']>0
             data = dataloaders[dataset_name][var][valid_indices]
         if weights is not None:
             if multiple_jets_per_event:
@@ -1227,10 +1238,14 @@ def plot_observable(flags, var, dataloaders, version):
         feed_dict['Rapgap'] = Rapgap_data
     else:
         # Need to use the ~np.isnan mask to make this work for Delta z
-        weights[data_name] = (dataloaders['Rapgap']['mc_weights'] * dataloaders['Rapgap'][weight_name])[~np.isnan(dataloaders['Rapgap'][var])]
-        weights['Rapgap'] = dataloaders['Rapgap']['mc_weights'][~np.isnan(dataloaders['Rapgap'][var])]
-        feed_dict[data_name] = dataloaders['Rapgap'][var][~np.isnan(dataloaders['Rapgap'][var])]
-        feed_dict['Rapgap'] = dataloaders['Rapgap'][var][~np.isnan(dataloaders['Rapgap'][var])]
+        if var == "Delta_zjet":
+            Rapgap_mask = ~np.isnan(dataloaders['Rapgap'][var])
+        else:
+            Rapgap_mask = dataloaders['Rapgap']['jet_pt']>0
+        weights[data_name] = (dataloaders['Rapgap']['mc_weights'] * dataloaders['Rapgap'][weight_name])[Rapgap_mask]
+        weights['Rapgap'] = dataloaders['Rapgap']['mc_weights'][Rapgap_mask]
+        feed_dict[data_name] = dataloaders['Rapgap'][var][Rapgap_mask]
+        feed_dict['Rapgap'] = dataloaders['Rapgap'][var][Rapgap_mask]
     
     if len(dataloaders['Djangoh'][var].shape) > 1:
         if "centauro" in var:
@@ -1244,21 +1259,31 @@ def plot_observable(flags, var, dataloaders, version):
         weights['Djangoh'] = np.repeat(dataloaders['Djangoh']['mc_weights'], num_Djangoh_jets_per_event, axis=0)
         feed_dict['Djangoh'] = Djangoh_data
     else:
-        weights['Djangoh'] = dataloaders['Djangoh']['mc_weights'][~np.isnan(dataloaders['Djangoh'][var])]
-        feed_dict['Djangoh'] = dataloaders['Djangoh'][var][~np.isnan(dataloaders['Djangoh'][var])]
+        if var == "Delta_zjet":
+            Djangoh_mask = ~np.isnan(dataloaders['Djangoh'][var])
+        else:
+            Djangoh_mask = dataloaders['Djangoh']['jet_pt']>0
+        weights['Djangoh'] = dataloaders['Djangoh']['mc_weights'][Djangoh_mask]
+        feed_dict['Djangoh'] = dataloaders['Djangoh'][var][Djangoh_mask]
 
     if flags.reco:
         if len(dataloaders['data'][var].shape) > 1:
-            data_mask = dataloaders["data"]["jet_pt"]>0
+            if "centauro" in var:
+                data_mask = dataloaders["data"]["jet_centauro_E"]>0
+            else:
+                data_mask = dataloaders["data"]["jet_pt"]>0
             data = ak.drop_none(ak.mask(dataloaders["data"][var], data_mask))
             data = ak.flatten(data)
             weights['data'] = np.ones_like(data)
 
             feed_dict['data'] = data
         else:
-
-            weights['data'] = np.ones_like(dataloaders['data'][var][dataloaders['data']['jet_pt'] > 0])
-            feed_dict['data'] = dataloaders['data'][var][dataloaders['data']['jet_pt'] > 0]
+            if var == "Delta_zjet":
+                data_mask = ~np.isnan(dataloaders['data'][var])
+            else:
+                data_mask = dataloaders['data']['jet_pt']>0
+            weights['data'] = np.ones_like(dataloaders['data'][var][data_mask])
+            feed_dict['data'] = dataloaders['data'][var][data_mask]
 
     if flags.reco:
         ylabel = r'1/N $\mathrm{dN}/\mathrm{d}$%s'%info.name
