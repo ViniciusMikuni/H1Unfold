@@ -39,7 +39,7 @@ int main(int argc, char* argv[])
     else
     {
         inputFileName = args["--input"];
-        std::cout<<"Input file is "<<inputFileName<<std::endl;
+        // std::cout<<"Input file is "<<inputFileName<<std::endl;
     }
 
     std::string outputFileName;
@@ -51,7 +51,7 @@ int main(int argc, char* argv[])
     else
     {
         outputFileName = args["--output"];
-        std::cout<<"Output file is "<<outputFileName<<std::endl;
+        // std::cout<<"Output file is "<<outputFileName<<std::endl;
     }
 
     double jet_radius;
@@ -63,7 +63,7 @@ int main(int argc, char* argv[])
     else
     {
         jet_radius = std::stod(args["--jet_radius"]);
-        std::cout<<" Jet radius set to "<<jet_radius<<std::endl;
+        // std::cout<<" Jet radius set to "<<jet_radius<<std::endl;
     }
 
 
