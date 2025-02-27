@@ -15,9 +15,8 @@ utils.SetStyle()
 var_names = [#'weights','mc_weights',
              #'jet_pt',
              #'jet_breit_pt','deltaphi','jet_tau10', 'zjet', 'zjet_breit', 
-             'theta']
-# if flags.eec:
-#     var_names = ['eec']
+             'eec']
+            # 'theta']
 
 
 def get_sample_names(niter, use_sys, sys_list = ['sys0','sys1','sys5','sys7','sys11'],
@@ -56,7 +55,6 @@ def parse_arguments():
     parser.add_argument('--bootstrap', action='store_true', default=False,help='Load models for bootstrapping')
     parser.add_argument('--nboot', type=int, default=50, help='Number of bootstrap models to load')
     parser.add_argument('--eec', action='store_true', default=False,help='Get EEC')
-    parser.add_argument('--nmax', type=int, default=10000, help='Maximum number of events to load')
 
     parser.add_argument('--verbose', action='store_true', default=False,help='Increase print level')
     

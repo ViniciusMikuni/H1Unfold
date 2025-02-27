@@ -995,7 +995,7 @@ def cluster_breit(flags,dataloaders):
         eec_array = []
         for i in range(max_num_parts):
             if i < len(theta):
-                eec_info = [ eec[i], E_wgt[i], theta[i] ]  # make it a list for plotting purpose
+                eec_info = [ eec[i], E_wgt[i], theta[i] ]  
             else:
                 eec_info = [-100, -100, -100] # zero padding for multigpu
             eec_array.append(eec_info)
@@ -1027,8 +1027,11 @@ def cluster_breit(flags,dataloaders):
         theta_P = math.acos( 1 )  # arccos( p_z / |p3| ), just zero here
 
         entries = [math.log( math.tan( math.atan(math.exp(-part.eta)) )) for part in parts if np.abs(part.E) != 0]
-        E_wgt = [x_B**4 * (part.E / P[3]) for part in parts if np.abs(part.E) != 0]
+        E_wgt = [x_B * (part.E / P[3]) for part in parts if np.abs(part.E) != 0]
         theta = [part.eta for part in parts if np.abs(part.E) != 0]
+
+        # theta = [x_B**4 * (part.E / P[3]) for part in parts if np.abs(part.E) != 0]
+        # E_wgt = [part.eta for part in parts if np.abs(part.E) != 0]
 
         return entries, E_wgt, theta
 
@@ -1044,7 +1047,7 @@ def cluster_breit(flags,dataloaders):
         if flags.eec:
             list_of_eec = []
             for i, event in enumerate(boosted_vectors):
-                
+
                 # particles = [
                 #     fastjet.PseudoJet(part_vec.E, part_vec.px, part_vec.py, part_vec.pz)
                 #     for part_vec in event if np.abs(part_vec.E) != 0
@@ -1056,8 +1059,8 @@ def cluster_breit(flags,dataloaders):
 
                 # 'event' is the list of particles in that event here
                 eec, E_wgt, theta = calculate_eec(event, q[i], i, data.event, electron_momentum)
-                # theta = [ -math.log(math.tan(0.5*math.atan(math.sqrt(part.px**2+part.py**2)/part.pz))) for part in event if np.abs(part.E) != 0] 
-                theta = [part.eta for part in event if np.abs(part.E) != 0] 
+                # print(np.min(eec), np.max(eec))
+                # input()
                 # Take the angles & energy weights
                 list_of_eec.append( _take_eec(eec, E_wgt, theta) )
 
@@ -1366,7 +1369,6 @@ def plot_observable(flags, var, dataloaders, version):
         feed_dict['Rapgap'] = dataloaders['Rapgap'][var][dataloaders['Rapgap']['jet_pt'] > 0]
     
     if flags.eec:
-    # if var == 'eec':
         Djangoh_mask = dataloaders["Djangoh"]["theta"] != -100 
         Djangoh_data = ak.drop_none(ak.mask(dataloaders["Djangoh"][var], Djangoh_mask))
         num_Djangoh_jets_per_event = ak.count(Djangoh_data, axis=1)
@@ -1425,8 +1427,7 @@ def plot_observable(flags, var, dataloaders, version):
 
     # Set plot limits and save
     ax.set_ylim(info.ylow, info.yhigh)
-    # fig.savefig(f'../plots/{version}_{var}.pdf')
-    fig.savefig(f'plots/{version}_{var}.pdf')
+    fig.savefig(flags.plot_folder+f'{version}_{var}.pdf')
 
 
         

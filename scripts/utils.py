@@ -78,8 +78,9 @@ dedicated_binning = {
     'jet_tau10': np.array([-4.00,-3.15,-2.59,-2.18,-1.86,-1.58,-1.29,-1.05,-0.81,-0.61,0.00]),
     'zjet' : np.linspace(0.2, 1, 10),
     'zjet_breit' : np.linspace(0.2, 1, 10),
-    'eec' : np.linspace(-0.5, 0.5, 50),
-    'theta' : np.linspace(-6, 4, 10),
+    'eec' : np.linspace(-8, 10, 40),
+    'theta' : np.linspace(-1, 4, 20),
+    # 'theta' : np.linspace(1e-17, 1e-9, 10),
 }
 
 def get_log(var):
@@ -94,7 +95,7 @@ def get_log(var):
     if 'eec' in var:
         return False, True
     if 'theta' in var:
-        return False, False
+        return True, False
     else:
         print(f"ERROR: {var} not present!")
 
