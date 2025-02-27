@@ -1001,19 +1001,6 @@ def cluster_breit(flags,dataloaders):
             eec_array.append(eec_info)
         return np.array(eec_array) # for event i
 
-    # def _take_eec(eec):
-    #     max_num_parts = 200
-    #     if not eec:
-    #         return np.zeros((max_num_parts,1))
-    #     eec_array = []
-    #     for i in range(max_num_parts):
-    #         if i < len(eec):
-    #             eec_info = [ eec[i] ]  # make it a list for plotting purpose
-    #         else:
-    #             eec_info = [0 ] # zero padding for multigpu
-    #         eec_array.append(eec_info)
-    #     return np.array(eec_array) # for event i
-
     def calculate_eec(parts, q, i, event, scattered_electron):
 
         import math
@@ -1030,7 +1017,6 @@ def cluster_breit(flags,dataloaders):
         # Breit frame proton 4-momentum & polar angle for event i
         # P = np.divide(Q[i], 2*x_B[i]) * np.array([1, 0, 0, 1], dtype=np.float32)
         # theta_P = math.acos( P[2] / np.linalg.norm(P) )  # arccos( p_z / |p| )
-
         ##### IMPORTANT: [px, py, pz, E] #####
         # Bjorken x using 2312.07655 (seems equivalent with the above..)
         P = np.array([0, 0, 920, 920], dtype=np.float32) # 920 GeV is proton beam energy in lab frame
@@ -1040,50 +1026,9 @@ def cluster_breit(flags,dataloaders):
         P = Q[i] / (2 * x_B) * np.array([0, 0, 1, 1], dtype=np.float32)
         theta_P = math.acos( 1 )  # arccos( p_z / |p3| ), just zero here
 
-        # convert jet constituents from pt-eta-phi-mass to cartesian...
-        # part_px, part_py, part_pz, part_E = [], [], [], []
-        # for part in parts:
-        #     part_px.append( part.px )
-        #     part_py.append( part.py )
-        #     part_pz.append( part.pz )
-        #     part_E.append( part.E )  # from google..
-        # if doing PseudoJets
-        # for part in parts:
-        #     part_px.append( part.pt() * math.cos(part.phi()) )
-        #     part_py.append( part.pt() * math.sin(part.phi()) )
-        #     part_pz.append( part.pt() * math.sinh(part.eta()) )
-        #     part_E.append( part.e() )
-            # part_E.append( math.sqrt( part.m()**2 + part.pt()**2 * math.cosh(part.eta())**2 ) ) # from google..
-
-        # denomenator of the normalization for EEC in DIS
-        # px_sum = np.sum(part_px)
-        # py_sum = np.sum(part_py)
-        # pz_sum = np.sum(part_pz)
-        # E_sum = np.sum(part_E)
-        # P_dot_psum = P[3]*E_sum - P[0]*px_sum - P[1]*py_sum - P[2]*pz_sum
-
-        entries, E_wgt, theta = [], [], []  # a list of EEC entries for the leading jet in event i
-        # for i, part in enumerate( parts):
-        for j, part in enumerate(parts):
-
-            # Following def in 2102.05669
-            # P_dot_pc = P[3]*part_E[i] - P[0]*part_px[i] - P[1]*part_py[i] - P[2]*part_pz[i]
-            # z = P_dot_pc / P_dot_psum # normalization factor
-            # theta_c = 2 * math.atan( math.exp( - part.eta() ) )
-            # entries.append( ( math.cos(theta_P) - math.cos(theta_c) ) / z ) # following def in 2102.05669
-
-            theta_c = math.atan( math.sqrt(part.px**2 + part.py**2) / part.pz) #+ math.pi/2
-            # theta_c = 2 * math.atan( math.exp( - part.eta() ) )  # from google..
-            # theta_c = math.acos( part.pz / part.E )
-            delta_theta =  theta_c - theta_P   # want part polar angle wrt the proton
-
-            # if x_B * (part_E[i] / P[3]) != 0 :
-            # if delta_theta < math.pi/2:
-            entries.append(   math.log( math.tan( abs(delta_theta/2) ) ) ) 
-            E_wgt.append( x_B * (part.E / P[3]) )
-            theta.append(part.eta)
-        # print(entries)
-        # input()
+        entries = [math.log( math.tan( math.atan(math.exp(-part.eta)) )) for part in parts if np.abs(part.E) != 0]
+        E_wgt = [x_B**4 * (part.E / P[3]) for part in parts if np.abs(part.E) != 0]
+        theta = [part.eta for part in parts if np.abs(part.E) != 0]
 
         return entries, E_wgt, theta
 
@@ -1095,14 +1040,11 @@ def cluster_breit(flags,dataloaders):
         cartesian = _convert_kinematics(data.part, data.event, data.mask)        
         boosted_vectors = boost_particles(cartesian, electron_momentum)
         q = _calculate_q(cartesian, electron_momentum)
-        # jets["pt"] = -np.sqrt(jets["px"]**2 + jets["py"]**2)
-        # jets["phi"] = np.arctan2(jets["py"],jets["px"])
-        # jets["eta"] = np.arcsinh(jets["pz"]/jets["pt"])
 
         if flags.eec:
             list_of_eec = []
-            # for i, particles in enumerate(events):
             for i, event in enumerate(boosted_vectors):
+                
                 # particles = [
                 #     fastjet.PseudoJet(part_vec.E, part_vec.px, part_vec.py, part_vec.pz)
                 #     for part_vec in event if np.abs(part_vec.E) != 0
@@ -1115,17 +1057,12 @@ def cluster_breit(flags,dataloaders):
                 # 'event' is the list of particles in that event here
                 eec, E_wgt, theta = calculate_eec(event, q[i], i, data.event, electron_momentum)
                 # theta = [ -math.log(math.tan(0.5*math.atan(math.sqrt(part.px**2+part.py**2)/part.pz))) for part in event if np.abs(part.E) != 0] 
-                theta = [math.atan(math.sqrt(part.px**2+part.py**2)/part.pz) for part in event if np.abs(part.E) != 0] 
+                theta = [part.eta for part in event if np.abs(part.E) != 0] 
                 # Take the angles & energy weights
                 list_of_eec.append( _take_eec(eec, E_wgt, theta) )
-                # # 'event' is the list of particles in that event here
-                # eec = calculate_eec(particles, q[i], i, data.event, electron_momentum)
-                # # Take the angles & energy weights
-                # list_of_eec.append( _take_eec(eec) )
 
             # Store the jet features in the dataloader
             data.eec = np.array(list_of_eec, dtype=np.float32)  # (n_event, n_max_parts, 1)
-            # data.all_jets = np.array(list_of_all_jets, dtype=np.float32)
             #print(f"----------------- Done working with {dataloader_name} -------------------")
 
         events = []
@@ -1397,10 +1334,7 @@ def plot_observable(flags, var, dataloaders, version):
     feed_dict = {}
 
     if flags.eec:
-    # if var == 'eec':
-        print('data name: ', data_name)
-        # input()
-        Rapgap_mask = dataloaders["Rapgap"]["eec"] != -100 # != [0]
+        Rapgap_mask = dataloaders["Rapgap"]["theta"] != -100  
         Rapgap_data = ak.drop_none(ak.mask(dataloaders["Rapgap"][var], Rapgap_mask))
         num_Rapgap_parts_per_event = ak.count(Rapgap_data, axis=1)
         Rapgap_data = ak.flatten(Rapgap_data)
@@ -1409,14 +1343,11 @@ def plot_observable(flags, var, dataloaders, version):
 
         Rapgap_E_wgt = ak.drop_none(ak.mask(dataloaders["Rapgap"]['E_wgt'], Rapgap_mask))
         Rapgap_E_wgt = ak.flatten(Rapgap_E_wgt)
+        weights['Rapgap_E_wgt'] = Rapgap_E_wgt #np.multiply(weights['Rapgap'], Rapgap_E_wgt)
+        weights[data_name+'_E_wgt'] = Rapgap_E_wgt #np.multiply(np.repeat(dataloaders['Rapgap'][weight_name], num_Rapgap_parts_per_event, axis=0), Rapgap_E_wgt)
 
         weights['Rapgap'] = np.repeat(dataloaders['Rapgap']['mc_weights'], num_Rapgap_parts_per_event, axis=0)
-        # unfolding the per-particle energy weight
-        weights['Rapgap_E_wgt'] = Rapgap_E_wgt #np.multiply(weights['Rapgap'], Rapgap_E_wgt) 
-
         weights[data_name] = np.repeat(dataloaders['Rapgap']['mc_weights'] * dataloaders['Rapgap'][weight_name], num_Rapgap_parts_per_event, axis=0)
-        # unfolding the per-particle energy weight
-        weights[data_name+'_E_wgt'] = Rapgap_E_wgt #np.multiply(np.repeat(dataloaders['Rapgap'][weight_name], num_Rapgap_parts_per_event, axis=0), Rapgap_E_wgt)
 
     elif len(dataloaders['Rapgap'][var].shape) > 1:
         Rapgap_mask = dataloaders["Rapgap"]["jet_pt"]>0
@@ -1436,20 +1367,17 @@ def plot_observable(flags, var, dataloaders, version):
     
     if flags.eec:
     # if var == 'eec':
-        Djangoh_mask = dataloaders["Djangoh"]["theta"] != -100 # != [0]
+        Djangoh_mask = dataloaders["Djangoh"]["theta"] != -100 
         Djangoh_data = ak.drop_none(ak.mask(dataloaders["Djangoh"][var], Djangoh_mask))
         num_Djangoh_jets_per_event = ak.count(Djangoh_data, axis=1)
         Djangoh_data = ak.flatten(Djangoh_data)
         feed_dict['Djangoh'] = Djangoh_data
-        # print("EEC array to plot: ", Rapgap_data)
-        # input()
 
         Djangoh_E_wgt = ak.drop_none(ak.mask(dataloaders["Djangoh"]['E_wgt'], Djangoh_mask))
         Djangoh_E_wgt = ak.flatten(Djangoh_E_wgt)
+        weights['Djangoh_E_wgt'] = Djangoh_E_wgt #np.multiply(weights['Djangoh'], Djangoh_E_wgt)
 
         weights['Djangoh'] = np.repeat(dataloaders['Djangoh']['mc_weights'], num_Djangoh_jets_per_event, axis=0)
-        # unfolding the per-particle energy weight
-        weights['Djangoh_E_wgt'] = Djangoh_E_wgt #np.multiply(weights['Djangoh'], Djangoh_E_wgt)
 
     elif len(dataloaders['Djangoh'][var].shape) > 1:
         Djangoh_mask = dataloaders["Djangoh"]["jet_pt"]>0

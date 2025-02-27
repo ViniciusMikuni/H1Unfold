@@ -79,7 +79,7 @@ dedicated_binning = {
     'zjet' : np.linspace(0.2, 1, 10),
     'zjet_breit' : np.linspace(0.2, 1, 10),
     'eec' : np.linspace(-0.5, 0.5, 50),
-    'theta' : np.linspace(-2, 4, 30),
+    'theta' : np.linspace(-6, 4, 10),
 }
 
 def get_log(var):
@@ -341,30 +341,21 @@ def HistRoutine(feed_dict,
     xaxis = 0.5 * (binning[:-1] + binning[1:])  # Bin centers
 
     # Compute reference histogram
-    print('reference_name: ', reference_name)
-    # input()
     ref_weights = weights[reference_name] if weights else None
     ref_E_weights = weights[reference_name+'_E_wgt'] if weights else None # unfolded per-particle energy weighting
-    reference_hist, _ = np.histogram(feed_dict[reference_name], bins=binning, density=True, weights=ref_weights)# * ref_E_weights)
-    # E_hist, _ = np.histogram(ref_E_weights, bins=binning, density=True, weights=ref_weights)
-    # reference_hist = np.multiply( reference_hist, E_hist)
+    reference_hist, _ = np.histogram(feed_dict[reference_name], bins=binning, density=True, weights=ref_weights * ref_E_weights)
 
     max_y = 0
 
     # Plot each distribution
     for plot_name, data in feed_dict.items():
-        print('plot name: ', plot_name)
-        # input()
         plot_style = ref_plot_style if plot_name == reference_name else other_plot_style
         plot_weights = weights[plot_name] if weights else None
         plot_E_weights = weights[plot_name+'_E_wgt'] if weights else None # unfolded per-particle energy weighting
-        # plot_E_hist, _ = np.histogram(plot_E_weights, bins=binning, density=True, weights=plot_weights)
-        # data, _ = np.histogram(data, bins=binning, density=True, weights=plot_weights)
-        # data = np.multiply(data, plot_E_hist)
 
         # Plot histogram
         dist, _, _ = ax0.hist(
-            data, bins=binning, density=True, weights=plot_weights,# * plot_E_weights,
+            data, bins=binning, density=True, weights=plot_weights * plot_E_weights,
             label=options.name_translate[plot_name],
             color=options.colors[plot_name],
             **plot_style
