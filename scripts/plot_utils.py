@@ -1347,7 +1347,7 @@ def plot_observable(flags, var, dataloaders, version):
         Rapgap_E_wgt = ak.drop_none(ak.mask(dataloaders["Rapgap"]['E_wgt'], Rapgap_mask))
         Rapgap_E_wgt = ak.flatten(Rapgap_E_wgt)
         weights['Rapgap_E_wgt'] = Rapgap_E_wgt #np.multiply(weights['Rapgap'], Rapgap_E_wgt)
-        weights[data_name+'_E_wgt'] = Rapgap_E_wgt #np.multiply(np.repeat(dataloaders['Rapgap'][weight_name], num_Rapgap_parts_per_event, axis=0), Rapgap_E_wgt)
+        weights[data_name+'_E_wgt'] = np.multiply(np.repeat(dataloaders['Rapgap'][weight_name], num_Rapgap_parts_per_event, axis=0), Rapgap_E_wgt)
 
         weights['Rapgap'] = np.repeat(dataloaders['Rapgap']['mc_weights'], num_Rapgap_parts_per_event, axis=0)
         weights[data_name] = np.repeat(dataloaders['Rapgap']['mc_weights'] * dataloaders['Rapgap'][weight_name], num_Rapgap_parts_per_event, axis=0)
