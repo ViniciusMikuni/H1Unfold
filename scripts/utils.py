@@ -68,7 +68,8 @@ observable_names = {
     'zjet':r'$z^{jet}$',
     'zjet_breit':r'$z^{jet}$ Breit frame',
     'eec':r'$EEC$ Breit frame',
-    'theta':r'$x_B\times(E_{part}/E_{proton})$ Breit frame',
+    'theta':r'$x_B \cdot E_{\mathrm{part}}/E_p$ Breit frame',
+    # 'theta':r'$(P \cdot p_{part}/P \cdot \sum_i p_{\mathrm{part},i})$ Breit frame',
 }
 
 dedicated_binning = {
@@ -77,9 +78,11 @@ dedicated_binning = {
     'deltaphi': np.linspace(0, 1, 8),
     'jet_tau10': np.array([-4.00,-3.15,-2.59,-2.18,-1.86,-1.58,-1.29,-1.05,-0.81,-0.61,0.00]),
     'zjet' : np.linspace(0.2, 1, 10),
-    'zjet_breit' : np.linspace(0.2, 1, 10),
-    'eec' : np.linspace(-5, 8, 20),
-    'theta' : np.linspace(5e-5, 1.5e3, 10),
+    'zjet_breit' : np.linspace(0.2, 1, 10),  
+    'eec' : np.linspace(-1, 1, 16),
+    'theta' : np.linspace(0, 1e3, 50),
+    # For x-weighted definition
+    # 'eec' : np.linspace(-5, 8, 20),
     # 'theta' : np.linspace(1e-17, 1e-9, 10),
 }
 
@@ -93,9 +96,9 @@ def get_log(var):
     if 'zjet' in var:
         return False, False
     if 'eec' in var:
-        return False, True
+        return False, False
     if 'theta' in var:
-        return False, True
+        return True, False
     else:
         print(f"ERROR: {var} not present!")
 
@@ -108,9 +111,10 @@ def get_ylim(var):
     if 'tau' in var:
         return 0, 1.2
     if 'eec' in var:
-        return 1e-5, 10
+        # return 0, 0.35
+        return 0, 4.2
     if 'theta' in var:
-        return 0, 0.0055
+        return 0, 2.5
     if var == 'zjet':
         return 0,8
     if var == 'zjet_breit':
@@ -284,6 +288,7 @@ def PlotRoutine(feed_dict,xlabel='',ylabel='',reference_name='gen',plot_ratio = 
 
 
 def HistRoutine(feed_dict,
+                var,
                 xlabel='',
                 ylabel='',
                 reference_name='data',
@@ -344,7 +349,10 @@ def HistRoutine(feed_dict,
     # Compute reference histogram
     ref_weights = weights[reference_name] if weights else None
     ref_E_weights = weights[reference_name+'_E_wgt'] if weights else None # unfolded per-particle energy weighting
-    reference_hist, _ = np.histogram(feed_dict[reference_name], bins=binning, density=True, weights=ref_weights * ref_E_weights)
+    if var == 'eec':
+        reference_hist, _ = np.histogram(feed_dict[reference_name], bins=binning, density=True, weights=ref_weights * ref_E_weights)
+    else:
+        reference_hist, _ = np.histogram(feed_dict[reference_name], bins=binning, density=True, weights=ref_weights)
 
     max_y = 0
 
@@ -355,14 +363,22 @@ def HistRoutine(feed_dict,
         plot_style = ref_plot_style if plot_name == reference_name else other_plot_style
         plot_weights = weights[plot_name] if weights else None
         plot_E_weights = weights[plot_name+'_E_wgt'] if weights else None # unfolded per-particle energy weighting
-
+        
         # Plot histogram
-        dist, _, _ = ax0.hist(
-            data, bins=binning, density=True, weights=plot_weights * plot_E_weights,
-            label=options.name_translate[plot_name],
-            color=options.colors[plot_name],
-            **plot_style
-        )
+        if var == 'eec':
+            dist, _, _ = ax0.hist(
+                data, bins=binning, density=True, weights=plot_weights * plot_E_weights,
+                label=options.name_translate[plot_name],
+                color=options.colors[plot_name],
+                **plot_style
+            )
+        else:
+            dist, _, _ = ax0.hist(
+                data, bins=binning, density=True, weights=plot_weights,
+                label=options.name_translate[plot_name],
+                color=options.colors[plot_name],
+                **plot_style
+            )
 
         max_y = max(max_y, np.max(dist))
         print("MAX y: ", max_y)

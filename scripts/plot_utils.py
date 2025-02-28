@@ -1031,9 +1031,9 @@ def cluster_breit(flags,dataloaders):
             # Following def in 2102.05669
             P_dot_pc = P[3]*part.E - P[0]*part.px - P[1]*part.py - P[2]*part.pz
             theta_c = 2 * math.atan( math.exp( - part.eta ) )
-            entries.append( ( math.cos(theta_c) - math.cos(theta_P) ) ) # following def in 2102.05669
+            entries.append( ( math.cos(theta_c)  ) ) # following def in 2102.05669
             E_wgt.append( P_dot_pc / P_dot_psum ) # normalization factor )
-            theta.append( theta_c )
+            theta.append( P_dot_pc / P_dot_psum )
 
         # Bjorken x weighted EEC following 2312.07655
         # entries = [math.log( math.tan( math.atan(math.exp(-part.eta)) )) for part in parts if np.abs(part.E) != 0]
@@ -1353,7 +1353,7 @@ def plot_observable(flags, var, dataloaders, version):
         Rapgap_E_wgt = ak.drop_none(ak.mask(dataloaders["Rapgap"]['E_wgt'], Rapgap_mask))
         Rapgap_E_wgt = ak.flatten(Rapgap_E_wgt)
         weights['Rapgap_E_wgt'] = Rapgap_E_wgt #np.multiply(weights['Rapgap'], Rapgap_E_wgt)
-        weights[data_name+'_E_wgt'] = np.multiply(np.repeat(dataloaders['Rapgap'][weight_name], num_Rapgap_parts_per_event, axis=0), Rapgap_E_wgt)
+        weights[data_name+'_E_wgt'] = Rapgap_E_wgt #np.multiply(np.repeat(dataloaders['Rapgap'][weight_name], num_Rapgap_parts_per_event, axis=0), Rapgap_E_wgt)
 
         weights['Rapgap'] = np.repeat(dataloaders['Rapgap']['mc_weights'], num_Rapgap_parts_per_event, axis=0)
         weights[data_name] = np.repeat(dataloaders['Rapgap']['mc_weights'] * dataloaders['Rapgap'][weight_name], num_Rapgap_parts_per_event, axis=0)
@@ -1420,6 +1420,7 @@ def plot_observable(flags, var, dataloaders, version):
     # Generate histogram plot
     fig, ax = utils.HistRoutine(
         feed_dict,
+        var,
         xlabel=info.name,
         ylabel = ylabel,
         weights=weights,
