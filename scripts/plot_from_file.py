@@ -15,8 +15,8 @@ utils.SetStyle()
 var_names = [#'weights','mc_weights',
              #'jet_pt',
              #'jet_breit_pt','deltaphi','jet_tau10', 'zjet', 'zjet_breit', 
-             'eec']
-            # 'theta']
+            #  'eec']
+            'theta']
 
 
 def get_sample_names(niter, use_sys, sys_list = ['sys0','sys1','sys5','sys7','sys11'],

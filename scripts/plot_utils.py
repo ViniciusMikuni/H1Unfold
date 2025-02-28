@@ -1012,25 +1012,34 @@ def cluster_breit(flags,dataloaders):
         scattered_electron_momentum = np.sqrt(scattered_electron["px"]**2 + scattered_electron["py"]**2 + scattered_electron["pz"]**2)
         scattered_electron_theta = np.arccos(scattered_electron["pz"]/scattered_electron_momentum)
 
-        # Bjorken x using the ISigma method from table 1 in https://arxiv.org/pdf/2110.05505
+        # Bjorken x using the ISigma method from table 1 in 2110.05505
         x_B = (scattered_electron["E"] * np.divide( 1 + np.cos(scattered_electron_theta), 2*y*920 ))[i] # also need to divide by E_proton
         # Breit frame proton 4-momentum & polar angle for event i
         P = np.divide(Q[i], 2*x_B) * np.array([0, 0, 1, 1], dtype=np.float32)
         # theta_P = math.acos( P[2] / np.linalg.norm(P) )  # arccos( p_z / |p| )
-
-        # Bjorken x using 2312.07655
-        # P = np.array([0, 0, 920, 920], dtype=np.float32) # 920 GeV is proton beam energy in lab frame
-        # P_dot_q = P[3]*q[3] - P[0]*q[0] - P[1]*q[1] - P[2]*q[2]
-        # x_B =  Q2[i] / (2 * P_dot_q)  # for event i
-        # # Breit frame proton 4-momentum & polar angle for event i
-        # P = Q[i] / (2 * x_B) * np.array([0, 0, 1, 1], dtype=np.float32)
-
         theta_P = math.acos( 1 )  # arccos( p_z / |p3| ), just zero here
 
-        entries = [math.log( math.tan( math.atan(math.exp(-part.eta)) )) for part in parts if np.abs(part.E) != 0]
-        E_wgt = [(x_B**4)*(part.E / P[3])*1e15 for part in parts if np.abs(part.E) != 0]
-        # pseudo variable just to check the spectrum of various quantities
-        theta = [(x_B**4)*(part.E / P[3])*1e15 for part in parts if np.abs(part.E) != 0]
+        # denomenator of the normalization for EEC in DIS
+        px_sum = np.sum([part.px for part in parts if np.abs(part.E) != 0])
+        py_sum = np.sum([part.py for part in parts if np.abs(part.E) != 0])
+        pz_sum = np.sum([part.pz for part in parts if np.abs(part.E) != 0])
+        E_sum = np.sum([part.E for part in parts if np.abs(part.E) != 0])
+        P_dot_psum = P[3]*E_sum - P[0]*px_sum - P[1]*py_sum - P[2]*pz_sum
+
+        entries, E_wgt, theta = [], [], []
+        for part in parts:
+            # Following def in 2102.05669
+            P_dot_pc = P[3]*part.E - P[0]*part.px - P[1]*part.py - P[2]*part.pz
+            theta_c = 2 * math.atan( math.exp( - part.eta ) )
+            entries.append( ( math.cos(theta_c) - math.cos(theta_P) ) ) # following def in 2102.05669
+            E_wgt.append( P_dot_pc / P_dot_psum ) # normalization factor )
+            theta.append( theta_c )
+
+        # Bjorken x weighted EEC following 2312.07655
+        # entries = [math.log( math.tan( math.atan(math.exp(-part.eta)) )) for part in parts if np.abs(part.E) != 0]
+        # E_wgt = [(x_B)*(part.E / P[3])*1e5 for part in parts if np.abs(part.E) != 0]
+        # # pseudo variable just to check the spectrum of various quantities
+        # theta = [(x_B)*(part.E / P[3])*1e5 for part in parts if np.abs(part.E) != 0]
 
         return entries, E_wgt, theta
 

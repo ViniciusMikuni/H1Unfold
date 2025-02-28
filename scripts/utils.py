@@ -68,7 +68,7 @@ observable_names = {
     'zjet':r'$z^{jet}$',
     'zjet_breit':r'$z^{jet}$ Breit frame',
     'eec':r'$EEC$ Breit frame',
-    'theta':r'$E_{part}/E_{proton}$ Breit frame',
+    'theta':r'$x_B\times(E_{part}/E_{proton})$ Breit frame',
 }
 
 dedicated_binning = {
@@ -79,7 +79,7 @@ dedicated_binning = {
     'zjet' : np.linspace(0.2, 1, 10),
     'zjet_breit' : np.linspace(0.2, 1, 10),
     'eec' : np.linspace(-5, 8, 20),
-    'theta' : np.linspace(0, 10, 20),
+    'theta' : np.linspace(5e-5, 1.5e3, 10),
     # 'theta' : np.linspace(1e-17, 1e-9, 10),
 }
 
@@ -95,7 +95,7 @@ def get_log(var):
     if 'eec' in var:
         return False, True
     if 'theta' in var:
-        return True, False
+        return False, True
     else:
         print(f"ERROR: {var} not present!")
 
@@ -110,7 +110,7 @@ def get_ylim(var):
     if 'eec' in var:
         return 1e-5, 10
     if 'theta' in var:
-        return 0, 600
+        return 0, 0.0055
     if var == 'zjet':
         return 0,8
     if var == 'zjet_breit':
@@ -350,7 +350,7 @@ def HistRoutine(feed_dict,
 
     # Plot each distribution
     for plot_name, data in feed_dict.items():
-        print(np.min(data), np.max(data))
+        print("data range: ", np.min(data), np.max(data))
         # input()
         plot_style = ref_plot_style if plot_name == reference_name else other_plot_style
         plot_weights = weights[plot_name] if weights else None
@@ -365,6 +365,9 @@ def HistRoutine(feed_dict,
         )
 
         max_y = max(max_y, np.max(dist))
+        print("MAX y: ", max_y)
+        for i in range(len(dist)):
+            print("(bin, hist): ", (binning[i], dist[i]))
 
         # Plot ratio if applicable
         if plot_ratio and plot_name != reference_name:
