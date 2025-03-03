@@ -1400,12 +1400,22 @@ def plot_observable(flags, var, dataloaders, version):
         feed_dict['Djangoh'] = dataloaders['Djangoh'][var][dataloaders['Djangoh']['jet_pt'] > 0]
 
     if flags.reco:
-        if len(dataloaders['data'][var].shape) > 1:
+        if flags.eec:
+            data_mask = dataloaders["data"]["eec"]!= -100
+            data = ak.drop_none(ak.mask(dataloaders["data"][var], data_mask))
+            data = ak.flatten(data)
+            weights['data'] = np.ones_like(data)
+            feed_dict['data'] = data
+        
+            data_E_wgt = ak.drop_none(ak.mask(dataloaders["data"]['E_wgt'], data_mask))
+            data_E_wgt = ak.flatten(data_E_wgt)
+            weights['data_E_wgt'] = data_E_wgt
+        elif len(dataloaders['data'][var].shape) > 1:
             data_mask = dataloaders["data"]["jet_pt"]>0
             data = ak.drop_none(ak.mask(dataloaders["data"][var], data_mask))
             data = ak.flatten(data)
             weights['data'] = np.ones_like(data)
-
+        
             feed_dict['data'] = data
         else:
 
