@@ -36,6 +36,7 @@ event_names = {
     '4': r'$e_{\phi}$',
     }
 
+
 jet_names = {
     '0': r'Jet $p_{T}$ [GeV]',
     '1': r'Jet $\eta$',
@@ -203,7 +204,7 @@ def SetGrid(ratio=True):
 
 
 
-def FormatFig(xlabel,ylabel,ax0,xpos=0.86,ypos=0.945):
+def FormatFig(xlabel,ylabel,ax0,xpos=0.83,ypos=1.035):
     #Limit number of digits in ticks
     # y_loc, _ = plt.yticks()
     # y_update = ['%.1f' % y for y in y_loc]
@@ -212,7 +213,7 @@ def FormatFig(xlabel,ylabel,ax0,xpos=0.86,ypos=0.945):
     ax0.set_ylabel(ylabel)
         
 
-    text = r'$\bf{H1 Internal}$'
+    text = r'$\bf{H1 Preliminary}$'
     WriteText(xpos,ypos,text,ax0)
 
 
@@ -253,7 +254,6 @@ def make_error_boxes(ax, xdata, ydata, xerror, yerror, facecolor='r',
     # Plot errorbars
     artists = ax.errorbar(xdata, ydata, xerr=xerror, yerr=yerror,
                           fmt='None', ecolor='k')
-
 
 def PlotRoutine(feed_dict,xlabel='',ylabel='',reference_name='gen',plot_ratio = False):
     if plot_ratio:
