@@ -73,8 +73,8 @@ dedicated_binning = {
     'jet_breit_pt': np.logspace(np.log10(10),np.log10(50),7),
     'deltaphi': np.linspace(0, 1, 8),
     'jet_tau10': np.array([-4.00,-3.15,-2.59,-2.18,-1.86,-1.58,-1.29,-1.05,-0.81,-0.61,0.00]),
-    'zjet' : np.linspace(0.2, 1, 10),
-    'zjet_breit' : np.linspace(0.2, 1, 10)
+    'zjet' : np.linspace(0.2, 1, 11),
+    'zjet_breit' : np.linspace(0.2, 1, 11)
 }
 
 def get_log(var):
@@ -91,7 +91,9 @@ def get_log(var):
 
 
 def get_ylim(var):
-    if 'pt' in var:
+    if var == "jet_pt":
+        return 1e-5, 1
+    if var == "jet_breit_pt":
         return 1e-4, 1
     if 'deltaphi' in var:
         return 1e-3, 50
@@ -185,7 +187,7 @@ def SetGrid(ratio=True):
 
 
 
-def FormatFig(xlabel,ylabel,ax0,xpos=0.86,ypos=0.945):
+def FormatFig(xlabel,ylabel,ax0,xpos=0.83,ypos=1.035):
     #Limit number of digits in ticks
     # y_loc, _ = plt.yticks()
     # y_update = ['%.1f' % y for y in y_loc]
@@ -194,7 +196,7 @@ def FormatFig(xlabel,ylabel,ax0,xpos=0.86,ypos=0.945):
     ax0.set_ylabel(ylabel)
         
 
-    text = r'$\bf{H1 Internal}$'
+    text = r'$\bf{H1 Preliminary}$'
     WriteText(xpos,ypos,text,ax0)
 
 
