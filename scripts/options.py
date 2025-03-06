@@ -13,6 +13,7 @@ colors = {
     'Djangoh':'#8c564b',
     'Rapgap':'darkorange',
     'Rapgap_unfolded':'darkolivegreen',
+    'Data_unfolded':'darkolivegreen',
     'Rapgap_closure':'darkolivegreen',
     'Herwig':'crimson',
     'Herwig_Matchbox':'#a50f15',
@@ -30,9 +31,11 @@ markers = {
     'Djangoh':'P',
     'Rapgap':'X',
     'Rapgap_unfolded':'X',
+    'Data_unfolded':'X',
     'Rapgap_closure':'X',
     'mc':'X',    
 
+    'data':'X',
     'Pythia': '^',
     'Pythia_Vincia': '^',
     'Pythia_Dire': '^',
@@ -60,6 +63,7 @@ xaxis_disp = {
     'Djangoh':0.1,
     'Rapgap':0.2,
     'Rapgap_unfolded':0.3,
+    'Data_unfolded':0.3,
     'Sherpa2Lund':0.5,
     'Sherpa2Cluster':0.6,
     'Sherpa3NLO':0.7,
@@ -162,6 +166,7 @@ name_translate = {
     'Rapgap_closure': 'RAPGAP Closure',
     'Djangoh': 'DJANGOH',
     'data': 'Data',
+    'Data_unfolded': 'Data Unfolded'
 
 }
 

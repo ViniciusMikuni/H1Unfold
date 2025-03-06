@@ -1096,7 +1096,12 @@ def plot_observable(flags, var, dataloaders, version):
 
     # Determine weight name
     weight_name = 'closure_weights' if flags.blind else 'weights'
-    data_name = 'Rapgap_closure' if flags.blind else 'Rapgap_unfolded'
+    if flags.blind:
+        data_name = 'Rapgap_closure'
+    elif flags.reco:
+        data_name = 'Rapgap_unfolded'
+    else:
+        data_name = 'Data_unfolded'
 
     # Set binning
     binning = info.binning
