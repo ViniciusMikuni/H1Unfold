@@ -348,8 +348,8 @@ def HistRoutine(feed_dict,
 
     # Compute reference histogram
     ref_weights = weights[reference_name] if weights else None
-    ref_E_weights = weights[reference_name+'_E_wgt'] if weights else None # unfolded per-particle energy weighting
     if var == 'eec':
+        ref_E_weights = weights[reference_name+'_E_wgt'] if weights else None # unfolded per-particle energy weighting
         reference_hist, _ = np.histogram(feed_dict[reference_name], bins=binning, density=True, weights=ref_weights * ref_E_weights)
     else:
         reference_hist, _ = np.histogram(feed_dict[reference_name], bins=binning, density=True, weights=ref_weights)
@@ -362,10 +362,10 @@ def HistRoutine(feed_dict,
         # input()
         plot_style = ref_plot_style if plot_name == reference_name else other_plot_style
         plot_weights = weights[plot_name] if weights else None
-        plot_E_weights = weights[plot_name+'_E_wgt'] if weights else None # unfolded per-particle energy weighting
         
         # Plot histogram
         if var == 'eec':
+            plot_E_weights = weights[plot_name+'_E_wgt'] if weights else None # unfolded per-particle energy weighting
             dist, _, _ = ax0.hist(
                 data, bins=binning, density=True, weights=plot_weights * plot_E_weights,
                 label=options.name_translate[plot_name],
