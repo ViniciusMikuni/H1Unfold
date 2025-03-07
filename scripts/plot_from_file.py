@@ -15,6 +15,7 @@ utils.SetStyle()
 var_names = ['weights','mc_weights','jet_pt',
              'jet_breit_pt','deltaphi','jet_tau10', 'zjet', 'zjet_breit']
 
+
 def get_sample_names(niter, use_sys, sys_list = ['sys0','sys1','sys5','sys7','sys11'],
                      nominal = 'Rapgap',period = 'Eplus0607',reco=False,bootstrap=False,nboot=1):
     add_string = '_reco' if reco else ''
@@ -87,7 +88,7 @@ def main():
     for var in var_names:
         if 'weight' in var:continue
         plot_observable(flags,var,dataloaders,opt['NAME'])
-
+        
     
 if __name__ == '__main__':
     main()
