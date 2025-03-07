@@ -34,7 +34,6 @@ def parse_arguments():
     parser.add_argument('--nmax', type=int, default=1000000, help='Maximum number of events to load')
     parser.add_argument('--img_fmt', default='pdf', help='Format of the output figures')
     parser.add_argument('--verbose', action='store_true', default=False,help='Increase print level')
-    parser.add_argument('--eec', action='store_true', default=False,help='Get EEC')
     
     flags = parser.parse_args()
 
@@ -98,7 +97,7 @@ def main():
     num_part = dataloaders['Rapgap'].part.shape[1]
     
     cluster_jets(dataloaders)
-    cluster_breit(flags,dataloaders)
+    cluster_breit(dataloaders)
     gather_data(dataloaders)
     plot_particles(flags,dataloaders,weights,opt['NAME'],num_part = num_part)
     plot_jet_pt(flags,dataloaders,weights,opt['NAME'],lab_frame=False)
@@ -108,7 +107,6 @@ def main():
     plot_tau(flags,dataloaders,weights,opt['NAME'])
     plot_zjet(flags,dataloaders,weights,opt['NAME'], frame = "lab")
     plot_zjet(flags,dataloaders,weights,opt['NAME'], frame = "breit")
-    plot_eec(flags,dataloaders,weights,opt['NAME'], frame = "breit")
     plot_event(flags,dataloaders,weights,opt['NAME'])    
 
 
