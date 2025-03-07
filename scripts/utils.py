@@ -269,7 +269,6 @@ def PlotRoutine(feed_dict,xlabel='',ylabel='',reference_name='gen',plot_ratio = 
         
     return fig,ax0
 
-
 def HistRoutine(feed_dict,
                 xlabel='',
                 ylabel='',
@@ -283,22 +282,6 @@ def HistRoutine(feed_dict,
                 uncertainty=None):
     """
     Generate a histogram plot with optional ratio and uncertainties.
-
-    Args:
-        feed_dict (dict): Dictionary containing data to be plotted.
-        xlabel (str): Label for the x-axis.
-        ylabel (str): Label for the y-axis.
-        reference_name (str): Key in feed_dict used as the reference distribution.
-        logy (bool): Whether to use a logarithmic scale on the y-axis.
-        logx (bool): Whether to use a logarithmic scale on the x-axis.
-        binning (array-like): Bin edges for the histograms.
-        label_loc (str): Location of the legend.
-        plot_ratio (bool): Whether to plot the ratio to the reference distribution.
-        weights (dict): Optional weights for each distribution in feed_dict.
-        uncertainty (array-like): Optional uncertainties for the ratio plot.
-
-    Returns:
-        fig, ax0: The generated figure and main axis.
     """
     import numpy as np
     import matplotlib.pyplot as plt
@@ -309,6 +292,7 @@ def HistRoutine(feed_dict,
     # Default styles for plots
     ref_plot_style = {'histtype': 'stepfilled', 'alpha': 0.2}
     other_plot_style = {'histtype': 'step', 'linewidth': 2}
+    marker_style = {'marker': 'o', 'linestyle': 'None', 'markersize': 8, 'color': 'black', 'label': 'Data'}
 
     # Set up the figure and axes
     fig, gs = SetGrid(ratio=plot_ratio)
@@ -336,39 +320,55 @@ def HistRoutine(feed_dict,
 
     # Plot each distribution
     for plot_name, data in feed_dict.items():
-        plot_style = ref_plot_style if plot_name == reference_name else other_plot_style
         plot_weights = weights[plot_name] if weights else None
 
-        # Plot histogram
-        dist, _, _ = ax0.hist(
-            data, bins=binning, density=True, weights=plot_weights,
-            label=options.name_translate[plot_name],
-            color=options.colors[plot_name],
-            **plot_style
-        )
+        if plot_name.lower() == "data":
+            # Use error bars for "Data" instead of a histogram
+            hist_values, _ = np.histogram(data, bins=binning, density=True, weights=plot_weights)
+            bin_centers = (binning[:-1] + binning[1:]) / 2
+            bin_counts, _ = np.histogram(data, bins=binning, weights=plot_weights)
+            bin_counts = np.asarray(bin_counts)  # Ensure bin_counts is a NumPy array
+            y_errors = np.sqrt(hist_values)
+            nonzero = bin_counts > 0
+            y_errors = np.asarray(y_errors)  # Ensure y_errors is a NumPy array
+            y_errors[nonzero] = hist_values[nonzero] / np.sqrt(bin_counts[nonzero])  # Poisson errors
+            print(f"hist_values: {hist_values}")
+            print(f"y_errors: {y_errors}")
+            ax0.errorbar(bin_centers, hist_values, yerr=y_errors, **marker_style)
 
-        max_y = max(max_y, np.max(dist))
+            max_y = max(max_y, np.max(hist_values))
 
-        # Plot ratio if applicable
-        if plot_ratio and plot_name != reference_name:
-            ratio = np.ma.divide(dist, reference_hist).filled(0)
-            ax1.plot(
-                xaxis, ratio,
+        else:
+            # Use histogram for other distributions
+            plot_style = ref_plot_style if plot_name == reference_name else other_plot_style
+            dist, _, _ = ax0.hist(
+                data, bins=binning, density=True, weights=plot_weights,
+                label=options.name_translate[plot_name],
                 color=options.colors[plot_name],
-                marker=options.markers[plot_name],
-                ms=10, lw=0,
-                markerfacecolor='none', markeredgewidth=3
+                **plot_style
             )
 
-            # Add uncertainties
-            if uncertainty is not None:
-                for ibin in range(len(binning)-1):
-                    xup = binning[ibin+1]
-                    xlow = binning[ibin]
-                    ax1.fill_between(np.array([xlow,xup]),
-                                     1.0 + uncertainty[ibin],1.0 -uncertainty[ibin],
-                                     alpha=0.3,color='k')
-                    
+            max_y = max(max_y, np.max(dist))
+
+            # Plot ratio if applicable
+            if plot_ratio and plot_name != reference_name:
+                ratio = np.ma.divide(dist, reference_hist).filled(0)
+                ax1.plot(
+                    xaxis, ratio,
+                    color=options.colors[plot_name],
+                    marker=options.markers[plot_name],
+                    ms=10, lw=0,
+                    markerfacecolor='none', markeredgewidth=3
+                )
+
+                # Add uncertainties
+                if uncertainty is not None:
+                    for ibin in range(len(binning)-1):
+                        xup = binning[ibin+1]
+                        xlow = binning[ibin]
+                        ax1.fill_between(np.array([xlow,xup]),
+                                         1.0 + uncertainty[ibin],1.0 -uncertainty[ibin],
+                                         alpha=0.3,color='k')
 
     # Adjust y-axis scale
     if logy:
@@ -395,6 +395,134 @@ def HistRoutine(feed_dict,
         FormatFig(xlabel=xlabel, ylabel=ylabel, ax0=ax0)
 
     return fig, ax0
+
+# def HistRoutine(feed_dict,
+#                 xlabel='',
+#                 ylabel='',
+#                 reference_name='data',
+#                 logy=False,
+#                 logx=False,
+#                 binning=None,
+#                 label_loc='best',
+#                 plot_ratio=True,
+#                 weights=None,
+#                 uncertainty=None):
+#     """
+#     Generate a histogram plot with optional ratio and uncertainties.
+
+#     Args:
+#         feed_dict (dict): Dictionary containing data to be plotted.
+#         xlabel (str): Label for the x-axis.
+#         ylabel (str): Label for the y-axis.
+#         reference_name (str): Key in feed_dict used as the reference distribution.
+#         logy (bool): Whether to use a logarithmic scale on the y-axis.
+#         logx (bool): Whether to use a logarithmic scale on the x-axis.
+#         binning (array-like): Bin edges for the histograms.
+#         label_loc (str): Location of the legend.
+#         plot_ratio (bool): Whether to plot the ratio to the reference distribution.
+#         weights (dict): Optional weights for each distribution in feed_dict.
+#         uncertainty (array-like): Optional uncertainties for the ratio plot.
+
+#     Returns:
+#         fig, ax0: The generated figure and main axis.
+#     """
+#     import numpy as np
+#     import matplotlib.pyplot as plt
+#     from utils import SetGrid, FormatFig
+
+#     assert reference_name in feed_dict, "ERROR: Reference distribution not found in feed_dict."
+
+#     # Default styles for plots
+#     ref_plot_style = {'histtype': 'stepfilled', 'alpha': 0.2}
+#     other_plot_style = {'histtype': 'step', 'linewidth': 2}
+
+#     # Set up the figure and axes
+#     fig, gs = SetGrid(ratio=plot_ratio)
+#     ax0 = plt.subplot(gs[0])
+
+#     if plot_ratio:
+#         ax1 = plt.subplot(gs[1], sharex=ax0)
+#         ax0.xaxis.set_visible(False)
+
+#     # Define binning if not provided
+#     if binning is None:
+#         binning = np.linspace(
+#             np.quantile(feed_dict[reference_name], 0.01),
+#             np.quantile(feed_dict[reference_name], 0.99),
+#             50
+#         )
+
+#     xaxis = 0.5 * (binning[:-1] + binning[1:])  # Bin centers
+
+#     # Compute reference histogram
+#     ref_weights = weights[reference_name] if weights else None
+#     reference_hist, _ = np.histogram(feed_dict[reference_name], bins=binning, density=True, weights=ref_weights)
+
+#     max_y = 0
+
+#     # Plot each distribution
+#     for plot_name, data in feed_dict.items():
+#         print("HARRYYYYYYYY_______")
+#         print(f"plot_name :{plot_name}")
+#         plot_style = ref_plot_style if plot_name == reference_name else other_plot_style
+#         plot_weights = weights[plot_name] if weights else None
+
+#         # Plot histogram
+#         dist, _, _ = ax0.hist(
+#             data, bins=binning, density=True, weights=plot_weights,
+#             label=options.name_translate[plot_name],
+#             color=options.colors[plot_name],
+#             **plot_style
+#         )
+
+#         max_y = max(max_y, np.max(dist))
+
+#         # Plot ratio if applicable
+#         if plot_ratio and plot_name != reference_name:
+#             ratio = np.ma.divide(dist, reference_hist).filled(0)
+#             ax1.plot(
+#                 xaxis, ratio,
+#                 color=options.colors[plot_name],
+#                 marker=options.markers[plot_name],
+#                 ms=10, lw=0,
+#                 markerfacecolor='none', markeredgewidth=3
+#             )
+
+#             # Add uncertainties
+#             if uncertainty is not None:
+#                 for ibin in range(len(binning)-1):
+#                     xup = binning[ibin+1]
+#                     xlow = binning[ibin]
+#                     ax1.fill_between(np.array([xlow,xup]),
+#                                      1.0 + uncertainty[ibin],1.0 -uncertainty[ibin],
+#                                      alpha=0.3,color='k')
+                    
+
+#     # Adjust y-axis scale
+#     if logy:
+#         ax0.set_yscale('log')
+#         ax0.set_ylim(1e-5, 10 * max_y)
+#     else:
+#         ax0.set_ylim(0, 1.3 * max_y)
+
+#     # Adjust x-axis scale
+#     if logx:
+#         ax0.set_xscale('log')
+#         if plot_ratio:
+#             ax1.set_xscale('log')
+
+#     # Add legend and format axes
+#     ax0.legend(loc=label_loc, fontsize=16, ncol=2)
+#     if plot_ratio:
+#         FormatFig(xlabel="", ylabel=ylabel, ax0=ax0)
+#         ax1.set_ylabel('Pred./Ref.')
+#         ax1.axhline(y=1.0, color='r', linestyle='-', linewidth=1)
+#         ax1.set_ylim([0.5, 1.5])
+#         ax1.set_xlabel(xlabel)
+#     else:
+#         FormatFig(xlabel=xlabel, ylabel=ylabel, ax0=ax0)
+
+#     return fig, ax0
 
 
 def setup_gpus(local_rank):

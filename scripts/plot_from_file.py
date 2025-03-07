@@ -12,13 +12,13 @@ import h5py as h5
 
 utils.SetStyle()
 
-var_names = ['weights','mc_weights','jet_pt',
-             'jet_breit_pt','deltaphi','jet_tau10', 'zjet', 'zjet_breit']
-
+# var_names = ['weights','mc_weights','jet_pt',
+            #  'jet_breit_pt','deltaphi','jet_tau10', 'zjet', 'zjet_breit']
+var_names = ['jet_pt']
 
 def get_sample_names(niter, use_sys, sys_list = ['sys0','sys1','sys5','sys7','sys11'],
                      nominal = 'Rapgap',period = 'Eplus0607',reco=False,bootstrap=False,nboot=1):
-    add_string = '_reco' if reco else ''
+    add_string = '_prelimnote_reco' if reco else ''
     mc_file_names = {
         'Rapgap':f'Rapgap_{period}_unfolded_{niter}{add_string}.h5',
         'Djangoh':f'Djangoh_{period}_unfolded_{niter}{add_string}.h5',
