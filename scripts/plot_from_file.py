@@ -38,7 +38,8 @@ def get_sample_names(niter, use_sys, sys_list = ['sys0','sys1','sys5','sys7','sy
 def parse_arguments():
     parser = argparse.ArgumentParser()
     
-    parser.add_argument('--data_folder', default='/global/cfs/cdirs/m3246/H1/h5/', help='Folder containing data and MC files')
+    parser.add_argument('--data_folder', default='/pscratch/sd/v/vmikuni/H1v2/h5', help='Folder containing data and MC files')
+    #parser.add_argument('--data_folder', default='/global/cfs/cdirs/m3246/vmikuni/H1v2/h5/', help='Folder containing data and MC files')
     parser.add_argument('--weights', default='../weights', help='Folder to store trained weights')
     parser.add_argument('--load_pretrain', action='store_true', default=False,help='Load pretrained model instead of starting from scratch')
     parser.add_argument('--config', default='config_general.json', help='Basic config file containing general options')
