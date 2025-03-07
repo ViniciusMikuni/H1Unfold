@@ -1359,7 +1359,7 @@ def plot_observable(flags, var, dataloaders, version):
 
     # Set plot limits and save
     ax.set_ylim(info.ylow, info.yhigh)
-    fig.savefig(flags.plot_folder+f'{version}_{var}.pdf')
+    fig.savefig(flags.plot_folder+f'/{version}_{var}.pdf')
 
 
         
