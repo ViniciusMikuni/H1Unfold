@@ -1165,6 +1165,162 @@ def plot_observable(flags, var, dataloaders, version):
     def compute_histogram(dataset_name, weights=None,density=True):
         if len(dataloaders[dataset_name][var].shape) > 1:
             multiple_jets_per_event = True
+            valid_indices = dataloaders[dataset_name]['jet_pt']>0
+            data = ak.mask(dataloaders[dataset_name][var], valid_indices)
+            data = ak.drop_none(data)
+            num_jets_per_event = ak.count(data, axis = 1)
+            data = ak.flatten(data)
+        else:
+            multiple_jets_per_event = False
+            valid_indices = dataloaders[dataset_name]['jet_pt'] > 0
+            data = dataloaders[dataset_name][var][valid_indices]
+        if weights is not None:
+            if multiple_jets_per_event:
+                weights = np.repeat(weights, num_jets_per_event, axis=0)
+            else:
+                weights = weights[valid_indices]
+        counts, bins = np.histogram(data, bins=binning, density=density, weights=weights)
+        return ak.to_numpy(counts), bins
+
+    # Determine weight name
+    weight_name = 'closure_weights' if flags.blind else 'weights'
+    if flags.blind:
+        data_name = 'Rapgap_closure'
+    elif flags.reco:
+        data_name = 'Rapgap_unfolded'
+    else:
+        data_name = 'Data_unfolded'
+
+    # Set binning
+    binning = info.binning
+
+    # Compute nominal and closure histograms if systematic uncertainties are enabled
+    total_unc = None
+    if flags.sys:
+        nominal_weights = dataloaders['Rapgap']['weights'] if not flags.reco else np.ones_like(dataloaders['Rapgap']['weights'])
+
+        nominal, _ = compute_histogram('Rapgap', nominal_weights * dataloaders['Rapgap']['mc_weights'])
+        nominal_closure, _ = compute_histogram('Djangoh', dataloaders['Djangoh']['mc_weights'])
+
+        total_unc = np.zeros_like(nominal)
+        for sys in dataloaders:
+            if 'boot' in sys: continue
+            print(sys)
+            if flags.reco:
+                #Skip model and closure uncertainties at reco level
+                if sys == 'Rapgap': continue
+                if sys == 'Djangoh': continue
+                if sys == 'data': continue
+
+                
+            sys_weights = dataloaders[sys]['closure_weights'] if sys == 'Rapgap' else dataloaders[sys]['weights']
+            if flags.reco: sys_weights = np.ones_like(sys_weights)
+            sys_hist, _ = compute_histogram(sys, dataloaders[sys]['mc_weights'] * sys_weights)
+
+            ref_hist = nominal_closure if sys == 'Rapgap' else nominal
+            unc = (np.ma.divide(sys_hist, ref_hist).filled(1) - 1) ** 2
+            total_unc += unc
+            
+            print(f"{sys}: max uncertainty = {np.max(np.sqrt(unc))}")
+            
+        #Statistical Uncertainties
+        if flags.reco:
+            counts,_ = compute_histogram('data',density=False)
+            unc = 1.0/(1e-9+counts)
+            total_unc += unc
+            print(f"stat: max uncertainty = {np.max(np.sqrt(unc))}")
+        else:
+            if flags.bootstrap:
+                print("Running over boostrap entries")
+                stat_unc = []
+                for boot in range(1,flags.nboot):
+                    if boot ==10: continue
+                    if boot == 23: continue
+                    sys_weights = dataloaders['bootstrap'][f'weights{boot}']
+                    sys_hist, _ = compute_histogram('bootstrap', dataloaders['bootstrap']['mc_weights'] * sys_weights)
+                    stat_unc.append(sys_hist)
+                stat_unc = np.ma.divide(np.std(stat_unc,0), np.mean(stat_unc,0)).filled(0)
+                
+                total_unc += stat_unc**2
+                print(f"{sys}: max uncertainty = {np.max(stat_unc)}")
+                    
+        total_unc = np.sqrt(total_unc)
+
+    # Prepare weights and data for plotting
+    weights = {}
+    feed_dict = {}
+
+    if len(dataloaders['Rapgap'][var].shape) > 1:
+        Rapgap_mask = dataloaders["Rapgap"]["jet_pt"]>0
+        Rapgap_data = ak.drop_none(ak.mask(dataloaders["Rapgap"][var], Rapgap_mask))
+        num_Rapgap_jets_per_event = ak.count(Rapgap_data, axis=1)
+        Rapgap_data = ak.flatten(Rapgap_data)
+
+        weights[data_name] = np.repeat(dataloaders['Rapgap']['mc_weights'] * dataloaders['Rapgap'][weight_name], num_Rapgap_jets_per_event, axis=0)
+        weights['Rapgap'] = np.repeat(dataloaders['Rapgap']['mc_weights'], num_Rapgap_jets_per_event, axis=0)
+        feed_dict[data_name] = Rapgap_data
+        feed_dict['Rapgap'] = Rapgap_data
+    else:
+        weights[data_name] = (dataloaders['Rapgap']['mc_weights'] * dataloaders['Rapgap'][weight_name])[dataloaders['Rapgap']['jet_pt'] > 0]
+        weights['Rapgap'] = dataloaders['Rapgap']['mc_weights'][dataloaders['Rapgap']['jet_pt'] > 0]
+        feed_dict[data_name] = dataloaders['Rapgap'][var][dataloaders['Rapgap']['jet_pt'] > 0]
+        feed_dict['Rapgap'] = dataloaders['Rapgap'][var][dataloaders['Rapgap']['jet_pt'] > 0]
+    
+    if len(dataloaders['Djangoh'][var].shape) > 1:
+        Djangoh_mask = dataloaders["Djangoh"]["jet_pt"]>0
+        Djangoh_data = ak.drop_none(ak.mask(dataloaders["Djangoh"][var], Djangoh_mask))
+        num_Djangoh_jets_per_event = ak.count(Djangoh_data, axis=1)
+        Djangoh_data = ak.flatten(Djangoh_data)
+
+        weights['Djangoh'] = np.repeat(dataloaders['Djangoh']['mc_weights'], num_Djangoh_jets_per_event, axis=0)
+        feed_dict['Djangoh'] = Djangoh_data
+    else:
+        weights['Djangoh'] = dataloaders['Djangoh']['mc_weights'][dataloaders['Djangoh']['jet_pt'] > 0]
+        feed_dict['Djangoh'] = dataloaders['Djangoh'][var][dataloaders['Djangoh']['jet_pt'] > 0]
+
+    if flags.reco:
+        if len(dataloaders['data'][var].shape) > 1:
+            data_mask = dataloaders["data"]["jet_pt"]>0
+            data = ak.drop_none(ak.mask(dataloaders["data"][var], data_mask))
+            data = ak.flatten(data)
+            weights['data'] = np.ones_like(data)
+
+            feed_dict['data'] = data
+        else:
+
+            weights['data'] = np.ones_like(dataloaders['data'][var][dataloaders['data']['jet_pt'] > 0])
+            feed_dict['data'] = dataloaders['data'][var][dataloaders['data']['jet_pt'] > 0]
+
+    if flags.reco:
+        ylabel = r'1/N $\mathrm{dN}/\mathrm{d}$%s'%info.name
+    else:
+        ylabel = r'$1/\sigma$ $\mathrm{d}\sigma/\mathrm{d}$%s'%info.name
+            
+    # Generate histogram plot
+    fig, ax = utils.HistRoutine(
+        feed_dict,
+        xlabel=info.name,
+        ylabel = ylabel,
+        weights=weights,
+        logy=info.logy,
+        logx=info.logx,
+        binning=binning,
+        reference_name='data' if flags.reco else data_name,
+        label_loc='upper left',
+        uncertainty=total_unc,
+    )
+
+    # Set plot limits and save
+    ax.set_ylim(info.ylow, info.yhigh)
+    fig.savefig(f'../plots/{version}_{var}.pdf')
+
+
+def plot_part_observable(flags, var, dataloaders, version):
+    info = utils.ObservableInfo(var)
+
+    def compute_histogram(dataset_name, weights=None,density=True):
+        if len(dataloaders[dataset_name][var].shape) > 1:
+            multiple_jets_per_event = True
             if flags.eec:
                 valid_indices = dataloaders[dataset_name]['eec'] != 0
             else:
@@ -1361,8 +1517,7 @@ def plot_observable(flags, var, dataloaders, version):
     ax.set_ylim(info.ylow, info.yhigh)
     fig.savefig(flags.plot_folder+f'/{version}_{var}.pdf')
 
-
-        
+    
 
 def gather_data(dataloaders):
 
