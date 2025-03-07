@@ -348,37 +348,23 @@ def HistRoutine(feed_dict,
 
     # Compute reference histogram
     ref_weights = weights[reference_name] if weights else None
-    if var == 'eec':
-        ref_E_weights = weights[reference_name+'_E_wgt'] if weights else None # unfolded per-particle energy weighting
-        reference_hist, _ = np.histogram(feed_dict[reference_name], bins=binning, density=True, weights=ref_weights * ref_E_weights)
-    else:
-        reference_hist, _ = np.histogram(feed_dict[reference_name], bins=binning, density=True, weights=ref_weights)
+    reference_hist, _ = np.histogram(feed_dict[reference_name], bins=binning, density=True, weights=ref_weights)
 
     max_y = 0
 
     # Plot each distribution
     for plot_name, data in feed_dict.items():
-        print("data range: ", np.min(data), np.max(data))
-        # input()
+        # print("data range: ", np.min(data), np.max(data))
         plot_style = ref_plot_style if plot_name == reference_name else other_plot_style
         plot_weights = weights[plot_name] if weights else None
         
         # Plot histogram
-        if var == 'eec':
-            plot_E_weights = weights[plot_name+'_E_wgt'] if weights else None # unfolded per-particle energy weighting
-            dist, _, _ = ax0.hist(
-                data, bins=binning, density=True, weights=plot_weights * plot_E_weights,
-                label=options.name_translate[plot_name],
-                color=options.colors[plot_name],
-                **plot_style
-            )
-        else:
-            dist, _, _ = ax0.hist(
-                data, bins=binning, density=True, weights=plot_weights,
-                label=options.name_translate[plot_name],
-                color=options.colors[plot_name],
-                **plot_style
-            )
+        dist, _, _ = ax0.hist(
+            data, bins=binning, density=True, weights=plot_weights,
+            label=options.name_translate[plot_name],
+            color=options.colors[plot_name],
+            **plot_style
+        )
 
         max_y = max(max_y, np.max(dist))
         print("MAX y: ", max_y)

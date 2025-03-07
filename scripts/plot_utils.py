@@ -1267,11 +1267,11 @@ def plot_observable(flags, var, dataloaders, version):
 
         Rapgap_E_wgt = ak.drop_none(ak.mask(dataloaders["Rapgap"]['E_wgt'], Rapgap_mask))
         Rapgap_E_wgt = ak.flatten(Rapgap_E_wgt)
-        weights['Rapgap_E_wgt'] = Rapgap_E_wgt #np.multiply(weights['Rapgap'], Rapgap_E_wgt)
-        weights[data_name+'_E_wgt'] = Rapgap_E_wgt #np.multiply(np.repeat(dataloaders['Rapgap'][weight_name], num_Rapgap_parts_per_event, axis=0), Rapgap_E_wgt)
 
         weights['Rapgap'] = np.repeat(dataloaders['Rapgap']['mc_weights'], num_Rapgap_parts_per_event, axis=0)
+        weights['Rapgap'] = np.multiply(weights['Rapgap'], Rapgap_E_wgt)
         weights[data_name] = np.repeat(dataloaders['Rapgap']['mc_weights'] * dataloaders['Rapgap'][weight_name], num_Rapgap_parts_per_event, axis=0)
+        weights[data_name] = np.multiply(weights[data_name], Rapgap_E_wgt)
 
     elif len(dataloaders['Rapgap'][var].shape) > 1:
         Rapgap_mask = dataloaders["Rapgap"]["jet_pt"]>0
@@ -1298,9 +1298,9 @@ def plot_observable(flags, var, dataloaders, version):
 
         Djangoh_E_wgt = ak.drop_none(ak.mask(dataloaders["Djangoh"]['E_wgt'], Djangoh_mask))
         Djangoh_E_wgt = ak.flatten(Djangoh_E_wgt)
-        weights['Djangoh_E_wgt'] = Djangoh_E_wgt #np.multiply(weights['Djangoh'], Djangoh_E_wgt)
 
         weights['Djangoh'] = np.repeat(dataloaders['Djangoh']['mc_weights'], num_Djangoh_jets_per_event, axis=0)
+        weights['Djangoh'] = np.multiply(weights['Djangoh'], Djangoh_E_wgt)
 
     elif len(dataloaders['Djangoh'][var].shape) > 1:
         Djangoh_mask = dataloaders["Djangoh"]["jet_pt"]>0
