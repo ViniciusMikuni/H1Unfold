@@ -342,7 +342,8 @@ def HistRoutine(feed_dict,
     for plot_name, data in feed_dict.items():
         plot_weights = weights[plot_name] if weights else None
 
-        if plot_name.lower() == "data":
+        # if plot_name.lower() == "data":
+        if "data" in plot_name.lower():    
             # Use error bars for "Data" instead of a histogram
             hist_values, _ = np.histogram(data, bins=binning, density=True, weights=plot_weights)
             bin_centers = (binning[:-1] + binning[1:]) / 2
