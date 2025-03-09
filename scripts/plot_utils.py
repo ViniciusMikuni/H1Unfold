@@ -384,6 +384,7 @@ def plot_qtQ(flags,dataloaders,data_weights,version):
                                reference_name = reference_name,
                                label_loc='upper left',
                                )
+    ax.set_ylim(1e-2,50)
     fig.savefig('../plots/{}_jet_pt.pdf'.format(version))
 
     feed_dict = {
@@ -608,7 +609,7 @@ def plot_jet_pt(flags, dataloaders, data_weights, version,lab_frame=True):
     )
 
     # Set plot limits and save
-    #ax.set_ylim(1e-2, 50)
+    # ax.set_ylim(1e-2, 50)
     tag = 'lab' if lab_frame else 'breit'
     
     fig.savefig(f'../plots/{version}_jet_pt_{tag}.pdf')

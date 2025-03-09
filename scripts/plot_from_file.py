@@ -14,24 +14,26 @@ utils.SetStyle()
 
 var_names = ['weights','mc_weights','jet_pt',
              'jet_breit_pt','deltaphi','jet_tau10', 'zjet', 'zjet_breit']
-
+# var_names = ['jet_breit_pt']
 
 def get_sample_names(niter, use_sys, sys_list = ['sys0','sys1','sys5','sys7','sys11'],
-                     nominal = 'Rapgap',period = 'Eplus0607',reco=False,bootstrap=False,nboot=1):
+                     nominal = 'Rapgap',period = 'Eplus0607',reco=False,bootstrap=False,nboot=1,prelim=False):
     add_string = '_reco' if reco else ''
+    prelim_string = '_prelimnote' if prelim else ''
+
     mc_file_names = {
-        'Rapgap':f'Rapgap_{period}_unfolded_{niter}{add_string}.h5',
-        'Djangoh':f'Djangoh_{period}_unfolded_{niter}{add_string}.h5',
+        'Rapgap':f'Rapgap_{period}_unfolded_{niter}{prelim_string}{add_string}.h5',
+        'Djangoh':f'Djangoh_{period}_unfolded_{niter}{prelim_string}{add_string}.h5',
     }
     if reco:
-        mc_file_names['data'] = f'data_{period}_unfolded_{niter}{add_string}.h5'
+        mc_file_names['data'] = f'data_{period}_unfolded_{niter}{prelim_string}{add_string}.h5'
 
     if use_sys:
         for sys in sys_list:
-            mc_file_names[f'{sys}'] = f'{nominal}_{period}_{sys}_unfolded_{niter}{add_string}.h5'
+            mc_file_names[f'{sys}'] = f'{nominal}_{period}_{sys}_unfolded_{niter}{prelim_string}{add_string}.h5'
 
     if bootstrap:
-        mc_file_names['bootstrap'] = f'{nominal}_{period}_unfolded_{niter}_boot.h5'
+        mc_file_names['bootstrap'] = f'{nominal}_{period}_unfolded_{niter}{prelim_string}_boot.h5'
             
     return mc_file_names
 
@@ -51,6 +53,7 @@ def parse_arguments():
     parser.add_argument('--niter', type=int, default=4, help='Omnifold iteration to load')
     parser.add_argument('--bootstrap', action='store_true', default=False,help='Load models for bootstrapping')
     parser.add_argument('--nboot', type=int, default=50, help='Number of bootstrap models to load')
+    parser.add_argument('--prelim', action='store_true', default=False,help='Load files with prelimnote label')
 
     parser.add_argument('--verbose', action='store_true', default=False,help='Increase print level')
     
@@ -79,7 +82,7 @@ def main():
     flags = parse_arguments()
     opt=utils.LoadJson(flags.config)
     mc_files = get_sample_names(niter=flags.niter,use_sys=flags.sys,
-                                reco=flags.reco,bootstrap=flags.bootstrap,nboot=flags.nboot)
+                                reco=flags.reco,bootstrap=flags.bootstrap,nboot=flags.nboot,prelim=flags.prelim)
     if flags.verbose:
         print(f'Will load the following files : {mc_files.keys()}')
         

@@ -165,7 +165,7 @@ name_translate = {
     'Rapgap_unfolded': 'RAPGAP + Unfolding',
     'Rapgap_closure': 'RAPGAP Closure',
     'Djangoh': 'DJANGOH',
-    'data': 'Data',
+    'data': 'Data (Omnifold)',
     'Data_unfolded': 'Data Unfolded'
 
 }
