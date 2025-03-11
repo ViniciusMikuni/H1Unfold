@@ -393,43 +393,26 @@ def HistRoutine(feed_dict,
         # Plot ratio if applicable
         if plot_ratio and plot_name != reference_name:
             ratio = np.ma.divide(dist, reference_hist).filled(0)
+
+            bin_edges = np.zeros(len(binning))
+            for i in range(len(binning)):
+                bin_edges[i] = binning[i]
             
-            # For logarithmic binning
-            if logx:
-                # Calculate the bin edges for proper extension in log space
-                bin_edges = np.zeros(len(binning))
-                for i in range(len(binning)):
-                    bin_edges[i] = binning[i]
-                
-                # Create extended ratio array for steps-post style
-                extended_ratio = np.zeros(len(bin_edges))
-                for i in range(len(ratio)):
-                    extended_ratio[i] = ratio[i]
-                
-                ax1.plot(
-                    bin_edges, extended_ratio,
-                    color=options.colors[plot_name],
-                    drawstyle='steps-post',
-                    linestyle='-',
-                    lw=3,
-                    ms=10,
-                    markerfacecolor='none', markeredgewidth=3
-                )
-            else:
-                # For linear binning
-                bin_width = binning[1] - binning[0]
-                extended_xaxis = np.append(xaxis, xaxis[-1] + bin_width)
-                extended_ratio = np.append(ratio, ratio[-1])
-                
-                ax1.plot(
-                    extended_xaxis, extended_ratio,
-                    color=options.colors[plot_name],
-                    drawstyle='steps-post',
-                    linestyle='-',
-                    lw=3,
-                    ms=10,
-                    markerfacecolor='none', markeredgewidth=3
-                )
+            # Create extended ratio array for steps-post style
+            extended_ratio = np.zeros(len(bin_edges))
+            for i in range(len(ratio)):
+                extended_ratio[i] = ratio[i]
+            
+            ax1.plot(
+                bin_edges, extended_ratio,
+                color=options.colors[plot_name],
+                drawstyle='steps-post',
+                linestyle='-',
+                lw=3,
+                ms=10,
+                markerfacecolor='none', markeredgewidth=3
+            )
+
 
             # Add uncertainties
             if uncertainty is not None:
