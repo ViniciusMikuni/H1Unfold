@@ -1502,11 +1502,11 @@ def plot_part_observable(flags, var, dataloaders, version):
         ylabel = r'1/N $\mathrm{dN}/\mathrm{d}$%s'%info.name
     else:
         ylabel = r'$1/\sigma$ $\mathrm{d}\sigma/\mathrm{d}$%s'%info.name
+
             
     # Generate histogram plot
     fig, ax = utils.HistRoutine(
         feed_dict,
-        var,
         xlabel=info.name,
         ylabel = ylabel,
         weights=weights,

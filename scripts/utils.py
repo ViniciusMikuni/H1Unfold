@@ -124,7 +124,7 @@ def get_ylim(var):
         return 0,3
     if 'eec' in var:
         # return 0, 0.35
-        return 0, 4.2
+        return 0, 4.7
     if 'theta' in var:
         return 0, 2.5
     else:
