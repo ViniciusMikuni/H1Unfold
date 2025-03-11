@@ -62,11 +62,14 @@ particle_names = {
 
 observable_names = {
     'jet_pt': r'$p_{T}^{jet}$ [GeV]',
-    'jet_breit_pt': r'$p_{T}^{jet}$ [GeV] Breit frame',
+    # 'jet_breit_pt': r'$p_{T}^{jet}$ [GeV] Breit frame',
+    'jet_breit_pt': r'$p_{T}^{jet}$ [GeV]',
     'deltaphi':r"$\Delta\phi^{jet}$ [rad]",
     'jet_tau10':r'$\mathrm{ln}(\lambda_1^1)$',
     'zjet':r'$z^{jet}$',
-    'zjet_breit':r'$z^{jet}$ Breit frame'
+    # 'zjet_breit':r'$z^{jet}$ Breit frame'
+    'zjet_breit':r'$z^{jet}$ '
+
 }
 
 dedicated_binning = {
@@ -210,7 +213,7 @@ def FormatFig(xlabel,ylabel,ax0,xpos=0.8,ypos=0.95):
     phasespace_text = r'$Q^2>150~\mathrm{GeV}^2, 0.2<y<0.7$'
     if "Breit frame" in xlabel.strip():
         frame_text = "Breit Frame"
-        phasespace_text += "\n" + r'$p_T^{jet} > 5 GeV$'
+        phasespace_text += "\n" + r'$p_T^{jet} > 5 GeV\ k_{T}, R = 1.0$'
     else: 
         frame_text = "Lab Frame"
         phasespace_text += "\n" + r'$p_T^{jet} > 10 GeV\ k_{T}, R = 1.0$'
@@ -390,43 +393,26 @@ def HistRoutine(feed_dict,
         # Plot ratio if applicable
         if plot_ratio and plot_name != reference_name:
             ratio = np.ma.divide(dist, reference_hist).filled(0)
+
+            bin_edges = np.zeros(len(binning))
+            for i in range(len(binning)):
+                bin_edges[i] = binning[i]
             
-            # For logarithmic binning
-            if logx:
-                # Calculate the bin edges for proper extension in log space
-                bin_edges = np.zeros(len(binning))
-                for i in range(len(binning)):
-                    bin_edges[i] = binning[i]
-                
-                # Create extended ratio array for steps-post style
-                extended_ratio = np.zeros(len(bin_edges))
-                for i in range(len(ratio)):
-                    extended_ratio[i] = ratio[i]
-                
-                ax1.plot(
-                    bin_edges, extended_ratio,
-                    color=options.colors[plot_name],
-                    drawstyle='steps-post',
-                    linestyle='-',
-                    lw=3,
-                    ms=10,
-                    markerfacecolor='none', markeredgewidth=3
-                )
-            else:
-                # For linear binning
-                bin_width = binning[1] - binning[0]
-                extended_xaxis = np.append(xaxis, xaxis[-1] + bin_width)
-                extended_ratio = np.append(ratio, ratio[-1])
-                
-                ax1.plot(
-                    extended_xaxis, extended_ratio,
-                    color=options.colors[plot_name],
-                    drawstyle='steps-post',
-                    linestyle='-',
-                    lw=3,
-                    ms=10,
-                    markerfacecolor='none', markeredgewidth=3
-                )
+            # Create extended ratio array for steps-post style
+            extended_ratio = np.zeros(len(bin_edges))
+            for i in range(len(ratio)):
+                extended_ratio[i] = ratio[i]
+            
+            ax1.plot(
+                bin_edges, extended_ratio,
+                color=options.colors[plot_name],
+                drawstyle='steps-post',
+                linestyle='-',
+                lw=3,
+                ms=10,
+                markerfacecolor='none', markeredgewidth=3
+            )
+
 
             # Add uncertainties
             if uncertainty is not None:
