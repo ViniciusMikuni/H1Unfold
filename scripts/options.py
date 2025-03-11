@@ -13,7 +13,8 @@ colors = {
     'Djangoh':'#8c564b',
     'Rapgap':'darkorange',
     'Rapgap_unfolded':'darkolivegreen',
-    'Data_unfolded':'darkolivegreen',
+    # 'Data_unfolded':'darkolivegreen',
+    'Data_unfolded':'black',
     'Rapgap_closure':'darkolivegreen',
     'Herwig':'crimson',
     'Herwig_Matchbox':'#a50f15',
@@ -165,8 +166,8 @@ name_translate = {
     'Rapgap_unfolded': 'RAPGAP + Unfolding',
     'Rapgap_closure': 'RAPGAP Closure',
     'Djangoh': 'DJANGOH',
-    'data': 'Data (Omnifold)',
-    'Data_unfolded': 'Data Unfolded'
+    'data': 'Data (inc. stat uncertainty)',
+    'Data_unfolded': 'Data Unfolded (inc. stat uncertainty)'
 
 }
 
