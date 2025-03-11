@@ -1227,7 +1227,9 @@ def plot_observable(flags, var, dataloaders, version):
         if flags.reco:
             counts,_ = compute_histogram('data',density=False)
             unc = 1.0/(1e-9+counts)
+
             total_unc += unc
+            data_stat_unc = np.sqrt(unc)
             print(f"stat: max uncertainty = {np.max(np.sqrt(unc))}")
         else:
             if flags.bootstrap:
@@ -1240,11 +1242,11 @@ def plot_observable(flags, var, dataloaders, version):
                     sys_hist, _ = compute_histogram('bootstrap', dataloaders['bootstrap']['mc_weights'] * sys_weights)
                     stat_unc.append(sys_hist)
                 stat_unc = np.ma.divide(np.std(stat_unc,0), np.mean(stat_unc,0)).filled(0)
-                
+                data_stat_unc = stat_unc
                 total_unc += stat_unc**2
                 print(f"{sys}: max uncertainty = {np.max(stat_unc)}")
-                    
         total_unc = np.sqrt(total_unc)
+        # print(f"data_stat_unc: {data_stat_unc}")    
 
     # Prepare weights and data for plotting
     weights = {}
@@ -1308,6 +1310,7 @@ def plot_observable(flags, var, dataloaders, version):
         reference_name='data' if flags.reco else data_name,
         label_loc='upper left',
         uncertainty=total_unc,
+        stat_uncertainty=data_stat_unc
     )
 
     # Set plot limits and save
@@ -1322,7 +1325,7 @@ def plot_part_observable(flags, var, dataloaders, version):
         if len(dataloaders[dataset_name][var].shape) > 1:
             multiple_jets_per_event = True
             if flags.eec:
-                valid_indices = dataloaders[dataset_name]['eec'] != 0
+                valid_indices = dataloaders[dataset_name]['eec'] != -100
             else:
                 valid_indices = dataloaders[dataset_name]['jet_pt']>0
             data = ak.mask(dataloaders[dataset_name][var], valid_indices)
@@ -1332,7 +1335,7 @@ def plot_part_observable(flags, var, dataloaders, version):
         else:
             multiple_jets_per_event = False
             if flags.eec:
-                valid_indices = dataloaders[dataset_name]['eec'] != 0
+                valid_indices = dataloaders[dataset_name]['eec'] != -100
             else:
                 valid_indices = dataloaders[dataset_name]['jet_pt']>0
             data = dataloaders[dataset_name][var][valid_indices]
@@ -1391,6 +1394,7 @@ def plot_part_observable(flags, var, dataloaders, version):
             counts,_ = compute_histogram('data',density=False)
             unc = 1.0/(1e-9+counts)
             total_unc += unc
+            data_stat_unc = np.sqrt(unc)
             print(f"stat: max uncertainty = {np.max(np.sqrt(unc))}")
         else:
             if flags.bootstrap:
@@ -1403,7 +1407,8 @@ def plot_part_observable(flags, var, dataloaders, version):
                     sys_hist, _ = compute_histogram('bootstrap', dataloaders['bootstrap']['mc_weights'] * sys_weights)
                     stat_unc.append(sys_hist)
                 stat_unc = np.ma.divide(np.std(stat_unc,0), np.mean(stat_unc,0)).filled(0)
-                
+
+                data_stat_unc = stat_unc
                 total_unc += stat_unc**2
                 print(f"{sys}: max uncertainty = {np.max(stat_unc)}")
                     
@@ -1511,6 +1516,7 @@ def plot_part_observable(flags, var, dataloaders, version):
         reference_name='data' if flags.reco else data_name,
         label_loc='upper left',
         uncertainty=total_unc,
+        stat_uncertainty=data_stat_unc,
     )
 
     # Set plot limits and save

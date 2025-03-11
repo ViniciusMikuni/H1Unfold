@@ -13,6 +13,8 @@ colors = {
     'Djangoh':'#8c564b',
     'Rapgap':'darkorange',
     'Rapgap_unfolded':'darkolivegreen',
+    # 'Data_unfolded':'darkolivegreen',
+    'Data_unfolded':'black',
     'Rapgap_closure':'darkolivegreen',
     'Herwig':'crimson',
     'Herwig_Matchbox':'#a50f15',
@@ -30,9 +32,11 @@ markers = {
     'Djangoh':'P',
     'Rapgap':'X',
     'Rapgap_unfolded':'X',
+    'Data_unfolded':'X',
     'Rapgap_closure':'X',
     'mc':'X',    
 
+    'data':'X',
     'Pythia': '^',
     'Pythia_Vincia': '^',
     'Pythia_Dire': '^',
@@ -60,6 +64,7 @@ xaxis_disp = {
     'Djangoh':0.1,
     'Rapgap':0.2,
     'Rapgap_unfolded':0.3,
+    'Data_unfolded':0.3,
     'Sherpa2Lund':0.5,
     'Sherpa2Cluster':0.6,
     'Sherpa3NLO':0.7,
@@ -76,9 +81,6 @@ dedicated_binning = {
     'jet_eta':np.linspace(-1,2.5,8),
     'jet_phi':np.linspace(-3.14,3.14,8),
 
-    'gen_eec':np.linspace(-10,10,80),
-    'eec':np.linspace(-10,10,80),
-
 
     'gen_jet_charge':np.array([-1.00,-0.88,-0.76,-0.62,-0.47,-0.33,-0.21,-0.11,-0.03,0.03,0.11,0.19,0.29,0.41,0.56,0.70,0.84,1.00]),
     'gen_jet_tau10':np.array([-4.00,-3.15,-2.59,-2.18,-1.86,-1.58,-1.29,-1.05,-0.81,-0.61,0.00]),
@@ -94,6 +96,9 @@ dedicated_binning = {
     'jet_tau15':np.array([-5.00,-3.99,-3.28,-2.78,-2.32,-1.92,-1.57,-1.21,-0.91,0.00]),
     'jet_tau20':np.array([-6.00,-4.61,-3.76,-3.09,-2.55,-2.06,-1.58,-1.15,0.00]),
     'jet_ptD':np.array([0.00,0.32,0.39,0.46,0.55,0.64,0.74,0.85,0.94,1.00,]),
+
+    'gen_eec':np.linspace(-10,10,80),
+    'eec':np.linspace(-10,10,80),
     
     'npart':np.linspace(0,30,5),
     'e_pt':np.linspace(5,50,5),
@@ -164,7 +169,8 @@ name_translate = {
     'Rapgap_unfolded': 'RAPGAP + Unfolding',
     'Rapgap_closure': 'RAPGAP Closure',
     'Djangoh': 'DJANGOH',
-    'data': 'Data',
+    'data': 'Data (inc. stat uncertainty)',
+    'Data_unfolded': 'Data Unfolded (inc. stat uncertainty)'
 
 }
 

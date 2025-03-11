@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from matplotlib import gridspec
 from matplotlib.collections import PatchCollection
 from matplotlib.patches import Rectangle
+from matplotlib.patches import Patch
 import matplotlib.ticker as mtick
 import uproot
 import os
@@ -35,7 +36,6 @@ event_names = {
     '3': r'$e_{\eta}$',
     '4': r'$e_{\phi}$',
     }
-
 
 jet_names = {
     '0': r'Jet $p_{T}$ [GeV]',
@@ -73,23 +73,27 @@ observable_names = {
     # 'theta':r'$(P \cdot p_{part}/P \cdot \sum_i p_{\mathrm{part},i})$ Breit frame',
 }
 
+
 dedicated_binning = {
     'jet_pt': np.logspace(np.log10(10),np.log10(100),7),
     'jet_breit_pt': np.logspace(np.log10(10),np.log10(50),7),
     'deltaphi': np.linspace(0, 1, 8),
     'jet_tau10': np.array([-4.00,-3.15,-2.59,-2.18,-1.86,-1.58,-1.29,-1.05,-0.81,-0.61,0.00]),
-    'zjet' : np.linspace(0.2, 1, 10),
-    'zjet_breit' : np.linspace(0.2, 1, 10),  
+    'zjet' : np.linspace(0.2, 1, 11),
+    'zjet_breit' : np.linspace(0.2, 1, 11),
     'eec' : np.linspace(-1, 1, 16),
     'theta' : np.linspace(0, 1e3, 50),
     # For x-weighted definition
     # 'eec' : np.linspace(-5, 8, 20),
     # 'theta' : np.linspace(1e-17, 1e-9, 10),
+
 }
 
 def get_log(var):
     if 'pt' in var:
         return True, True
+    # if 'pt' in var:
+    #     return False, False
     if 'deltaphi' in var:
         return True, True
     if 'tau' in var:
@@ -105,21 +109,24 @@ def get_log(var):
 
 
 def get_ylim(var):
-    if 'pt' in var:
-        return 1e-4, 1
+    if var == "jet_pt":
+        # return 1e-5, 1
+        return 1e-5, 12
+    if var == "jet_breit_pt":
+        return 1e-4, 10
     if 'deltaphi' in var:
-        return 1e-3, 50
+        return 1e-3, 350
     if 'tau' in var:
         return 0, 1.2
+    if var == 'zjet':
+        return 0,10
+    if var == 'zjet_breit':
+        return 0,3
     if 'eec' in var:
         # return 0, 0.35
         return 0, 4.2
     if 'theta' in var:
         return 0, 2.5
-    if var == 'zjet':
-        return 0,8
-    if var == 'zjet_breit':
-        return 0,3
     else:
         print("ERROR")
 
@@ -194,7 +201,8 @@ def SetStyle():
 #     return fig,gs
 
 def SetGrid(ratio=True):
-    fig = plt.figure(figsize=(9, 9))
+    # fig = plt.figure(figsize=(9, 9))
+    fig = plt.figure(figsize=(12, 12))
     if ratio:
         gs = gridspec.GridSpec(2, 1, height_ratios=[3,1]) 
         gs.update(wspace=0.025, hspace=0.1)
@@ -204,7 +212,7 @@ def SetGrid(ratio=True):
 
 
 
-def FormatFig(xlabel,ylabel,ax0,xpos=0.83,ypos=1.035):
+def FormatFig(xlabel,ylabel,ax0,xpos=0.8,ypos=0.95):
     #Limit number of digits in ticks
     # y_loc, _ = plt.yticks()
     # y_update = ['%.1f' % y for y in y_loc]
@@ -214,16 +222,31 @@ def FormatFig(xlabel,ylabel,ax0,xpos=0.83,ypos=1.035):
         
 
     text = r'$\bf{H1 Preliminary}$'
-    WriteText(xpos,ypos,text,ax0)
+    WriteText(xpos,ypos,text,ax0, align='left')
 
+    second_text = r'$\mathrm{Unfolded\ single\ particle\ dataset}$'
+    WriteText(xpos, ypos-0.06, second_text, ax0, fontsize=18, align='left')
 
-def WriteText(xpos,ypos,text,ax0):
+    phasespace_text = r'$Q^2>150~\mathrm{GeV}^2, 0.2<y<0.7$'
+    if "Breit frame" in xlabel.strip():
+        frame_text = "Breit Frame"
+        phasespace_text += "\n" + r'$p_T^{jet} > 5 GeV\ k_{T}, R = 1.0$'
+    else: 
+        frame_text = "Lab Frame"
+        phasespace_text += "\n" + r'$p_T^{jet} > 10 GeV\ k_{T}, R = 1.0$'
+
+    WriteText(xpos, ypos-0.15, frame_text, ax0, fontsize=18, align='left')
+    WriteText(xpos, ypos-0.25, phasespace_text, ax0, fontsize=18, align='left')
+
+    
+
+def WriteText(xpos,ypos,text,ax0, fontsize=25, align='center'):
 
     plt.text(xpos, ypos,text,
              horizontalalignment='center',
              verticalalignment='center',
              #fontweight='bold',
-             transform = ax0.transAxes, fontsize=25)
+             transform = ax0.transAxes, fontsize=fontsize)
 
 
 def LoadJson(file_name,base_path='../JSON'):
@@ -286,9 +309,7 @@ def PlotRoutine(feed_dict,xlabel='',ylabel='',reference_name='gen',plot_ratio = 
         
     return fig,ax0
 
-
 def HistRoutine(feed_dict,
-                var,
                 xlabel='',
                 ylabel='',
                 reference_name='data',
@@ -298,7 +319,8 @@ def HistRoutine(feed_dict,
                 label_loc='best',
                 plot_ratio=True,
                 weights=None,
-                uncertainty=None):
+                uncertainty=None,
+                stat_uncertainty=None):
     """
     Generate a histogram plot with optional ratio and uncertainties.
 
@@ -326,6 +348,7 @@ def HistRoutine(feed_dict,
 
     # Default styles for plots
     ref_plot_style = {'histtype': 'stepfilled', 'alpha': 0.2}
+    data_plot_style = {'histtype': 'step', 'alpha': 0.2}
     other_plot_style = {'histtype': 'step', 'linewidth': 2}
 
     # Set up the figure and axes
@@ -351,47 +374,84 @@ def HistRoutine(feed_dict,
     reference_hist, _ = np.histogram(feed_dict[reference_name], bins=binning, density=True, weights=ref_weights)
 
     max_y = 0
-
     # Plot each distribution
-    for plot_name, data in feed_dict.items():
-        # print("data range: ", np.min(data), np.max(data))
-        plot_style = ref_plot_style if plot_name == reference_name else other_plot_style
-        plot_weights = weights[plot_name] if weights else None
-        
-        # Plot histogram
-        dist, _, _ = ax0.hist(
-            data, bins=binning, density=True, weights=plot_weights,
-            label=options.name_translate[plot_name],
-            color=options.colors[plot_name],
-            **plot_style
-        )
 
+    for plot_name, data in feed_dict.items():
+        # plot_style = ref_plot_style if plot_name == reference_name else other_plot_style
+        if "data" in plot_name.lower():
+            plot_style = data_plot_style
+
+        elif "Rapgap_closure" in plot_name:
+            plot_style = ref_plot_style
+        else: plot_style = other_plot_style   
+
+        plot_weights = weights[plot_name] if weights else None
+
+
+        # if plot_name == reference_name:
+        if "data" in plot_name.lower():
+            dist, _ = np.histogram(data, bins=binning, density=True, weights=plot_weights)
+            bin_centers = (binning[:-1] + binning[1:]) / 2
+            errors_low = dist *(1-stat_uncertainty)
+            errors_high = dist *(1+stat_uncertainty)
+            errors = [dist - errors_low, errors_high - dist]  # Asymmetric error bars
+            ax0.errorbar(bin_centers, dist, yerr=errors, fmt='o', color='black', label=options.name_translate[plot_name], markersize=8)
+        else:
+            dist, _, _ = ax0.hist(
+                data, bins=binning, density=True, weights=plot_weights,
+                label=options.name_translate[plot_name],
+                color=options.colors[plot_name],
+                **plot_style
+            )
+
+            
         max_y = max(max_y, np.max(dist))
-        print("MAX y: ", max_y)
-        for i in range(len(dist)):
-            print("(bin, hist): ", (binning[i], dist[i]))
 
         # Plot ratio if applicable
         if plot_ratio and plot_name != reference_name:
             ratio = np.ma.divide(dist, reference_hist).filled(0)
+
+            bin_edges = np.zeros(len(binning))
+            for i in range(len(binning)):
+                bin_edges[i] = binning[i]
+            
+            # Create extended ratio array for steps-post style
+            extended_ratio = np.zeros(len(bin_edges))
+            for i in range(len(ratio)):
+                extended_ratio[i] = ratio[i]
+            
             ax1.plot(
-                xaxis, ratio,
+                bin_edges, extended_ratio,
                 color=options.colors[plot_name],
-                marker=options.markers[plot_name],
-                ms=10, lw=0,
+                drawstyle='steps-post',
+                linestyle='-',
+                lw=3,
+                ms=10,
                 markerfacecolor='none', markeredgewidth=3
             )
 
+
             # Add uncertainties
             if uncertainty is not None:
-                for ibin in range(len(binning)-1):
-                    xup = binning[ibin+1]
-                    xlow = binning[ibin]
-                    ax1.fill_between(np.array([xlow,xup]),
-                                     1.0 + uncertainty[ibin],1.0 -uncertainty[ibin],
-                                     alpha=0.3,color='k')
-                    
+                    for ibin in range(len(binning)-1):
+                        xup = binning[ibin+1]
+                        xlow = binning[ibin]
+                        ax1.fill_between(np.array([xlow,xup]),
+                                         1.0 + uncertainty[ibin],1.0 -uncertainty[ibin],
+                                         alpha=0.1,color='k')
+                        # Overlay hatch using bar
+                        ax1.bar((xlow + xup) / 2, 2 * uncertainty[ibin], width=(xup - xlow), 
+                                bottom=1.0 - uncertainty[ibin], hatch='//', color='none', edgecolor='grey', label='Systematic Uncertainty')
 
+    grey_patch = Patch(facecolor='grey', alpha=0.5, hatch='//', edgecolor='black', label='Systematic Uncertainty')
+                
+    ## draw data points at 1 with stat uncertainties on the bottom panel
+    if "data" in reference_name.lower():
+        ax1.errorbar(xaxis,np.ones_like(xaxis), yerr=stat_uncertainty, marker='o', 
+            linestyle='None', 
+            markersize=8, 
+            color='black',
+            capsize=3)
     # Adjust y-axis scale
     if logy:
         ax0.set_yscale('log')
@@ -405,10 +465,17 @@ def HistRoutine(feed_dict,
         if plot_ratio:
             ax1.set_xscale('log')
 
-    # Add legend and format axes
-    ax0.legend(loc=label_loc, fontsize=16, ncol=2)
+   # Add legend and format axes
+    # ax0.legend(loc=label_loc, fontsize=16, ncol=2)
+    handles, labels = ax0.get_legend_handles_labels()
+    handles.append(grey_patch)
+    labels.append('Systematic Uncertainty')
+    ax0.legend(handles, labels, loc=label_loc, fontsize=20, ncol=1)
+
+    # ax0.legend(loc=label_loc, fontsize=20, ncol=1)
+    
     if plot_ratio:
-        FormatFig(xlabel="", ylabel=ylabel, ax0=ax0)
+        FormatFig(xlabel=xlabel, ylabel=ylabel, ax0=ax0)
         ax1.set_ylabel('Pred./Ref.')
         ax1.axhline(y=1.0, color='r', linestyle='-', linewidth=1)
         ax1.set_ylim([0.5, 1.5])
