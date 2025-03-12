@@ -70,9 +70,6 @@ observable_names = {
     'zjet':r'$z^{jet}$',
     # 'zjet_breit':r'$z^{jet}$ Breit frame'
     'zjet_breit':r'$z^{jet}$ '
-    'eec':r'$EEC$ Breit frame',
-    'theta':r'$x_B \cdot E_{\mathrm{part}}/E_p$ Breit frame',
-    # 'theta':r'$(P \cdot p_{part}/P \cdot \sum_i p_{\mathrm{part},i})$ Breit frame',
 
 }
 
@@ -83,11 +80,6 @@ dedicated_binning = {
     'jet_tau10': np.array([-4.00,-3.15,-2.59,-2.18,-1.86,-1.58,-1.29,-1.05,-0.81,-0.61,0.00]),
     'zjet' : np.linspace(0.2, 1, 11),
     'zjet_breit' : np.linspace(0.2, 1, 11)
-    'eec' : np.linspace(-1, 1, 16),
-    'theta' : np.linspace(0, 1e3, 50),
-    # For x-weighted definition
-    # 'eec' : np.linspace(-5, 8, 20),
-    # 'theta' : np.linspace(1e-17, 1e-9, 10),
 }
 
 
