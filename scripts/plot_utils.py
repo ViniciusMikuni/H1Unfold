@@ -1503,7 +1503,7 @@ def plot_part_observable(flags, var, dataloaders, version):
 
             
     # Generate histogram plot
-    fig, ax = utils.HistRoutine(
+    fig, ax = utils.HistRoutinePart(
         feed_dict,
         xlabel=info.name,
         ylabel = ylabel,
