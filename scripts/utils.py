@@ -80,7 +80,7 @@ dedicated_binning = {
     'zjet_breit' : np.linspace(0.2, 1, 11), 
     'zjet_centauro' : np.linspace(0.2, 1, 11),
     'Delta_zjet' : np.linspace(-.5, .5, 11),
-    'jet_centauro_pt' : np.logspace(np.log10(.01),np.log10(30),10),
+    'jet_centauro_pt' : np.logspace(np.log10(.01),np.log10(30),7),
 }
 
 def get_log(var):
@@ -104,7 +104,7 @@ def get_ylim(var):
     if 'deltaphi' in var:
         return 1e-3, 50
     if var == 'zjet_centauro':
-        return 0,2.5
+        return 0,2.8
     if 'tau' in var:
         return 0, 1.2
     if var == 'zjet':
