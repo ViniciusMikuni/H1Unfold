@@ -13,14 +13,10 @@ import h5py as h5
 utils.SetStyle()
 
 var_names = ['weights','mc_weights','jet_pt',
-<<<<<<< HEAD
              'jet_breit_pt','deltaphi','jet_tau10', 'zjet', 'zjet_breit',
              'zjet_centauro', 'Delta_zjet', "jet_centauro_pt"]
 
-=======
-             'jet_breit_pt','deltaphi','jet_tau10', 'zjet', 'zjet_breit']
 # var_names = ['jet_tau10']
->>>>>>> origin/main
 
 def get_sample_names(niter, use_sys, sys_list = ['sys0','sys1','sys5','sys7','sys11'],
                      nominal = 'Rapgap',period = 'Eplus0607',reco=False,bootstrap=False,nboot=1,prelim=False):
