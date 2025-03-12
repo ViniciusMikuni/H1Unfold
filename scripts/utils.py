@@ -70,6 +70,7 @@ observable_names = {
     'zjet':r'$z^{jet}$',
     # 'zjet_breit':r'$z^{jet}$ Breit frame'
     'zjet_breit':r'$z^{jet}$ '
+    
 }
 
 dedicated_binning = {
