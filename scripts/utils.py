@@ -62,13 +62,13 @@ particle_names = {
 
 observable_names = {
     'jet_pt': r'$p_{T}^{jet}$ [GeV]',
-    # 'jet_breit_pt': r'$p_{T}^{jet}$ [GeV] Breit frame',
-    'jet_breit_pt': r'$p_{T}^{jet}$ [GeV]',
+    'jet_breit_pt': r'$p_{T}^{jet}$ [GeV] Breit frame',
+    # 'jet_breit_pt': r'$p_{T}^{jet}$ [GeV]',
     'deltaphi':r"$\Delta\phi^{jet}$ [rad]",
     'jet_tau10':r'$\mathrm{ln}(\lambda_1^1)$',
     'zjet':r'$z^{jet}$',
-    # 'zjet_breit':r'$z^{jet}$ Breit frame'
-    'zjet_breit':r'$z^{jet}$ '
+    'zjet_breit':r'$z^{jet}$ Breit frame'
+    # 'zjet_breit':r'$z^{jet}$ '
 
 }
 
@@ -199,11 +199,19 @@ def FormatFig(xlabel,ylabel,ax0,xpos=0.8,ypos=0.95):
     #Limit number of digits in ticks
     # y_loc, _ = plt.yticks()
     # y_update = ['%.1f' % y for y in y_loc]
-    # plt.yticks(y_loc, y_update) 
-    ax0.set_xlabel(xlabel,fontsize=24)
-    ax0.set_ylabel(ylabel)
-        
+    # plt.yticks(y_loc, y_update)
+    # print(xlabel)
+    # print(ylabel) 
+    if "Breit" in xlabel:
+        xlabel_strip = xlabel.replace(" Breit frame", "")
+        ylabel_strip = ylabel.replace(" Breit frame", "")
+        ax0.set_xlabel(xlabel_strip,fontsize=24)
+        ax0.set_ylabel(ylabel_strip)
 
+    else: 
+        ax0.set_xlabel(xlabel,fontsize=24)    
+        ax0.set_ylabel(ylabel)
+        
     text = r'$\bf{H1 Preliminary}$'
     WriteText(xpos,ypos,text,ax0, align='left')
 
@@ -456,14 +464,20 @@ def HistRoutine(feed_dict,
     ax0.legend(handles, labels, loc=label_loc, fontsize=20, ncol=1)
 
     # ax0.legend(loc=label_loc, fontsize=20, ncol=1)
-    
+
+
     if plot_ratio:
         FormatFig(xlabel=xlabel, ylabel=ylabel, ax0=ax0)
         ax1.set_ylabel('Pred./Ref.')
         ax1.axhline(y=1.0, color='r', linestyle='-', linewidth=1)
         ax1.set_ylim([0.5, 1.5])
-        ax1.set_xlabel(xlabel)
+        if "Breit" in xlabel:
+            xlabel_strip = xlabel.replace(" Breit frame", "")
+            ax1.set_xlabel(xlabel_strip)
+        else:     
+            ax1.set_xlabel(xlabel)
     else:
+            
         FormatFig(xlabel=xlabel, ylabel=ylabel, ax0=ax0)
 
     return fig, ax0
