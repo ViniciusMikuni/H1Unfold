@@ -1349,13 +1349,13 @@ def plot_part_observable(flags, var, dataloaders, version):
 
     # Determine weight name
     weight_name = 'closure_weights' if flags.blind else 'weights'
-    data_name = 'Rapgap_closure' if flags.blind else 'Rapgap_unfolded'
-    # if flags.blind:
-    #     data_name = 'Rapgap_closure'
-    # elif flags.reco:
-    #     data_name = 'Rapgap_unfolded'
-    # else:
-    #     data_name = 'Data_unfolded'
+    # data_name = 'Rapgap_closure' if flags.blind else 'Rapgap_unfolded'
+    if flags.blind:
+        data_name = 'Rapgap_closure'
+    elif flags.reco:
+        data_name = 'Rapgap_unfolded'
+    else:
+        data_name = 'Data_unfolded'
 
     # Set binning
     binning = info.binning
@@ -1428,12 +1428,10 @@ def plot_part_observable(flags, var, dataloaders, version):
 
         Rapgap_E_wgt = ak.drop_none(ak.mask(dataloaders["Rapgap"]['E_wgt'], Rapgap_mask))
         Rapgap_E_wgt = ak.flatten(Rapgap_E_wgt)
-
         weights['Rapgap'] = np.repeat(dataloaders['Rapgap']['mc_weights'], num_Rapgap_parts_per_event, axis=0)
         weights['Rapgap'] = np.multiply(weights['Rapgap'], Rapgap_E_wgt)
         weights[data_name] = np.repeat(dataloaders['Rapgap']['mc_weights'] * dataloaders['Rapgap'][weight_name], num_Rapgap_parts_per_event, axis=0)
         weights[data_name] = np.multiply(weights[data_name], Rapgap_E_wgt)
-
     elif len(dataloaders['Rapgap'][var].shape) > 1:
         Rapgap_mask = dataloaders["Rapgap"]["jet_pt"]>0
         Rapgap_data = ak.drop_none(ak.mask(dataloaders["Rapgap"][var], Rapgap_mask))
