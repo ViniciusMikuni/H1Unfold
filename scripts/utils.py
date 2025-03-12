@@ -69,7 +69,10 @@ observable_names = {
     'jet_tau10':r'$\mathrm{ln}(\lambda_1^1)$',
     'zjet':r'$z^{jet}$',
     # 'zjet_breit':r'$z^{jet}$ Breit frame'
-    'zjet_breit':r'$z^{jet}$ '
+    'zjet_breit':r'$z^{jet}$ ',
+    'eec':r'$EEC$ Breit frame',
+    'theta':r'$x_B \cdot E_{\mathrm{part}}/E_p$ Breit frame',
+    # 'theta':r'$(P \cdot p_{part}/P \cdot \sum_i p_{\mathrm{part},i})$ Breit frame',
 
 }
 
@@ -79,7 +82,12 @@ dedicated_binning = {
     'deltaphi': np.linspace(0, 1, 8),
     'jet_tau10': np.array([-4.00,-3.15,-2.59,-2.18,-1.86,-1.58,-1.29,-1.05,-0.81,-0.61,0.00]),
     'zjet' : np.linspace(0.2, 1, 11),
-    'zjet_breit' : np.linspace(0.2, 1, 11)
+    'zjet_breit' : np.linspace(0.2, 1, 11),
+    'eec' : np.linspace(-1, 1, 16),
+    'theta' : np.linspace(0, 1e3, 50),
+    # For x-weighted definition
+    # 'eec' : np.linspace(-5, 8, 20),
+    # 'theta' : np.linspace(1e-17, 1e-9, 10),
 }
 
 
@@ -211,8 +219,15 @@ def FormatFig(xlabel,ylabel,ax0,xpos=0.8,ypos=0.95):
     # y_loc, _ = plt.yticks()
     # y_update = ['%.1f' % y for y in y_loc]
     # plt.yticks(y_loc, y_update) 
-    ax0.set_xlabel(xlabel,fontsize=24)
-    ax0.set_ylabel(ylabel)
+    if "Breit" in xlabel:
+        xlabel_strip = xlabel.replace(" Breit frame", "")
+        ylabel_strip = ylabel.replace(" Breit frame", "")
+        ax0.set_xlabel(xlabel_strip,fontsize=24)
+        ax0.set_ylabel(ylabel_strip)
+
+    else: 
+        ax0.set_xlabel(xlabel,fontsize=24)    
+        ax0.set_ylabel(ylabel)
         
 
     text = r'$\bf{H1 Preliminary}$'
@@ -473,7 +488,11 @@ def HistRoutine(feed_dict,
         ax1.set_ylabel('Pred./Ref.')
         ax1.axhline(y=1.0, color='r', linestyle='-', linewidth=1)
         ax1.set_ylim([0.5, 1.5])
-        ax1.set_xlabel(xlabel)
+        if "Breit" in xlabel:
+            xlabel_strip = xlabel.replace(" Breit frame", "")
+            ax1.set_xlabel(xlabel_strip)
+        else:     
+            ax1.set_xlabel(xlabel)
     else:
         FormatFig(xlabel=xlabel, ylabel=ylabel, ax0=ax0)
 
