@@ -384,6 +384,7 @@ def plot_qtQ(flags,dataloaders,data_weights,version):
                                reference_name = reference_name,
                                label_loc='upper left',
                                )
+    ax.set_ylim(1e-2,50)
     fig.savefig('../plots/{}_jet_pt.pdf'.format(version))
 
     feed_dict = {
@@ -608,7 +609,7 @@ def plot_jet_pt(flags, dataloaders, data_weights, version,lab_frame=True):
     )
 
     # Set plot limits and save
-    #ax.set_ylim(1e-2, 50)
+    # ax.set_ylim(1e-2, 50)
     tag = 'lab' if lab_frame else 'breit'
     
     fig.savefig(f'../plots/{version}_jet_pt_{tag}.pdf')
@@ -1181,7 +1182,12 @@ def plot_observable(flags, var, dataloaders, version):
 
     # Determine weight name
     weight_name = 'closure_weights' if flags.blind else 'weights'
-    data_name = 'Rapgap_closure' if flags.blind else 'Rapgap_unfolded'
+    if flags.blind:
+        data_name = 'Rapgap_closure'
+    elif flags.reco:
+        data_name = 'Rapgap_unfolded'
+    else:
+        data_name = 'Data_unfolded'
 
     # Set binning
     binning = info.binning
@@ -1219,7 +1225,9 @@ def plot_observable(flags, var, dataloaders, version):
         if flags.reco:
             counts,_ = compute_histogram('data',density=False)
             unc = 1.0/(1e-9+counts)
+
             total_unc += unc
+            data_stat_unc = np.sqrt(unc)
             print(f"stat: max uncertainty = {np.max(np.sqrt(unc))}")
         else:
             if flags.bootstrap:
@@ -1232,11 +1240,11 @@ def plot_observable(flags, var, dataloaders, version):
                     sys_hist, _ = compute_histogram('bootstrap', dataloaders['bootstrap']['mc_weights'] * sys_weights)
                     stat_unc.append(sys_hist)
                 stat_unc = np.ma.divide(np.std(stat_unc,0), np.mean(stat_unc,0)).filled(0)
-                
+                data_stat_unc = stat_unc
                 total_unc += stat_unc**2
                 print(f"{sys}: max uncertainty = {np.max(stat_unc)}")
-                    
         total_unc = np.sqrt(total_unc)
+        # print(f"data_stat_unc: {data_stat_unc}")    
 
     # Prepare weights and data for plotting
     weights = {}
@@ -1321,6 +1329,7 @@ def plot_observable(flags, var, dataloaders, version):
         reference_name='data' if flags.reco else data_name,
         label_loc='upper left',
         uncertainty=total_unc,
+        stat_uncertainty=data_stat_unc
     )
 
     # Set plot limits and save
