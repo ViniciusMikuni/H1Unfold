@@ -123,7 +123,7 @@ int main(int argc, char* argv[])
         fastjet::JetDefinition jet_def(centauro_plugin);
         fastjet::ClusterSequence clust_seq(particle_vector, jet_def);
 
-        std::vector<fastjet::PseudoJet> jets = sorted_by_pt(clust_seq.inclusive_jets(0));
+        std::vector<fastjet::PseudoJet> jets = sorted_by_E(clust_seq.inclusive_jets(0));
 
         // Store jet attributes
         std::vector<std::vector<double>> event_jets;
