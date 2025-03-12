@@ -33,6 +33,7 @@ def parse_arguments():
     parser.add_argument('--bootstrap', action='store_true', default=False,help='Load models for bootstrapping')
     parser.add_argument('--nboot', type=int, default=50, help='Number of bootstrap models to load')
     parser.add_argument('--verbose', action='store_true', default=False,help='Increase print level')
+    parser.add_argument('--fastjet_config_path', type=str, default="/global/cfs/cdirs/m3246/rmilton/fastjet-3.4.3-install/bin/fastjet-config", help="Path to your fastjet-config")
     flags = parser.parse_args()
 
     return flags
@@ -98,7 +99,8 @@ def main():
 
     
     cluster_jets(dataloaders)
-    cluster_breit(dataloaders)
+    cluster_breit(dataloaders, fastjet_config = flags.fastjet_config_path)
+    calculate_Delta_zjet(dataloaders)
     del dataloaders[flags.file].part, dataloaders[flags.file].mask
     gc.collect()
     gather_data(dataloaders)
@@ -130,6 +132,10 @@ def main():
             dset = fh5.create_dataset('jet_tau10', data=dataloaders[flags.file].all_jets[:,:,4])
             dset = fh5.create_dataset('zjet', data=dataloaders[flags.file].all_jets[:, :, 9])
             dset = fh5.create_dataset('zjet_breit', data=dataloaders[flags.file].all_jets_breit[:, :, 7])
+            dset = fh5.create_dataset('zjet_centauro', data=dataloaders[flags.file].all_jets_breit_centauro[:, :, 7])
+            dset = fh5.create_dataset('Delta_zjet', data=dataloaders[flags.file].Delta_zjet)
+            dset = fh5.create_dataset('jet_centauro_pt', data=dataloaders[flags.file].all_jets_breit_centauro[:, :, 0])
+            dset = fh5.create_dataset('jet_centauro_E', data=dataloaders[flags.file].all_jets_breit_centauro[:, :, 3])
     
 if __name__ == '__main__':
     main()
