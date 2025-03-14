@@ -11,52 +11,75 @@ import options
 import tensorflow as tf
 
 line_style = {
-    'Baseline':'dotted',
-    'Pre-trained':'-',
-    'Baseline_Ens0':'dotted',
-    'Baseline_Ens1':'dotted',
-    'Baseline_Ens2':'dotted',
-    'Baseline_Ens3':'dotted',
-    'Baseline_Ens4':'dotted',
-    'Pre-trained_Ens0':'-',
-    'Pre-trained_Ens1':'-',
-    'Pre-trained_Ens2':'-',
-    'Pre-trained_Ens3':'-',
-    'Pre-trained_Ens4':'-',
-    'Finetuned_Ens0':'-',
-    'Finetuned_Ens1':'-',
-    'Finetuned_Ens2':'-',
-    'Finetuned_Ens3':'-',
-    'Finetuned_Ens4':'-',
-    'data':'dotted',
-    'Rapgap reco':'-',
-    'Rapgap gen':'-',
+    'Baseline': 'dotted',
+    'Pre-trained': '-',
+    'Baseline_Ens0': 'solid',
+    'Baseline_Ens1': 'solid',
+    'Baseline_Ens2': 'solid',
+    'Baseline_Ens3': 'solid',
+    'Baseline_Ens4': 'solid',
+    'Pre-trained_Ens0': 'dotted',
+    'Pre-trained_Ens1': 'dotted',
+    'Pre-trained_Ens2': 'dotted',
+    'Pre-trained_Ens3': 'dotted',
+    'Pre-trained_Ens4': 'dotted',
+    'Finetuned_Ens0': 'dashed',
+    'Finetuned_Ens1': 'dashed',
+    'Finetuned_Ens2': 'dashed',
+    'Finetuned_Ens3': 'dashed',
+    'Finetuned_Ens4': 'dashed',
+    'data': 'dotted',
+    'Rapgap reco': '-',
+    'Rapgap gen': '-',
 }
 
-
-
-colors = {
-    'Baseline':'black',
-    'Pre-trained':'black',    
-    'Baseline_Ens0':'#0000FF',
-    'Baseline_Ens1':'#0040DF',
-    'Baseline_Ens2':'#0080BF',
-    'Baseline_Ens3':'#00BF9F',
-    'Baseline_Ens4':'#00FF80',
-    'Pre-trained_Ens0':'#FFCC00',
-    'Pre-trained_Ens1':'#FF9900',
-    'Pre-trained_Ens2':'#FF6600',
-    'Pre-trained_Ens3':'#FF3300',
-    'Pre-trained_Ens4':'#FF0000',
-    'Finetuned_Ens0':'#FFCC00',
-    'Finetuned_Ens1':'#FF9900',
-    'Finetuned_Ens2':'#FF6600',
-    'Finetuned_Ens3':'#FF3300',
-    'Finetuned_Ens4':'#FF0000',
-    'data':'black',
-    'Rapgap reco':'#7570b3',
-    'Rapgap gen':'darkorange',
+labels = {
+    'Baseline': 'Blues',
+    'Pre-trained': 'Greens',
+    'Finetuned': 'Reds'
 }
+
+# Initialize the colors dictionary
+colors = {}
+
+# Generate colors for each label
+for label, cmap_name in labels.items():
+    cmap = plt.get_cmap(cmap_name)
+    color_array = cmap(np.linspace(0.5, 0.9, 5))
+    for i, color in enumerate(color_array):
+        colors[f'{label}_Ens{i}'] = tuple(color)  # Convert color to tuple for readability
+
+# Add any additional colors explicitly
+colors.update({
+    'Baseline': 'black',
+    'Pre-trained': 'black',
+    'data': 'black',
+    'Rapgap reco': '#7570b3',
+    'Rapgap gen': 'darkorange',
+})
+
+# colors = {
+#     'Baseline':'black',
+#     'Pre-trained':'black',
+#     'Baseline_Ens0':'#0000FF',
+#     'Baseline_Ens1':'#0040DF',
+#     'Baseline_Ens2':'#0080BF',
+#     'Baseline_Ens3':'#00BF9F',
+#     'Baseline_Ens4':'#00FF80',
+#     'Pre-trained_Ens0':'#FFCC00',
+#     'Pre-trained_Ens1':'#FF9900',
+#     'Pre-trained_Ens2':'#FF6600',
+#     'Pre-trained_Ens3':'#FF3300',
+#     'Pre-trained_Ens4':'#FF0000',
+#     'Finetuned_Ens0':'#00ffff',
+#     'Finetuned_Ens1':'#40bfff',
+#     'Finetuned_Ens2':'#807fff',
+#     'Finetuned_Ens3':'#c03fff',
+#     'Finetuned_Ens4':'#ff00ff',
+#     'data':'black',
+#     'Rapgap reco':'#7570b3',
+#     'Rapgap gen':'darkorange',
+# }
 
 
 event_names = {
@@ -286,6 +309,7 @@ def HistRoutine(feed_dict,
 
     if weights is not None:
         reference_hist,_ = np.histogram(feed_dict[reference_name],weights=weights[reference_name],bins=binning,density=True)
+        #in the case of Djangoh or other MC, these weights will just be the original MC Weights
     else:
         reference_hist,_ = np.histogram(feed_dict[reference_name],bins=binning,density=True)
 
@@ -296,13 +320,21 @@ def HistRoutine(feed_dict,
 
         if '0' in plot:
             ens0_flag = True
+            plot_vals = np.array([xaxis, reference_hist, reference_hist/reference_hist]) #ratio = 1 -> ref/ref
+            np.save(f'../plots/{plot}{save_str}_plot_vals.npy', plot_vals)
 
-        if not ens0_flag and (plot=='Rapgap' or plot=='Djangoh'):
+
+        if not ens0_flag and (plot=='Djangoh'):
             continue
+
+        if 'Avg' in plot:
+            plot_vals = np.array([xaxis, reference_hist, reference_hist/reference_hist]) #ratio = 1 -> ref/ref
+            np.save(f'../plots/{plot}{save_str}_plot_vals.npy', plot_vals)
+
 
         plot_style = ref_plot if reference_name == plot else other_plots
         if weights is not None:
-            dist,_,_=ax0.hist(feed_dict[plot],bins=binning,
+            dist, _, _ =ax0.hist(feed_dict[plot],bins=binning,
                               label=plot,color=options.colors[plot],
                               density=True,weights=weights[plot],
                               **plot_style)
@@ -327,7 +359,7 @@ def HistRoutine(feed_dict,
 
         plot_vals = np.array([xaxis, dist, ratio])
         # print(f'saving to: ../plots/{plot}{save_str}_plot_vals.npy')
-        np.save(f'../plots/{plot}{save_str}_plot_vals.npy',plot_vals)
+        np.save(f'../plots/{plot}{save_str}_plot_vals.npy', plot_vals)
         # plot_dict = {} #dictionary for storing histogram, ratio, and x-values
         # plot_dict['xvals'] = xaxis
         # plot_dict['top_plot'] = dist
