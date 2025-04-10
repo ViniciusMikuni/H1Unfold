@@ -190,6 +190,7 @@ def cluster_jets(dataloaders):
         jet_array = []
         for i in range(max_num_jets):
             if i < len(jets):
+                jet = jets[i]
                 jet_info = [
                             jet.pt(),
                             jet.eta(),
@@ -1026,14 +1027,19 @@ def cluster_breit(dataloaders, clustering_type = "all", fastjet_config=""):
             masked_jets = ak.drop_none(masked_jets)
             max_jets = ak.max(ak.num(masked_jets, axis=1))
             padded_jets = ak.pad_none(masked_jets, max_jets, axis=1)
+            max_num_jets = 4
             event_list = []
             for j, event in enumerate(padded_jets):
                 current_event = []
-                for k, jet in enumerate(event):
-                    if jet is None:
-                        current_event.append([0, 0, 0, 0, 0, 0, 0, 0])
+                for k in range(max_num_jets):
+                    if k < len(event):
+                        jet = event[k]
+                        if jet is None:
+                            current_event.append(np.array([0, 0, 0, 0, 0, 0, 0, 0]))
+                        else:
+                            current_event.append(np.array(jet.to_list()))
                     else:
-                        current_event.append(np.array(jet.to_list()))
+                        current_event.append(np.array([0, 0, 0, 0, 0, 0, 0, 0]))
                 event_list.append(np.array(current_event))
             # Assign back to dataloader
             dataloaders[dataloader_name].all_jets_breit_centauro = np.array(event_list)
