@@ -96,6 +96,9 @@ dedicated_binning = {
     'jet_tau15':np.array([-5.00,-3.99,-3.28,-2.78,-2.32,-1.92,-1.57,-1.21,-0.91,0.00]),
     'jet_tau20':np.array([-6.00,-4.61,-3.76,-3.09,-2.55,-2.06,-1.58,-1.15,0.00]),
     'jet_ptD':np.array([0.00,0.32,0.39,0.46,0.55,0.64,0.74,0.85,0.94,1.00,]),
+
+    'gen_eec':np.linspace(-10,10,80),
+    'eec':np.linspace(-10,10,80),
     
     'npart':np.linspace(0,30,5),
     'e_pt':np.linspace(5,50,5),
@@ -178,6 +181,7 @@ reco_vars = {
     'jet_tau10':r'$\mathrm{ln}(\lambda_1^1)$', 
     'jet_tau15':r'$\mathrm{ln}(\lambda_{1.5}^1)$',
     'jet_tau20':r'$\mathrm{ln}(\lambda_2^1)$',
+    'eec':r'$EEC$',
     # 'npart':'Jet particle multiplicity',
     # 'e_pt':r'electron p$_\mathrm{T}$ [GeV]',
     # 'e_theta':r'electron $\pi - \theta$',
@@ -192,6 +196,7 @@ gen_vars = {
     'gen_jet_tau10':r'$\ln(\lambda_1^1)$', 
     'gen_jet_tau15':r'$\ln(\lambda_{1.5}^1)$',
     'gen_jet_tau20':r'$\ln(\lambda_2^1)$',
+    'gen_eec':r'$EEC$',
     
     # 'genjet_pt':r'Jet $p_\mathrm{T}$',
     # 'gen_Q2':r'$Q^2$', 

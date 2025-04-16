@@ -10,6 +10,7 @@ import os
 import json,yaml
 import options
 import tensorflow as tf
+import math
 
 line_style = {
     'Baseline':'dotted',
@@ -81,6 +82,7 @@ dedicated_binning = {
     'zjet_breit' : np.linspace(0.2, 1, 11)
 }
 
+
 def get_log(var):
     if 'pt' in var:
         return True, True
@@ -92,6 +94,10 @@ def get_log(var):
         return False, False
     if 'zjet' in var:
         return False, False
+    if 'eec' in var:
+        return False, False
+    if 'theta' in var:
+        return True, False
     else:
         print(f"ERROR: {var} not present!")
 
@@ -110,6 +116,11 @@ def get_ylim(var):
         return 0,10
     if var == 'zjet_breit':
         return 0,3
+    if 'eec' in var:
+        # return 0, 0.35
+        return 0, 4.7
+    if 'theta' in var:
+        return 0, 2.5
     else:
         print("ERROR")
 
@@ -200,8 +211,15 @@ def FormatFig(xlabel,ylabel,ax0,xpos=0.8,ypos=0.95):
     # y_loc, _ = plt.yticks()
     # y_update = ['%.1f' % y for y in y_loc]
     # plt.yticks(y_loc, y_update) 
-    ax0.set_xlabel(xlabel,fontsize=24)
-    ax0.set_ylabel(ylabel)
+    if "Breit" in xlabel:
+        xlabel_strip = xlabel.replace(" Breit frame", "")
+        ylabel_strip = ylabel.replace(" Breit frame", "")
+        ax0.set_xlabel(xlabel_strip,fontsize=24)
+        ax0.set_ylabel(ylabel_strip)
+
+    else: 
+        ax0.set_xlabel(xlabel,fontsize=24)    
+        ax0.set_ylabel(ylabel)
         
 
     text = r'$\bf{H1 Preliminary}$'
@@ -462,9 +480,227 @@ def HistRoutine(feed_dict,
         ax1.set_ylabel('Pred./Ref.')
         ax1.axhline(y=1.0, color='r', linestyle='-', linewidth=1)
         ax1.set_ylim([0.5, 1.5])
-        ax1.set_xlabel(xlabel)
+        if "Breit" in xlabel:
+            xlabel_strip = xlabel.replace(" Breit frame", "")
+            ax1.set_xlabel(xlabel_strip)
+        else:     
+            ax1.set_xlabel(xlabel)
     else:
         FormatFig(xlabel=xlabel, ylabel=ylabel, ax0=ax0)
+
+    return fig, ax0
+
+
+#########################
+
+def FormatFigPart(xlabel,ylabel,ax0,xpos=0.8,ypos=0.95):
+    #Limit number of digits in ticks
+    # y_loc, _ = plt.yticks()
+    # y_update = ['%.1f' % y for y in y_loc]
+    # plt.yticks(y_loc, y_update) 
+    if "Breit" in xlabel:
+        xlabel_strip = xlabel.replace(" Breit frame", "")
+        ylabel_strip = ylabel.replace(" Breit frame", "")
+        ax0.set_xlabel(xlabel_strip,fontsize=24)
+        ax0.set_ylabel(ylabel_strip)
+
+    else: 
+        ax0.set_xlabel(xlabel,fontsize=24)    
+        ax0.set_ylabel(ylabel)
+        
+    text = r'$\bf{H1 Preliminary}$'
+    WriteText(xpos,ypos,text,ax0, align='left')
+
+    second_text = r'$\mathrm{Unfolded\ single\ particle\ dataset}$'
+    WriteText(xpos, ypos-0.06, second_text, ax0, fontsize=18, align='left')
+
+    phasespace_text = r'$Q^2>150~\mathrm{GeV}^2, 0.2<y<0.7$'
+    if "Breit frame" in xlabel.strip():
+        frame_text = "Breit Frame"
+    else: 
+        frame_text = "Lab Frame"
+
+    WriteText(xpos, ypos-0.15, frame_text, ax0, fontsize=18, align='left')
+    WriteText(xpos, ypos-0.25, phasespace_text, ax0, fontsize=18, align='left')
+
+
+def HistRoutinePart(feed_dict,
+                xlabel='',
+                ylabel='',
+                reference_name='data',
+                logy=False,
+                logx=False,
+                binning=None,
+                label_loc='best',
+                plot_ratio=True,
+                weights=None,
+                uncertainty=None,
+                stat_uncertainty=None):
+    """
+    Generate a histogram plot with optional ratio and uncertainties.
+
+    Args:
+        feed_dict (dict): Dictionary containing data to be plotted.
+        xlabel (str): Label for the x-axis.
+        ylabel (str): Label for the y-axis.
+        reference_name (str): Key in feed_dict used as the reference distribution.
+        logy (bool): Whether to use a logarithmic scale on the y-axis.
+        logx (bool): Whether to use a logarithmic scale on the x-axis.
+        binning (array-like): Bin edges for the histograms.
+        label_loc (str): Location of the legend.
+        plot_ratio (bool): Whether to plot the ratio to the reference distribution.
+        weights (dict): Optional weights for each distribution in feed_dict.
+        uncertainty (array-like): Optional uncertainties for the ratio plot.
+
+    Returns:
+        fig, ax0: The generated figure and main axis.
+    """
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from utils import SetGrid, FormatFigPart
+
+    assert reference_name in feed_dict, "ERROR: Reference distribution not found in feed_dict."
+
+    # Default styles for plots
+    ref_plot_style = {'histtype': 'stepfilled', 'alpha': 0.2}
+    data_plot_style = {'histtype': 'step', 'alpha': 0.2}
+    other_plot_style = {'histtype': 'step', 'linewidth': 2}
+
+    # Set up the figure and axes
+    fig, gs = SetGrid(ratio=plot_ratio)
+    ax0 = plt.subplot(gs[0])
+
+    if plot_ratio:
+        ax1 = plt.subplot(gs[1], sharex=ax0)
+        ax0.xaxis.set_visible(False)
+
+    # Define binning if not provided
+    if binning is None:
+        binning = np.linspace(
+            np.quantile(feed_dict[reference_name], 0.01),
+            np.quantile(feed_dict[reference_name], 0.99),
+            50
+        )
+
+    xaxis = 0.5 * (binning[:-1] + binning[1:])  # Bin centers
+
+    # Compute reference histogram
+    ref_weights = weights[reference_name] if weights else None
+    reference_hist, _ = np.histogram(feed_dict[reference_name], bins=binning, density=True, weights=ref_weights)
+
+    max_y = 0
+    # Plot each distribution
+
+    for plot_name, data in feed_dict.items():
+        # plot_style = ref_plot_style if plot_name == reference_name else other_plot_style
+        if "data" in plot_name.lower():
+            plot_style = data_plot_style
+
+        elif "Rapgap_closure" in plot_name:
+            plot_style = ref_plot_style
+        else: plot_style = other_plot_style   
+
+        plot_weights = weights[plot_name] if weights else None
+
+
+        # if plot_name == reference_name:
+        if "data" in plot_name.lower():
+            dist, _ = np.histogram(data, bins=binning, density=True, weights=plot_weights)
+            bin_centers = (binning[:-1] + binning[1:]) / 2
+            errors_low = dist *(1-stat_uncertainty)
+            errors_high = dist *(1+stat_uncertainty)
+            errors = [dist - errors_low, errors_high - dist]  # Asymmetric error bars
+            ax0.errorbar(bin_centers, dist, yerr=errors, fmt='o', color='black', label=options.name_translate[plot_name], markersize=8)
+        else:
+            dist, _, _ = ax0.hist(
+                data, bins=binning, density=True, weights=plot_weights,
+                label=options.name_translate[plot_name],
+                color=options.colors[plot_name],
+                **plot_style
+            )
+
+            
+        max_y = max(max_y, np.max(dist))
+
+        # Plot ratio if applicable
+        if plot_ratio and plot_name != reference_name:
+            ratio = np.ma.divide(dist, reference_hist).filled(0)
+
+            bin_edges = np.zeros(len(binning))
+            for i in range(len(binning)):
+                bin_edges[i] = binning[i]
+            
+            # Create extended ratio array for steps-post style
+            extended_ratio = np.zeros(len(bin_edges))
+            for i in range(len(ratio)):
+                extended_ratio[i] = ratio[i]
+            
+            ax1.plot(
+                bin_edges, extended_ratio,
+                color=options.colors[plot_name],
+                drawstyle='steps-post',
+                linestyle='-',
+                lw=3,
+                ms=10,
+                markerfacecolor='none', markeredgewidth=3
+            )
+
+
+            # Add uncertainties
+            if uncertainty is not None:
+                    for ibin in range(len(binning)-1):
+                        xup = binning[ibin+1]
+                        xlow = binning[ibin]
+                        ax1.fill_between(np.array([xlow,xup]),
+                                         1.0 + uncertainty[ibin],1.0 -uncertainty[ibin],
+                                         alpha=0.1,color='k')
+                        # Overlay hatch using bar
+                        ax1.bar((xlow + xup) / 2, 2 * uncertainty[ibin], width=(xup - xlow), 
+                                bottom=1.0 - uncertainty[ibin], hatch='//', color='none', edgecolor='grey', label='Systematic Uncertainty')
+
+    grey_patch = Patch(facecolor='grey', alpha=0.5, hatch='//', edgecolor='black', label='Systematic Uncertainty')
+                
+    ## draw data points at 1 with stat uncertainties on the bottom panel
+    if "data" in reference_name.lower():
+        ax1.errorbar(xaxis,np.ones_like(xaxis), yerr=stat_uncertainty, marker='o', 
+            linestyle='None', 
+            markersize=8, 
+            color='black',
+            capsize=3)
+    # Adjust y-axis scale
+    if logy:
+        ax0.set_yscale('log')
+        ax0.set_ylim(1e-5, 10 * max_y)
+    else:
+        ax0.set_ylim(0, 1.3 * max_y)
+
+    # Adjust x-axis scale
+    if logx:
+        ax0.set_xscale('log')
+        if plot_ratio:
+            ax1.set_xscale('log')
+
+   # Add legend and format axes
+    # ax0.legend(loc=label_loc, fontsize=16, ncol=2)
+    handles, labels = ax0.get_legend_handles_labels()
+    handles.append(grey_patch)
+    labels.append('Systematic Uncertainty')
+    ax0.legend(handles, labels, loc=label_loc, fontsize=20, ncol=1)
+
+    # ax0.legend(loc=label_loc, fontsize=20, ncol=1)
+    
+    if plot_ratio:
+        FormatFigPart(xlabel=xlabel, ylabel=ylabel, ax0=ax0)
+        ax1.set_ylabel('Pred./Ref.')
+        ax1.axhline(y=1.0, color='r', linestyle='-', linewidth=1)
+        ax1.set_ylim([0.5, 1.5])
+        if "Breit" in xlabel:
+            xlabel_strip = xlabel.replace(" Breit frame", "")
+            ax1.set_xlabel(xlabel_strip)
+        else:     
+            ax1.set_xlabel(xlabel)
+    else:
+        FormatFigPart(xlabel=xlabel, ylabel=ylabel, ax0=ax0)
 
     return fig, ax0
 
