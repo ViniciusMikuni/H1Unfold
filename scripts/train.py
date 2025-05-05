@@ -57,8 +57,9 @@ if __name__ == "__main__":
         nmax = None
 
     if flags.jobNum != -1:
-        tf.random.set_seed(1234*(flags.jobNum+1))
         np.random.seed(1234*(flags.jobNum+1))
+        if not (nstrap > 0): #ensure tf seed isn't same for multiple bootstraps
+            tf.random.set_seed(1234*(flags.jobNum+1))
         version += f'_job{flags.jobNum}'
 
     data = Dataset(data_file_names,flags.data_folder,is_mc=False,
