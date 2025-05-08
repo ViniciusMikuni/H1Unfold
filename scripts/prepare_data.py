@@ -10,7 +10,7 @@ import fnmatch
 def convert_to_np(file_list,base_path,name,is_data = False,
                   max_part = 191, #Overall maximum
                   max_nonzero=132,#Maximum number after applying the per-particle selection
-                  nevts=30000000):
+                  nevts=30000000,gen_only=False):
     reco_dict = {
         'event_features':[],
         'particle_features':[],
@@ -39,6 +39,7 @@ def convert_to_np(file_list,base_path,name,is_data = False,
             gen_dict['event_features'].append(np.stack([tmp_file['gen_'+feat].array()[:nevts] for feat in var_list if 'wgt' not in feat],-1))
             mask_gen = tmp_file['gen_y'].array()[:nevts]
             #Keep only Q2>100 GeV^2
+
             mask_evt = (gen_dict['event_features'][ifile][:,0] > 100)
             reco_dict['particle_features'][ifile] = reco_dict['particle_features'][ifile][mask_evt]
             reco_dict['event_features'][ifile] = reco_dict['event_features'][ifile][mask_evt]
@@ -65,8 +66,11 @@ def convert_to_np(file_list,base_path,name,is_data = False,
         # part pT > 0.1 GeV, -1.5 < part eta < 2.75
         mask_part = (reco_dict['particle_features'][ifile][:,:,0] > 0.1) & (reco_dict['particle_features'][ifile][:,:,1] > -1.5) & (reco_dict['particle_features'][ifile][:,:,1] < 2.75)
         reco_dict['particle_features'][ifile] = reco_dict['particle_features'][ifile]*mask_part[:,:,None]
-        mask_evt = np.sum(reco_dict['particle_features'][ifile][:,:,0],1) > 0
-        
+        if gen_only:
+            mask_evt = np.ones(reco_dict['particle_features'][ifile].shape[0],dtype=bool)
+        else:
+            mask_evt = np.sum(reco_dict['particle_features'][ifile][:,:,0],1) > 0
+
         del mask_part
         if 'Data' not in name:
             print("Adding Gen info")
@@ -74,14 +78,15 @@ def convert_to_np(file_list,base_path,name,is_data = False,
             # 0.2 < y < 0.7 and Q2 > 150
             pass_gen = (mask_gen > 0.2) & (mask_gen < 0.7) & (gen_dict['event_features'][ifile][:,0] > 150)
             gen_dict['event_features'][ifile] = np.concatenate((gen_dict['event_features'][ifile],pass_gen[:,None]),-1)
-            # part pT > 0.1 GeV, -1.5 < part eta < 2.75            
+            # part pT > 0.1 GeV, -1.5 < part eta < 2.75
+
             mask_part = (gen_dict['particle_features'][ifile][:,:,0] > 0.1) & (gen_dict['particle_features'][ifile][:,:,1] > -1.5) & (gen_dict['particle_features'][ifile][:,:,1] < 2.75)
             gen_dict['particle_features'][ifile] = gen_dict['particle_features'][ifile]*mask_part[:,:,None]
             
             #Reject events in case there's no particle left
-            mask_evt_gen = (np.sum(gen_dict['particle_features'][ifile][:,:,0],1) > 0) 
-            mask_evt*=mask_evt_gen
+            mask_evt_gen = (np.sum(gen_dict['particle_features'][ifile][:,:,0],1) > 0)
 
+            mask_evt*=mask_evt_gen
             gen_dict['particle_features'][ifile] = gen_dict['particle_features'][ifile][mask_evt]
             gen_dict['event_features'][ifile] = gen_dict['event_features'][ifile][mask_evt]
             
@@ -464,6 +469,27 @@ if __name__ == "__main__":
             dset = fh5.create_dataset('reco_event_features', data=reco['event_features'])
             dset = fh5.create_dataset('gen_particle_features', data=gen['particle_features'])
             dset = fh5.create_dataset('gen_event_features', data=gen['event_features'])
+
+    elif flags.sample == 'RapgapEp_NoRad':
+        print("Processing Rapgap")
+        file_list = find_files_with_string(flags.data_input+'/out_ep_norad', 'RaNorad_Eplus0607*.root')
+        reco,gen = convert_to_np(file_list,flags.data_input+'/out_ep_norad',name='RaNorad',gen_only=True)
+        with h5.File(os.path.join(flags.data_output,"Rapgap_Eplus0607_NoRad.h5"),'w') as fh5:
+            dset = fh5.create_dataset('reco_particle_features', data=reco['particle_features'])
+            dset = fh5.create_dataset('reco_event_features', data=reco['event_features'])
+            dset = fh5.create_dataset('gen_particle_features', data=gen['particle_features'])
+            dset = fh5.create_dataset('gen_event_features', data=gen['event_features'])
+
+    elif flags.sample == 'DjangohEp_NoRad':
+        print("Processing Djangoh")
+        file_list = find_files_with_string(flags.data_input+'/out_ep_norad', 'DjNorad_Eplus0607*.root')
+        reco,gen = convert_to_np(file_list,flags.data_input+'/out_ep_norad',name='DjNorad', gen_only=True)
+        with h5.File(os.path.join(flags.data_output,"Djangoh_Eplus0607_NoRad.h5"),'w') as fh5:
+            dset = fh5.create_dataset('reco_particle_features', data=reco['particle_features'])
+            dset = fh5.create_dataset('reco_event_features', data=reco['event_features'])
+            dset = fh5.create_dataset('gen_particle_features', data=gen['particle_features'])
+            dset = fh5.create_dataset('gen_event_features', data=gen['event_features'])
+
                       
     else:
         raise Exception("ERROR: Sample not recognized") 

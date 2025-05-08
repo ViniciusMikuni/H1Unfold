@@ -13,6 +13,17 @@ module load tensorflow
 pip install uproot awkward fastjet
 ```
 
+### Preparing new datasets
+Assuming you have root files coming from the outputs of the H1 analysis code, you need to:
+- convert the files to HDF5.
+
+```bash
+python prepare_data.py --sample DjangohEp --data-input INPUT/LOCATION --data-output OUTPUT/LOCATION
+```
+- preprocess the inputs to convert them into the format expected by the model.
+
+
+
 ### Using shifter on Perlmutter
 All the libraries required to run the code in the repo can be acessed through the docker image ```vmikuni/tensorflow:ngc-23.12-tf2-v1```. You can test it locally by doing:
 ```bash
