@@ -24,8 +24,7 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--data_folder', default='/pscratch/sd/v/vmikuni/H1v2/h5', help='Folder containing data and MC files')
-    #parser.add_argument('--data_folder', default='/global/cfs/cdirs/m3246/vmikuni/H1v2/h5/', help='Folder containing data and MC files')
+    parser.add_argument('--data_folder', default='/global/cfs/cdirs/m3246/H1/h5', help='Folder containing data and MC files')
     parser.add_argument('--config', default='config_general.json', help='Basic config file containing general options')
     parser.add_argument('--config_omnifold', default='config_omnifold.json', help='Basic config file containing general options')
     parser.add_argument('--closure', action='store_true', default=False,help='Train omnifold for a closure test using simulation')
@@ -34,6 +33,7 @@ if __name__ == "__main__":
     parser.add_argument('--nstrap', type=int,default=0, help='Unique id for bootstrapping')
     parser.add_argument('--start', type=int,default=0, help='Which omnifold iteration to start with')
     parser.add_argument('--verbose', action='store_true', default=False,help='Display additional information during training')
+    parser.add_argument('--jobNum', type=int, default=-1, help="SBATCH Job Number")
 
     flags = parser.parse_args()
 
@@ -55,6 +55,12 @@ if __name__ == "__main__":
         nmax = 350000 if flags.closure else None        
     else:
         nmax = None
+
+    if flags.jobNum != -1:
+        np.random.seed(1234*(flags.jobNum+1))
+        if not (flags.nstrap > 0): #ensure tf seed isn't same for multiple bootstraps
+            tf.random.set_seed(1234*(flags.jobNum+1))
+        version += f'_job{flags.jobNum}'
 
     data = Dataset(data_file_names,flags.data_folder,is_mc=False,
                    rank=hvd.rank(),size=hvd.size(),nmax=nmax) #match the normalization from MC files
