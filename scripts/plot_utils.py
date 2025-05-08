@@ -188,6 +188,7 @@ def cluster_jets(dataloaders):
         jet_array = []
         for i in range(max_num_jets):
             if i < len(jets):
+                jet = jets[i]
                 jet_info = [
                             jet.pt(),
                             jet.eta(),
