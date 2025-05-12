@@ -134,6 +134,10 @@ def main():
             dset = fh5.create_dataset('eec', data=dataloaders[flags.file].eec[:, :, 0])
             dset = fh5.create_dataset('E_wgt', data=dataloaders[flags.file].eec[:, :, 1]) # per particle energy weighting
             dset = fh5.create_dataset('theta', data=dataloaders[flags.file].eec[:, :, 2])
+            dset = fh5.create_dataset('zh', data=dataloaders[flags.file].zh)
+            dset = fh5.create_dataset('jt', data=dataloaders[flags.file].jt)
+            dset = fh5.create_dataset('jt_photon', data=dataloaders[flags.file].jt_photon)
+            dset = fh5.create_dataset('jet_qt', data=dataloaders[flags.file].all_jets[:, :, 10])
     
 if __name__ == '__main__':
     main()

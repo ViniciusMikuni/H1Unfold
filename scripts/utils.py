@@ -69,7 +69,12 @@ observable_names = {
     'jet_tau10':r'$\mathrm{ln}(\lambda_1^1)$',
     'zjet':r'$z^{jet}$',
     # 'zjet_breit':r'$z^{jet}$ Breit frame'
-    'zjet_breit':r'$z^{jet}$ '
+    'zjet_breit':r'$z^{jet}$ Breit frame',
+    'zh':r'$z_{h}$',
+    'jt':r'$j_{T}$',
+    'jet_qt':r'$q_{T}$',
+    'jt_photon':r'$j_{T}^{q}$'
+    
 
 }
 
@@ -79,7 +84,11 @@ dedicated_binning = {
     'deltaphi': np.linspace(0, 1, 8),
     'jet_tau10': np.array([-4.00,-3.15,-2.59,-2.18,-1.86,-1.58,-1.29,-1.05,-0.81,-0.61,0.00]),
     'zjet' : np.linspace(0.2, 1, 11),
-    'zjet_breit' : np.linspace(0.2, 1, 11)
+    'zjet_breit' : np.linspace(0.2, 1, 11),
+    'zh' : np.logspace(np.log10(.001),np.log10(1),21),
+    'jt' : np.linspace(0., 2, 21),
+    'jt_photon' : np.linspace(0., 5, 21),
+    'jet_qt' : np.linspace(0, 10, 21)
 }
 
 
@@ -98,11 +107,25 @@ def get_log(var):
         return False, False
     if 'theta' in var:
         return True, False
+    if 'zh' in var:
+        return True, True
+    if 'jt' in var:
+        return False, False
+    if 'jet_qt' in var:
+        return False, False
     else:
         print(f"ERROR: {var} not present!")
 
 
 def get_ylim(var):
+    if var == "jet_qt":
+        return 0, .6
+    if var == "zh":
+        return 8e-3, 350
+    if var == 'jt':
+        return 0, 2.5
+    if var == 'jt_photon':
+        return 0, .8
     if var == "jet_pt":
         # return 1e-5, 1
         return 1e-5, 12
@@ -216,7 +239,22 @@ def FormatFig(xlabel,ylabel,ax0,xpos=0.8,ypos=0.95):
         ylabel_strip = ylabel.replace(" Breit frame", "")
         ax0.set_xlabel(xlabel_strip,fontsize=24)
         ax0.set_ylabel(ylabel_strip)
-
+    elif "z_{h}" in xlabel:
+        xlabel_strip = r'$z_{h} = |\vec{p}^{jet}\cdot\vec{p}^{hadron}/|\vec{p}^{jet}|^{2}$'
+        ax0.set_xlabel(xlabel_strip,fontsize=24)
+        ax0.set_ylabel(ylabel)
+    elif "j_{T}^{q}" in xlabel:
+        xlabel_strip = r'$j_{T}^{q} = |\vec{q} \times \vec{p}^{hadron}|/|\vec{q}|$ [GeV]'
+        ax0.set_xlabel(xlabel_strip,fontsize=24)
+        ax0.set_ylabel(ylabel)
+    elif "j_{T}" in xlabel:
+        xlabel_strip = r'$j_{T} = |\vec{p}^{jet} \times \vec{p}^{hadron}|/|\vec{p}^{jet}|$ [GeV]'
+        ax0.set_xlabel(xlabel_strip,fontsize=24)
+        ax0.set_ylabel(ylabel)
+    elif "q_{T}" in xlabel:
+        xlabel_strip = r'$q_{T} = |\vec{p}_{T}^{e} + \vec{p}_{T}^{jet}|$ [GeV]'
+        ax0.set_xlabel(xlabel_strip,fontsize=24)
+        ax0.set_ylabel(ylabel)
     else: 
         ax0.set_xlabel(xlabel,fontsize=24)    
         ax0.set_ylabel(ylabel)
@@ -229,6 +267,10 @@ def FormatFig(xlabel,ylabel,ax0,xpos=0.8,ypos=0.95):
     WriteText(xpos, ypos-0.06, second_text, ax0, fontsize=18, align='left')
 
     phasespace_text = r'$Q^2>150~\mathrm{GeV}^2, 0.2<y<0.7$'
+    if "j_{T}" in xlabel.strip():
+        phasespace_text += "\n" + r'$0.1 < z_{h} < 0.5$' +", " + r'$q_{T}/p_{T}^{jet} < 0.3$'
+    if "$z_{h}$" in xlabel.strip():
+        phasespace_text += "\n" + r'$q_{T}/p_{T}^{jet} < 0.3$'
     if "Breit frame" in xlabel.strip():
         frame_text = "Breit Frame"
         phasespace_text += "\n" + r'$p_T^{jet} > 5 GeV\ k_{T}, R = 1.0$'
@@ -697,6 +739,18 @@ def HistRoutinePart(feed_dict,
         if "Breit" in xlabel:
             xlabel_strip = xlabel.replace(" Breit frame", "")
             ax1.set_xlabel(xlabel_strip)
+        elif "z_{h}" in xlabel:
+            xlabel_strip = r'$z_{h} = |\vec{p}^{jet}\cdot\vec{p}^{hadron}/|\vec{p}^{jet}|^{2}$'
+            ax1.set_xlabel(xlabel_strip,fontsize=24)
+        elif "j_{T}^{q}" in xlabel:
+            xlabel_strip = r'$j_{T}^{q} = |\vec{q} \times \vec{p}^{hadron}|/|\vec{q}|$ [GeV]'
+            ax1.set_xlabel(xlabel_strip,fontsize=24)
+        elif "j_{T}" in xlabel:
+            xlabel_strip = r'$j_{T} = |\vec{p}^{jet} \times \vec{p}^{hadron}|/|\vec{p}^{jet}|$ [GeV]'
+            ax1.set_xlabel(xlabel_strip,fontsize=24)
+        elif "q_{T}" in xlabel:
+            xlabel_strip = r'$q_{T} = |\vec{p}_{T}^{e} + \vec{p}_{T}^{jet}|$ [GeV]'
+            ax1.set_xlabel(xlabel_strip,fontsize=24)
         else:     
             ax1.set_xlabel(xlabel)
     else:

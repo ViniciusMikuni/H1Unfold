@@ -95,7 +95,8 @@ def cluster_jets(dataloaders):
     """
     import fastjet
     import numpy as np
-
+    if hvd.rank() == 0:
+        print("Lab clustering fastjet: ", fastjet.__file__)
     jetdef = fastjet.JetDefinition(fastjet.kt_algorithm, 1.0)
 
     def _convert_kinematics(part, event, mask):
@@ -133,10 +134,10 @@ def cluster_jets(dataloaders):
         q_list = np.stack((q_x, q_y, q_z, q_E), axis=1)
         return q_list
     
-    def _calculate_jet_features(jet, q):
-
+    def _calculate_jet_features(jet, q, elec_px, elec_py, elec_pz):
         """Calculate jet features such as tau variables and ptD."""
         tau_11, tau_11p5, tau_12, tau_20, sumpt = 0, 0, 0, 0, 0
+        zh, jt, jt_photon = [], [], []
         for constituent in jet.constituents():
             delta_r = jet.delta_R(constituent)
             pt = constituent.pt()
@@ -146,21 +147,39 @@ def cluster_jets(dataloaders):
             tau_12 += pt * delta_r ** 2
             tau_20 += pt ** 2
             sumpt += pt
+            h_jet_dot = np.abs(jet.px()*constituent.px() + jet.py()*constituent.py() + jet.pz()*constituent.pz())
+            jet_magnitude = np.sqrt(jet.px()*jet.px() + jet.py()*jet.py() + jet.pz()*jet.pz())
+            zh.append(h_jet_dot/(jet_magnitude*jet_magnitude))
+
+            h_jet_cross_x = jet.py()*constituent.pz() - jet.pz()*constituent.py()
+            h_jet_cross_y = jet.pz()*constituent.px() - jet.px()*constituent.pz()
+            h_jet_cross_z = jet.px()*constituent.py() - jet.py()*constituent.px()
+            cross_magnitude = np.sqrt(h_jet_cross_x**2 + h_jet_cross_y**2 + h_jet_cross_z**2)
+            jt.append(cross_magnitude/jet_magnitude)
+
+            photon_magnitude = np.sqrt(q[0]*q[0] + q[1]*q[1] + q[2]*q[2])
+            h_photon_cross_x = q[1]*constituent.pz() - q[2]*constituent.py()
+            h_photon_cross_y = q[2]*constituent.px() - q[0]*constituent.pz()
+            h_photon_cross_z = q[0]*constituent.py() - q[1]*constituent.px()
+            h_photon_cross_magnitude = np.sqrt(h_photon_cross_x**2 + h_photon_cross_y**2 + h_photon_cross_z**2)
+            jt_photon.append(h_photon_cross_magnitude/photon_magnitude)
 
         jet.tau_11 = np.log(tau_11 / jet.pt()) if jet.pt() > 0 else 0.0
         jet.tau_11p5 = np.log(tau_11p5 / jet.pt()) if jet.pt() > 0 else 0.0
         jet.tau_12 = np.log(tau_12 / jet.pt()) if jet.pt() > 0 else 0.0
         jet.tau_20 = tau_20 / (jet.pt() ** 2) if jet.pt() > 0 else 0.0
         jet.ptD = np.sqrt(tau_20) / sumpt if sumpt > 0 else 0.0
-
+        jet.zh = np.concatenate((zh, np.zeros(132-len(zh))))
+        jet.jt = np.concatenate((jt, np.zeros(132-len(jt))))
+        jet.jt_photon = np.concatenate((jt_photon, np.zeros(132-len(jt_photon))))
         # Calculating zjet
         P = np.array([0, 0, 920, 920], dtype=np.float32) # 920 GeV is proton beam energy
         P_dot_q = P[3]*q[3] - P[0]*q[0] - P[1]*q[1] - P[2]*q[2]
         z_jet_numerator = P[3]*jet.E() - P[0]*jet.px() - P[1]*jet.py() - P[2]*jet.pz()
         jet.zjet = z_jet_numerator/P_dot_q
-        
 
-        
+        jet.qt = np.sqrt( (jet.px()+elec_px)**2 + (jet.py()+elec_py)**2 )
+
     def _take_leading_jet(jets):
         """Extract features of the leading jet."""
         if not jets:
@@ -169,7 +188,7 @@ def cluster_jets(dataloaders):
         leading_jet = jets[0]
         return np.array([
             leading_jet.pt(),
-            leading_jet.eta(),
+            leading_jet.eta(), 
             (leading_jet.phi() + np.pi) % (2 * np.pi) - np.pi,
             leading_jet.E(),
             leading_jet.tau_11,
@@ -184,8 +203,9 @@ def cluster_jets(dataloaders):
         max_num_jets = 4
 
         if not jets:
-            return np.zeros((max_num_jets, 10))
+            return (np.zeros((max_num_jets, 11)), np.zeros((max_num_jets, 132)), np.zeros((max_num_jets, 132)), np.zeros((max_num_jets, 132)))
         jet_array = []
+        zh_array, jt_array, jt_photon_array = [], [], []
         for i in range(max_num_jets):
             if i < len(jets):
                 jet = jets[i]
@@ -199,13 +219,19 @@ def cluster_jets(dataloaders):
                             jet.tau_12,
                             jet.tau_20,
                             jet.ptD,
-                            jet.zjet
+                            jet.zjet,
+                            jet.qt
                         ]
+                zh_array.append(jet.zh)
+                jt_array.append(jet.jt)
+                jt_photon_array.append(jet.jt_photon)
             else:
-                jet_info = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+                jet_info = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+                zh_array.append(np.zeros(132))
+                jt_array.append(np.zeros(132))
+                jt_photon_array.append(np.zeros(132))
             jet_array.append(jet_info)
-
-        return np.array(jet_array)
+        return (np.array(jet_array), np.array(zh_array), np.array(jt_array), np.array(jt_photon_array))
 
     for dataloader_name, data in dataloaders.items():
         #print(f"----------------- Started working with {dataloader_name} -------------------")
@@ -217,6 +243,7 @@ def cluster_jets(dataloaders):
         q = _calculate_q(cartesian, electron_momentum)
         list_of_jets = []
         list_of_all_jets = []
+        list_of_all_zh, list_of_all_jt, list_of_all_jt_photon = [], [], []
         for i, event in enumerate(cartesian):
             particles = [
                 fastjet.PseudoJet(p[0], p[1], p[2], p[3])
@@ -228,16 +255,22 @@ def cluster_jets(dataloaders):
             sorted_jets = fastjet.sorted_by_pt(cluster.inclusive_jets(ptmin=10))
             # Calculate jet features
             for jet in sorted_jets:
-                _calculate_jet_features(jet, q[i])
-
+                _calculate_jet_features(jet, q[i], electron_momentum["px"][i], electron_momentum["py"][i], electron_momentum["pz"][i])
             # Take the leading jet's features
             # leading_jet = _take_leading_jet(sorted_jets)
             # list_of_jets.append(leading_jet)
+            # print(_take_all_jets(sorted_jets))
             all_jets = _take_all_jets(sorted_jets)
-            list_of_all_jets.append(all_jets)
+            list_of_all_jets.append(all_jets[0])
+            list_of_all_zh.append(all_jets[1])
+            list_of_all_jt.append(all_jets[2])
+            list_of_all_jt_photon.append(all_jets[3])
         # Store the jet features in the dataloader
         #data.jet = np.array(list_of_jets, dtype=np.float32)
         data.all_jets = np.array(list_of_all_jets, dtype=np.float32)
+        data.zh = np.array(list_of_all_zh, dtype=np.float32)
+        data.jt = np.array(list_of_all_jt, dtype=np.float32)
+        data.jt_photon = np.array(list_of_all_jt_photon, dtype=np.float32)
         #print(f"----------------- Done working with {dataloader_name} -------------------")
 
 
@@ -1435,8 +1468,19 @@ def plot_part_observable(flags, var, dataloaders, version):
         weights[data_name] = np.repeat(dataloaders['Rapgap']['mc_weights'] * dataloaders['Rapgap'][weight_name], num_Rapgap_parts_per_event, axis=0)
         weights[data_name] = np.multiply(weights[data_name], Rapgap_E_wgt)
     elif len(dataloaders['Rapgap'][var].shape) > 1:
-        Rapgap_mask = dataloaders["Rapgap"]["jet_pt"]>0
-        Rapgap_data = ak.drop_none(ak.mask(dataloaders["Rapgap"][var], Rapgap_mask))
+        if "zh" in var or "jt" in var:
+            if "jt" in var:
+                pt_mask = dataloaders["Rapgap"]["jet_pt"]>0
+                qt_mask = np.repeat(( ak.mask(dataloaders["Rapgap"]["jet_qt"], pt_mask)/ak.mask(dataloaders["Rapgap"]["jet_pt"], pt_mask)<.3)[:,:,np.newaxis], 132, axis=2)
+                Rapgap_mask = (dataloaders["Rapgap"][var]>0) & (dataloaders["Rapgap"]["zh"]>0.1) & (dataloaders["Rapgap"]["zh"]<0.5) & qt_mask
+            else:
+                pt_mask = dataloaders["Rapgap"]["jet_pt"]>0
+                qt_mask = np.repeat(( ak.mask(dataloaders["Rapgap"]["jet_qt"], pt_mask)/ak.mask(dataloaders["Rapgap"]["jet_pt"], pt_mask)<.3)[:,:,np.newaxis], 132, axis=2)
+                Rapgap_mask = (dataloaders["Rapgap"][var]>0) & qt_mask
+            Rapgap_data = ak.flatten(ak.drop_none(ak.mask(dataloaders["Rapgap"][var], Rapgap_mask)), axis=2)
+        else:
+            Rapgap_mask = dataloaders["Rapgap"]["jet_pt"]>0
+            Rapgap_data = ak.drop_none(ak.mask(dataloaders["Rapgap"][var], Rapgap_mask))
         num_Rapgap_jets_per_event = ak.count(Rapgap_data, axis=1)
         Rapgap_data = ak.flatten(Rapgap_data)
 
@@ -1464,8 +1508,19 @@ def plot_part_observable(flags, var, dataloaders, version):
         weights['Djangoh'] = np.multiply(weights['Djangoh'], Djangoh_E_wgt)
 
     elif len(dataloaders['Djangoh'][var].shape) > 1:
-        Djangoh_mask = dataloaders["Djangoh"]["jet_pt"]>0
-        Djangoh_data = ak.drop_none(ak.mask(dataloaders["Djangoh"][var], Djangoh_mask))
+        if "zh" in var or "jt" in var:
+            if "jt" in var:
+                pt_mask = dataloaders["Djangoh"]["jet_pt"]>0
+                qt_mask = np.repeat(( ak.mask(dataloaders["Djangoh"]["jet_qt"], pt_mask)/ak.mask(dataloaders["Djangoh"]["jet_pt"], pt_mask)<.3)[:,:,np.newaxis], 132, axis=2)
+                Djangoh_mask = (dataloaders["Djangoh"][var]>0) & (dataloaders["Djangoh"]["zh"]>0.1) & (dataloaders["Djangoh"]["zh"]<0.5) & qt_mask
+            else:
+                pt_mask = dataloaders["Djangoh"]["jet_pt"]>0
+                qt_mask = np.repeat(( ak.mask(dataloaders["Djangoh"]["jet_qt"], pt_mask)/ak.mask(dataloaders["Djangoh"]["jet_pt"], pt_mask)<.3)[:,:,np.newaxis], 132, axis=2)
+                Djangoh_mask = (dataloaders["Djangoh"][var]>0) & qt_mask
+            Djangoh_data = ak.flatten(ak.drop_none(ak.mask(dataloaders["Djangoh"][var], Djangoh_mask)), axis=2)
+        else:
+            Djangoh_mask = dataloaders["Djangoh"]["jet_pt"]>0
+            Djangoh_data = ak.drop_none(ak.mask(dataloaders["Djangoh"][var], Djangoh_mask))
         num_Djangoh_jets_per_event = ak.count(Djangoh_data, axis=1)
         Djangoh_data = ak.flatten(Djangoh_data)
 
@@ -1536,6 +1591,9 @@ def gather_data(dataloaders):
         # dataloaders[dataloader].jet = hvd.allgather(tf.constant(dataloaders[dataloader].jet)).numpy()
         # dataloaders[dataloader].jet_breit = hvd.allgather(tf.constant(dataloaders[dataloader].jet_breit)).numpy()
         dataloaders[dataloader].all_jets = hvd.allgather(tf.constant(dataloaders[dataloader].all_jets)).numpy()
+        dataloaders[dataloader].zh = hvd.allgather(tf.constant(dataloaders[dataloader].zh)).numpy()
+        dataloaders[dataloader].jt = hvd.allgather(tf.constant(dataloaders[dataloader].jt)).numpy()
+        dataloaders[dataloader].jt_photon = hvd.allgather(tf.constant(dataloaders[dataloader].jt_photon)).numpy()
         dataloaders[dataloader].all_jets_breit = hvd.allgather(tf.constant(dataloaders[dataloader].all_jets_breit)).numpy()
         dataloaders[dataloader].weight = hvd.allgather(tf.constant(dataloaders[dataloader].weight)).numpy()
         #dataloaders[dataloader].mask = hvd.allgather(tf.constant(dataloaders[dataloader].mask)).numpy()
