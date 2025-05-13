@@ -70,10 +70,10 @@ observable_names = {
     "zjet": r"$z^{jet}$",
     # 'zjet_breit':r'$z^{jet}$ Breit frame'
     "zjet_breit": r"$z^{jet}$ ",
-    'zh':r'$z_{h}$',
-    'jt':r'$j_{T}$',
-    'jet_qt':r'$q_{T}$',
-    'jt_photon':r'$j_{T}^{q}$',
+    "zh": r"$z_{h}$",
+    "jt": r"$j_{T}$",
+    "jet_qt": r"$q_{T}$",
+    "jt_photon": r"$j_{T}^{q}$",
 }
 
 dedicated_binning = {
@@ -85,15 +85,13 @@ dedicated_binning = {
     ),
     "zjet": np.linspace(0.2, 1, 11),
     "zjet_breit": np.linspace(0.2, 1, 11),
-    'zh' : np.logspace(np.log10(.001),np.log10(1),21),
-    'jt' : np.linspace(0., 2, 21),
-    'jt_photon' : np.linspace(0., 5, 21),
-    'jet_qt' : np.linspace(0, 10, 21),
+    "zh": np.logspace(np.log10(0.001), np.log10(1), 21),
+    "jt": np.linspace(0.0, 2, 21),
+    "jt_photon": np.linspace(0.0, 5, 21),
+    "jet_qt": np.linspace(0, 10, 21),
 }
 
-dedicated_binning = {
-    
-}
+dedicated_binning = {}
 
 
 def get_log(var):
@@ -111,11 +109,11 @@ def get_log(var):
         return False, False
     if "theta" in var:
         return True, False
-    if 'zh' in var:
+    if "zh" in var:
         return True, True
-    if 'jt' in var:
+    if "jt" in var:
         return False, False
-    if 'jet_qt' in var:
+    if "jet_qt" in var:
         return False, False
     else:
         print(f"ERROR: {var} not present!")
@@ -123,13 +121,13 @@ def get_log(var):
 
 def get_ylim(var):
     if var == "jet_qt":
-        return 0, .6
+        return 0, 0.6
     if var == "zh":
         return 8e-3, 350
-    if var == 'jt':
+    if var == "jt":
         return 0, 2.5
-    if var == 'jt_photon':
-        return 0, .8
+    if var == "jt_photon":
+        return 0, 0.8
     if var == "jet_pt":
         # return 1e-5, 1
         return 1e-5, 12
@@ -250,20 +248,26 @@ def FormatFig(xlabel, ylabel, ax0, xpos=0.8, ypos=0.95):
         ax0.set_xlabel(xlabel_strip, fontsize=24)
         ax0.set_ylabel(ylabel_strip)
     elif "z_{h}" in xlabel:
-        xlabel_strip = r'$z_{h} = |\vec{p}^{jet}\cdot\vec{p}^{hadron}/|\vec{p}^{jet}|^{2}$'
-        ax0.set_xlabel(xlabel_strip,fontsize=24)
+        xlabel_strip = (
+            r"$z_{h} = |\vec{p}^{jet}\cdot\vec{p}^{hadron}/|\vec{p}^{jet}|^{2}$"
+        )
+        ax0.set_xlabel(xlabel_strip, fontsize=24)
         ax0.set_ylabel(ylabel)
     elif "j_{T}^{q}" in xlabel:
-        xlabel_strip = r'$j_{T}^{q} = |\vec{q} \times \vec{p}^{hadron}|/|\vec{q}|$ [GeV]'
-        ax0.set_xlabel(xlabel_strip,fontsize=24)
+        xlabel_strip = (
+            r"$j_{T}^{q} = |\vec{q} \times \vec{p}^{hadron}|/|\vec{q}|$ [GeV]"
+        )
+        ax0.set_xlabel(xlabel_strip, fontsize=24)
         ax0.set_ylabel(ylabel)
     elif "j_{T}" in xlabel:
-        xlabel_strip = r'$j_{T} = |\vec{p}^{jet} \times \vec{p}^{hadron}|/|\vec{p}^{jet}|$ [GeV]'
-        ax0.set_xlabel(xlabel_strip,fontsize=24)
+        xlabel_strip = (
+            r"$j_{T} = |\vec{p}^{jet} \times \vec{p}^{hadron}|/|\vec{p}^{jet}|$ [GeV]"
+        )
+        ax0.set_xlabel(xlabel_strip, fontsize=24)
         ax0.set_ylabel(ylabel)
     elif "q_{T}" in xlabel:
-        xlabel_strip = r'$q_{T} = |\vec{p}_{T}^{e} + \vec{p}_{T}^{jet}|$ [GeV]'
-        ax0.set_xlabel(xlabel_strip,fontsize=24)
+        xlabel_strip = r"$q_{T} = |\vec{p}_{T}^{e} + \vec{p}_{T}^{jet}|$ [GeV]"
+        ax0.set_xlabel(xlabel_strip, fontsize=24)
         ax0.set_ylabel(ylabel)
     else:
         ax0.set_xlabel(xlabel, fontsize=24)
@@ -277,10 +281,12 @@ def FormatFig(xlabel, ylabel, ax0, xpos=0.8, ypos=0.95):
 
     phasespace_text = r"$Q^2>150~\mathrm{GeV}^2, 0.2<y<0.7$"
     if "j_{T}" in xlabel.strip():
-        phasespace_text += "\n" + r'$0.1 < z_{h} < 0.5$' +", " + r'$q_{T}/p_{T}^{jet} < 0.3$'
+        phasespace_text += (
+            "\n" + r"$0.1 < z_{h} < 0.5$" + ", " + r"$q_{T}/p_{T}^{jet} < 0.3$"
+        )
     if "$z_{h}$" in xlabel.strip():
-        phasespace_text += "\n" + r'$q_{T}/p_{T}^{jet} < 0.3$'
-    
+        phasespace_text += "\n" + r"$q_{T}/p_{T}^{jet} < 0.3$"
+
     if "Breit frame" in xlabel.strip():
         frame_text = "Breit Frame"
         phasespace_text += "\n" + r"$p_T^{jet} > 5 GeV\ k_{T}, R = 1.0$"
@@ -851,17 +857,21 @@ def HistRoutinePart(
             xlabel_strip = xlabel.replace(" Breit frame", "")
             ax1.set_xlabel(xlabel_strip)
         elif "z_{h}" in xlabel:
-            xlabel_strip = r'$z_{h} = |\vec{p}^{jet}\cdot\vec{p}^{hadron}/|\vec{p}^{jet}|^{2}$'
-            ax1.set_xlabel(xlabel_strip,fontsize=24)
+            xlabel_strip = (
+                r"$z_{h} = |\vec{p}^{jet}\cdot\vec{p}^{hadron}/|\vec{p}^{jet}|^{2}$"
+            )
+            ax1.set_xlabel(xlabel_strip, fontsize=24)
         elif "j_{T}^{q}" in xlabel:
-            xlabel_strip = r'$j_{T}^{q} = |\vec{q} \times \vec{p}^{hadron}|/|\vec{q}|$ [GeV]'
-            ax1.set_xlabel(xlabel_strip,fontsize=24)
+            xlabel_strip = (
+                r"$j_{T}^{q} = |\vec{q} \times \vec{p}^{hadron}|/|\vec{q}|$ [GeV]"
+            )
+            ax1.set_xlabel(xlabel_strip, fontsize=24)
         elif "j_{T}" in xlabel:
-            xlabel_strip = r'$j_{T} = |\vec{p}^{jet} \times \vec{p}^{hadron}|/|\vec{p}^{jet}|$ [GeV]'
-            ax1.set_xlabel(xlabel_strip,fontsize=24)
+            xlabel_strip = r"$j_{T} = |\vec{p}^{jet} \times \vec{p}^{hadron}|/|\vec{p}^{jet}|$ [GeV]"
+            ax1.set_xlabel(xlabel_strip, fontsize=24)
         elif "q_{T}" in xlabel:
-            xlabel_strip = r'$q_{T} = |\vec{p}_{T}^{e} + \vec{p}_{T}^{jet}|$ [GeV]'
-            ax1.set_xlabel(xlabel_strip,fontsize=24)
+            xlabel_strip = r"$q_{T} = |\vec{p}_{T}^{e} + \vec{p}_{T}^{jet}|$ [GeV]"
+            ax1.set_xlabel(xlabel_strip, fontsize=24)
         else:
             ax1.set_xlabel(xlabel)
     else:

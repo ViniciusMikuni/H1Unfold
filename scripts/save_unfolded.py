@@ -174,7 +174,6 @@ def main():
                         "closure_weights", data=weights["closure"]
                     )
 
-                
             dset = fh5.create_dataset(
                 "jet_pt", data=dataloaders[flags.file].all_jets[:, :, 0]
             )
@@ -203,12 +202,19 @@ def main():
             dset = fh5.create_dataset(
                 "theta", data=dataloaders[flags.file].eec[:, :, 2]
             )
-            dset = fh5.create_dataset('zh', data=dataloaders[flags.file].zh)
-            dset = fh5.create_dataset('jt', data=dataloaders[flags.file].jt)
-            dset = fh5.create_dataset('jt_photon', data=dataloaders[flags.file].jt_photon)
-            dset = fh5.create_dataset('jet_qt', data=dataloaders[flags.file].all_jets[:, :, 10])
-            dset = fh5.create_dataset("EEC_energyweight", data=dataloaders[flags.file].EEC_energyweight)
+            dset = fh5.create_dataset("zh", data=dataloaders[flags.file].zh)
+            dset = fh5.create_dataset("jt", data=dataloaders[flags.file].jt)
+            dset = fh5.create_dataset(
+                "jt_photon", data=dataloaders[flags.file].jt_photon
+            )
+            dset = fh5.create_dataset(
+                "jet_qt", data=dataloaders[flags.file].all_jets[:, :, 10]
+            )
+            dset = fh5.create_dataset(
+                "EEC_energyweight", data=dataloaders[flags.file].EEC_energyweight
+            )
             dset = fh5.create_dataset("R_L", data=dataloaders[flags.file].R_L)
-    
+
+
 if __name__ == "__main__":
     main()
