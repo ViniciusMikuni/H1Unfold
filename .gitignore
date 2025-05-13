@@ -1,2 +1,5 @@
 plots/
 __pycache__/
+*~
+*.txt
+#*
