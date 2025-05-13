@@ -138,10 +138,11 @@ def main():
             dset = fh5.create_dataset('jt', data=dataloaders[flags.file].jt)
             dset = fh5.create_dataset('jt_photon', data=dataloaders[flags.file].jt_photon)
             dset = fh5.create_dataset('jet_qt', data=dataloaders[flags.file].all_jets[:, :, 10])
+            dset = fh5.create_dataset("EEC_energyweight", data=dataloaders[flags.file].EEC_energyweight)
+            dset = fh5.create_dataset("R_L", data=dataloaders[flags.file].R_L)
     
 if __name__ == '__main__':
     main()
 
 
 
-    
