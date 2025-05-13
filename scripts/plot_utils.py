@@ -1311,8 +1311,19 @@ def plot_observable(flags, var, dataloaders, version):
     feed_dict = {}
 
     if len(dataloaders['Rapgap'][var].shape) > 1:
-        Rapgap_mask = dataloaders["Rapgap"]["jet_pt"]>0
-        Rapgap_data = ak.drop_none(ak.mask(dataloaders["Rapgap"][var], Rapgap_mask))
+        if "zh" in var or "jt" in var:
+            if "jt" in var:
+                pt_mask = dataloaders["Rapgap"]["jet_pt"]>0
+                qt_mask = np.repeat(( ak.mask(dataloaders["Rapgap"]["jet_qt"], pt_mask)/ak.mask(dataloaders["Rapgap"]["jet_pt"], pt_mask)<.3)[:,:,np.newaxis], 132, axis=2)
+                Rapgap_mask = (dataloaders["Rapgap"][var]>0) & (dataloaders["Rapgap"]["zh"]>0.1) & (dataloaders["Rapgap"]["zh"]<0.5) & qt_mask
+            else:
+                pt_mask = dataloaders["Rapgap"]["jet_pt"]>0
+                qt_mask = np.repeat(( ak.mask(dataloaders["Rapgap"]["jet_qt"], pt_mask)/ak.mask(dataloaders["Rapgap"]["jet_pt"], pt_mask)<.3)[:,:,np.newaxis], 132, axis=2)
+                Rapgap_mask = (dataloaders["Rapgap"][var]>0) & qt_mask
+            Rapgap_data = ak.flatten(ak.drop_none(ak.mask(dataloaders["Rapgap"][var], Rapgap_mask)), axis=2)
+        else:
+            Rapgap_mask = dataloaders["Rapgap"]["jet_pt"]>0
+            Rapgap_data = ak.drop_none(ak.mask(dataloaders["Rapgap"][var], Rapgap_mask))
         num_Rapgap_jets_per_event = ak.count(Rapgap_data, axis=1)
         Rapgap_data = ak.flatten(Rapgap_data)
 
@@ -1327,8 +1338,19 @@ def plot_observable(flags, var, dataloaders, version):
         feed_dict['Rapgap'] = dataloaders['Rapgap'][var][dataloaders['Rapgap']['jet_pt'] > 0]
     
     if len(dataloaders['Djangoh'][var].shape) > 1:
-        Djangoh_mask = dataloaders["Djangoh"]["jet_pt"]>0
-        Djangoh_data = ak.drop_none(ak.mask(dataloaders["Djangoh"][var], Djangoh_mask))
+        if "zh" in var or "jt" in var:
+            if "jt" in var:
+                pt_mask = dataloaders["Djangoh"]["jet_pt"]>0
+                qt_mask = np.repeat(( ak.mask(dataloaders["Djangoh"]["jet_qt"], pt_mask)/ak.mask(dataloaders["Djangoh"]["jet_pt"], pt_mask)<.3)[:,:,np.newaxis], 132, axis=2)
+                Djangoh_mask = (dataloaders["Djangoh"][var]>0) & (dataloaders["Djangoh"]["zh"]>0.1) & (dataloaders["Djangoh"]["zh"]<0.5) & qt_mask
+            else:
+                pt_mask = dataloaders["Djangoh"]["jet_pt"]>0
+                qt_mask = np.repeat(( ak.mask(dataloaders["Djangoh"]["jet_qt"], pt_mask)/ak.mask(dataloaders["Djangoh"]["jet_pt"], pt_mask)<.3)[:,:,np.newaxis], 132, axis=2)
+                Djangoh_mask = (dataloaders["Djangoh"][var]>0) & qt_mask
+            Djangoh_data = ak.flatten(ak.drop_none(ak.mask(dataloaders["Djangoh"][var], Djangoh_mask)), axis=2)
+        else:
+            Djangoh_mask = dataloaders["Djangoh"]["jet_pt"]>0
+            Djangoh_data = ak.drop_none(ak.mask(dataloaders["Djangoh"][var], Djangoh_mask))
         num_Djangoh_jets_per_event = ak.count(Djangoh_data, axis=1)
         Djangoh_data = ak.flatten(Djangoh_data)
 
@@ -1491,19 +1513,8 @@ def plot_part_observable(flags, var, dataloaders, version):
         weights[data_name] = np.repeat(dataloaders['Rapgap']['mc_weights'] * dataloaders['Rapgap'][weight_name], num_Rapgap_parts_per_event, axis=0)
         weights[data_name] = np.multiply(weights[data_name], Rapgap_E_wgt)
     elif len(dataloaders['Rapgap'][var].shape) > 1:
-        if "zh" in var or "jt" in var:
-            if "jt" in var:
-                pt_mask = dataloaders["Rapgap"]["jet_pt"]>0
-                qt_mask = np.repeat(( ak.mask(dataloaders["Rapgap"]["jet_qt"], pt_mask)/ak.mask(dataloaders["Rapgap"]["jet_pt"], pt_mask)<.3)[:,:,np.newaxis], 132, axis=2)
-                Rapgap_mask = (dataloaders["Rapgap"][var]>0) & (dataloaders["Rapgap"]["zh"]>0.1) & (dataloaders["Rapgap"]["zh"]<0.5) & qt_mask
-            else:
-                pt_mask = dataloaders["Rapgap"]["jet_pt"]>0
-                qt_mask = np.repeat(( ak.mask(dataloaders["Rapgap"]["jet_qt"], pt_mask)/ak.mask(dataloaders["Rapgap"]["jet_pt"], pt_mask)<.3)[:,:,np.newaxis], 132, axis=2)
-                Rapgap_mask = (dataloaders["Rapgap"][var]>0) & qt_mask
-            Rapgap_data = ak.flatten(ak.drop_none(ak.mask(dataloaders["Rapgap"][var], Rapgap_mask)), axis=2)
-        else:
-            Rapgap_mask = dataloaders["Rapgap"]["jet_pt"]>0
-            Rapgap_data = ak.drop_none(ak.mask(dataloaders["Rapgap"][var], Rapgap_mask))
+        Rapgap_mask = dataloaders["Rapgap"]["jet_pt"]>0
+        Rapgap_data = ak.drop_none(ak.mask(dataloaders["Rapgap"][var], Rapgap_mask))
         num_Rapgap_jets_per_event = ak.count(Rapgap_data, axis=1)
         Rapgap_data = ak.flatten(Rapgap_data)
 
@@ -1531,19 +1542,8 @@ def plot_part_observable(flags, var, dataloaders, version):
         weights['Djangoh'] = np.multiply(weights['Djangoh'], Djangoh_E_wgt)
 
     elif len(dataloaders['Djangoh'][var].shape) > 1:
-        if "zh" in var or "jt" in var:
-            if "jt" in var:
-                pt_mask = dataloaders["Djangoh"]["jet_pt"]>0
-                qt_mask = np.repeat(( ak.mask(dataloaders["Djangoh"]["jet_qt"], pt_mask)/ak.mask(dataloaders["Djangoh"]["jet_pt"], pt_mask)<.3)[:,:,np.newaxis], 132, axis=2)
-                Djangoh_mask = (dataloaders["Djangoh"][var]>0) & (dataloaders["Djangoh"]["zh"]>0.1) & (dataloaders["Djangoh"]["zh"]<0.5) & qt_mask
-            else:
-                pt_mask = dataloaders["Djangoh"]["jet_pt"]>0
-                qt_mask = np.repeat(( ak.mask(dataloaders["Djangoh"]["jet_qt"], pt_mask)/ak.mask(dataloaders["Djangoh"]["jet_pt"], pt_mask)<.3)[:,:,np.newaxis], 132, axis=2)
-                Djangoh_mask = (dataloaders["Djangoh"][var]>0) & qt_mask
-            Djangoh_data = ak.flatten(ak.drop_none(ak.mask(dataloaders["Djangoh"][var], Djangoh_mask)), axis=2)
-        else:
-            Djangoh_mask = dataloaders["Djangoh"]["jet_pt"]>0
-            Djangoh_data = ak.drop_none(ak.mask(dataloaders["Djangoh"][var], Djangoh_mask))
+        Djangoh_mask = dataloaders["Djangoh"]["jet_pt"]>0
+        Djangoh_data = ak.drop_none(ak.mask(dataloaders["Djangoh"][var], Djangoh_mask))
         num_Djangoh_jets_per_event = ak.count(Djangoh_data, axis=1)
         Djangoh_data = ak.flatten(Djangoh_data)
 
