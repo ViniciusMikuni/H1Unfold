@@ -7,21 +7,8 @@ import h5py as h5
 
 utils.SetStyle()
 
-
-var_names = [
-    "weights",
-    "mc_weights",
-    "jet_pt",
-    "jet_breit_pt",
-    "deltaphi",
-    "jet_tau10",
-    "zjet",
-    "zjet_breit",
-    "zjet_centauro",
-    "Delta_zjet",
-    "jet_centauro_pt",
-]
-# var_names = ['jet_tau10']
+var_names = ["eec"]
+# 'theta']
 
 
 def get_sample_names(
@@ -117,6 +104,7 @@ def parse_arguments():
         default=False,
         help="Load files with prelimnote label",
     )
+    parser.add_argument("--eec", action="store_true", default=False, help="Get EEC")
 
     parser.add_argument(
         "--verbose", action="store_true", default=False, help="Increase print level"
@@ -162,7 +150,7 @@ def main():
     for var in var_names:
         if "weight" in var:
             continue
-        plot_observable(flags, var, dataloaders, opt["NAME"])
+        plot_part_observable(flags, var, dataloaders, opt["NAME"])
 
 
 if __name__ == "__main__":
