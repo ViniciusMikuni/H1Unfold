@@ -155,6 +155,7 @@ def main():
 
     dataloaders = get_dataloaders(flags, mc_files)
 
+    plot_EEC_RL(flags, dataloaders, opt["NAME"])
     for var in var_names:
         if "weight" in var:
             continue
