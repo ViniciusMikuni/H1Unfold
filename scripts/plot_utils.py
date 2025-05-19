@@ -8,7 +8,7 @@ import horovod.tensorflow as hvd
 import awkward as ak
 import subprocess
 import h5py as h5
-import time
+
 
 def get_sample_names(
     use_sys,
@@ -117,6 +117,7 @@ def cluster_jets(dataloaders):
     """
     import fastjet
     import numpy as np
+
     if hvd.rank() == 0:
         print("Lab clustering fastjet: ", fastjet.__file__)
     jetdef = fastjet.JetDefinition(fastjet.kt_algorithm, 1.0)
@@ -1003,7 +1004,8 @@ def plot_zjet(flags, dataloaders, data_weights, version, frame="lab"):
     ax.set_ylim(0, 5)
     fig.savefig(f"../plots/{version}_zjet_{frame}.pdf")
 
-def cluster_breit(flags, dataloaders, clustering_type = "all", fastjet_config=""):
+
+def cluster_breit(flags, dataloaders, clustering_type="all", fastjet_config=""):
     import fastjet
     import awkward as ak
     import vector
@@ -1235,14 +1237,24 @@ def cluster_breit(flags, dataloaders, clustering_type = "all", fastjet_config=""
 
         events = []
         for event in boosted_vectors:
-            events.append([{"px": part_vec.px, "py": part_vec.py, "pz": part_vec.pz, "E": part_vec.E} for part_vec in event])
-        
+            events.append(
+                [
+                    {
+                        "px": part_vec.px,
+                        "py": part_vec.py,
+                        "pz": part_vec.pz,
+                        "E": part_vec.E,
+                    }
+                    for part_vec in event
+                ]
+            )
+
         if clustering_type == "centauro" or clustering_type == "all":
             if fastjet_config == "":
                 raise ValueError("fastjet_config needs to be set when using Centauro!")
             else:
-                if hvd.rank()==0:
-                    print(f"Using fastjet at {fastjet_config} for Centauro") 
+                if hvd.rank() == 0:
+                    print(f"Using fastjet at {fastjet_config} for Centauro")
             # Saving Breit particles to an h5 file so we can cluster in C++ with Centauro
             px, py, pz, energy = [], [], [], []
             max_num_particles = len(max(events, key=len))
@@ -1253,20 +1265,35 @@ def cluster_breit(flags, dataloaders, clustering_type = "all", fastjet_config=""
                 pz.append([particle_vector["pz"] for particle_vector in event])
                 energy.append([particle_vector["E"] for particle_vector in event])
 
-            breit_particles = np.zeros((len(events),max_num_particles,4))
-            breit_particles[:,:,0] = np.array(list(itertools.zip_longest(*px, fillvalue=0))).T[:,:max_num_particles]
-            breit_particles[:,:,1] = np.array(list(itertools.zip_longest(*py, fillvalue=0))).T[:,:max_num_particles]
-            breit_particles[:,:,2] = np.array(list(itertools.zip_longest(*pz, fillvalue=0))).T[:,:max_num_particles]
-            breit_particles[:,:,3] = np.array(list(itertools.zip_longest(*energy, fillvalue=0))).T[:,:max_num_particles]
-            
+            breit_particles = np.zeros((len(events), max_num_particles, 4))
+            breit_particles[:, :, 0] = np.array(
+                list(itertools.zip_longest(*px, fillvalue=0))
+            ).T[:, :max_num_particles]
+            breit_particles[:, :, 1] = np.array(
+                list(itertools.zip_longest(*py, fillvalue=0))
+            ).T[:, :max_num_particles]
+            breit_particles[:, :, 2] = np.array(
+                list(itertools.zip_longest(*pz, fillvalue=0))
+            ).T[:, :max_num_particles]
+            breit_particles[:, :, 3] = np.array(
+                list(itertools.zip_longest(*energy, fillvalue=0))
+            ).T[:, :max_num_particles]
+
             breit_file_name = f"breit_particles_{dataloader_name[:-3]}_{hvd.rank()}.h5"
             jet_file_name = f"centauro_jets_{dataloader_name[:-3]}_{hvd.rank()}.h5"
-            with h5.File(breit_file_name,'w') as fh5:
-                dset = fh5.create_dataset('breit_particles', data=breit_particles)
-            
+            with h5.File(breit_file_name, "w") as fh5:
+                dset = fh5.create_dataset("breit_particles", data=breit_particles)
+
             # To use multiple GPUs, make a copy of the scripts for each GPU
-            subprocess.run([f"cp ./run_centauro.sh ./run_centauro_{hvd.rank()}.sh"], shell=True)
-            subprocess.run([f"./run_centauro_{hvd.rank()}.sh --input {breit_file_name} --output {jet_file_name} --jet_radius {1.0} --GPU_ID {hvd.rank()} --fastjet_config_path {fastjet_config}"], shell=True)
+            subprocess.run(
+                [f"cp ./run_centauro.sh ./run_centauro_{hvd.rank()}.sh"], shell=True
+            )
+            subprocess.run(
+                [
+                    f"./run_centauro_{hvd.rank()}.sh --input {breit_file_name} --output {jet_file_name} --jet_radius {1.0} --GPU_ID {hvd.rank()} --fastjet_config_path {fastjet_config}"
+                ],
+                shell=True,
+            )
             subprocess.run([f"rm ./run_centauro_{hvd.rank()}.sh"], shell=True)
 
             # The Centauro jets are already zero padded so we don't need anymore processing
@@ -1277,15 +1304,15 @@ def cluster_breit(flags, dataloaders, clustering_type = "all", fastjet_config=""
 
         if clustering_type == "kt" or clustering_type == "all":
             if hvd.rank() == 0:
-                print("Breit kt clustering fastjet: ",fastjet.__file__)
+                print("Breit kt clustering fastjet: ", fastjet.__file__)
             jetdef = fastjet.JetDefinition(fastjet.kt_algorithm, 1.0)
             array = ak.Array(events)
             cluster = fastjet.ClusterSequence(array, jetdef)
             jets = cluster.inclusive_jets(min_pt=5)
-            
-            jets["pt"] = -np.sqrt(jets["px"]**2 + jets["py"]**2)
-            jets["phi"] = np.arctan2(jets["py"],jets["px"])
-            jets["eta"] = np.arcsinh(jets["pz"]/jets["pt"])
+
+            jets["pt"] = -np.sqrt(jets["px"] ** 2 + jets["py"] ** 2)
+            jets["phi"] = np.arctan2(jets["py"], jets["px"])
+            jets["eta"] = np.arcsinh(jets["pz"] / jets["pt"])
             jets = fastjet.sorted_by_pt(jets)
 
         # def _take_leading_jet(jets):
@@ -1343,7 +1370,6 @@ def cluster_breit(flags, dataloaders, clustering_type = "all", fastjet_config=""
 
         # dataloaders[dataloader_name].jet_breit = _take_leading_jet(jets)
 
-        
         def calculate_zjet(jet_data, event):
             Q_array = np.sqrt(np.exp(event[:, 0]))
 
@@ -1367,12 +1393,19 @@ def cluster_breit(flags, dataloaders, clustering_type = "all", fastjet_config=""
             z_jet = z_jet.reshape(z_jet.shape[0], z_jet.shape[1], 1)
             jet_data = np.concatenate((jet_data, z_jet), axis=2)
             return jet_data
-        
+
         if clustering_type == "all" or clustering_type == "centauro":
-            dataloaders[dataloader_name].all_jets_breit_centauro = calculate_zjet(dataloaders[dataloader_name].all_jets_breit_centauro, dataloaders[dataloader_name].event)
-            zjet_mask = dataloaders[dataloader_name].all_jets_breit_centauro[:, :, -1]>0.2
+            dataloaders[dataloader_name].all_jets_breit_centauro = calculate_zjet(
+                dataloaders[dataloader_name].all_jets_breit_centauro,
+                dataloaders[dataloader_name].event,
+            )
+            zjet_mask = (
+                dataloaders[dataloader_name].all_jets_breit_centauro[:, :, -1] > 0.2
+            )
             # Mask all_jets_breit_centauro using zjet_mask
-            masked_jets = ak.mask(dataloaders[dataloader_name].all_jets_breit_centauro, zjet_mask)
+            masked_jets = ak.mask(
+                dataloaders[dataloader_name].all_jets_breit_centauro, zjet_mask
+            )
             masked_jets = ak.drop_none(masked_jets)
             max_jets = ak.max(ak.num(masked_jets, axis=1))
             padded_jets = ak.pad_none(masked_jets, max_jets, axis=1)
@@ -1395,27 +1428,44 @@ def cluster_breit(flags, dataloaders, clustering_type = "all", fastjet_config=""
 
         if clustering_type == "all" or clustering_type == "kt":
             max_num_jets = 4
-            dataloaders[dataloader_name].all_jets_breit = _take_all_jets(jets, max_num_jets)
-            dataloaders[dataloader_name].all_jets_breit = calculate_zjet(dataloaders[dataloader_name].all_jets_breit, dataloaders[dataloader_name].event)
-    
+            dataloaders[dataloader_name].all_jets_breit = _take_all_jets(
+                jets, max_num_jets
+            )
+            dataloaders[dataloader_name].all_jets_breit = calculate_zjet(
+                dataloaders[dataloader_name].all_jets_breit,
+                dataloaders[dataloader_name].event,
+            )
+
+
 def calculate_Delta_zjet(dataloaders):
     for dataloader in dataloaders:
         # Removing the zero energy jets
-        kt_zjet = ak.mask(dataloaders[dataloader].all_jets[:, :, 9], dataloaders[dataloader].all_jets[:, :, 3]>0)
+        kt_zjet = ak.mask(
+            dataloaders[dataloader].all_jets[:, :, 9],
+            dataloaders[dataloader].all_jets[:, :, 3] > 0,
+        )
         kt_zjet = ak.drop_none(kt_zjet)
-        centauro_zjet = ak.mask(dataloaders[dataloader].all_jets_breit_centauro[:, :, 7], dataloaders[dataloader].all_jets_breit_centauro[:, :, 7]>0.2)
+        centauro_zjet = ak.mask(
+            dataloaders[dataloader].all_jets_breit_centauro[:, :, 7],
+            dataloaders[dataloader].all_jets_breit_centauro[:, :, 7] > 0.2,
+        )
         centauro_zjet = ak.drop_none(centauro_zjet)
 
         # Getting the leading jet in each event (jet with highest zjet)
         kt_zjet_max = ak.max(kt_zjet, axis=1)
         centauro_zjet_max = ak.max(centauro_zjet, axis=1)
-        
+
         # Removing events where either kt or Centauro had no jets
         empty_jet_mask = (~ak.is_none(kt_zjet_max)) & (~ak.is_none(centauro_zjet_max))
-        Delta_zjet = np.subtract(ak.mask(kt_zjet_max, empty_jet_mask), ak.mask(centauro_zjet_max, empty_jet_mask))
+        Delta_zjet = np.subtract(
+            ak.mask(kt_zjet_max, empty_jet_mask),
+            ak.mask(centauro_zjet_max, empty_jet_mask),
+        )
         # Bad events (where there were no jets) will have nan as their Delta_z value
         Delta_zjet = ak.fill_none(Delta_zjet, np.nan)
         dataloaders[dataloader].Delta_zjet = Delta_zjet
+
+
 def plot_event(flags, dataloaders, data_weights, version, nbins=10):
     """
     Plot event-level observables for each feature in the dataset with optional systematic uncertainties.
@@ -1513,7 +1563,7 @@ def plot_observable(flags, var, dataloaders, version):
         if len(dataloaders[dataset_name][var].shape) > 1:
             multiple_jets_per_event = True
             if "centauro" in var:
-                valid_indices = dataloaders[dataset_name]['zjet_centauro']>0.2
+                valid_indices = dataloaders[dataset_name]["zjet_centauro"] > 0.2
             else:
                 valid_indices = dataloaders[dataset_name]["jet_pt"] > 0
             data = ak.mask(dataloaders[dataset_name][var], valid_indices)
@@ -1634,7 +1684,7 @@ def plot_observable(flags, var, dataloaders, version):
 
     if len(dataloaders["Rapgap"][var].shape) > 1:
         if "centauro" in var:
-            Rapgap_mask = dataloaders["Rapgap"]['zjet_centauro']>0.2
+            Rapgap_mask = dataloaders["Rapgap"]["zjet_centauro"] > 0.2
         else:
             Rapgap_mask = dataloaders["Rapgap"]["jet_pt"] > 0
         Rapgap_data = ak.drop_none(ak.mask(dataloaders["Rapgap"][var], Rapgap_mask))
@@ -1654,17 +1704,19 @@ def plot_observable(flags, var, dataloaders, version):
     else:
         # Need to use the ~np.isnan mask to make this work for Delta z
         if var == "Delta_zjet":
-            Rapgap_mask = ~np.isnan(dataloaders['Rapgap'][var])
+            Rapgap_mask = ~np.isnan(dataloaders["Rapgap"][var])
         else:
-            Rapgap_mask = dataloaders['Rapgap']['jet_pt']>0
-        weights[data_name] = (dataloaders['Rapgap']['mc_weights'] * dataloaders['Rapgap'][weight_name])[Rapgap_mask]
-        weights['Rapgap'] = dataloaders['Rapgap']['mc_weights'][Rapgap_mask]
-        feed_dict[data_name] = dataloaders['Rapgap'][var][Rapgap_mask]
-        feed_dict['Rapgap'] = dataloaders['Rapgap'][var][Rapgap_mask]
-    
+            Rapgap_mask = dataloaders["Rapgap"]["jet_pt"] > 0
+        weights[data_name] = (
+            dataloaders["Rapgap"]["mc_weights"] * dataloaders["Rapgap"][weight_name]
+        )[Rapgap_mask]
+        weights["Rapgap"] = dataloaders["Rapgap"]["mc_weights"][Rapgap_mask]
+        feed_dict[data_name] = dataloaders["Rapgap"][var][Rapgap_mask]
+        feed_dict["Rapgap"] = dataloaders["Rapgap"][var][Rapgap_mask]
+
     if len(dataloaders["Djangoh"][var].shape) > 1:
         if "centauro" in var:
-            Djangoh_mask = dataloaders["Djangoh"]['zjet_centauro']>0.2
+            Djangoh_mask = dataloaders["Djangoh"]["zjet_centauro"] > 0.2
         else:
             Djangoh_mask = dataloaders["Djangoh"]["jet_pt"] > 0
         Djangoh_data = ak.drop_none(ak.mask(dataloaders["Djangoh"][var], Djangoh_mask))
@@ -1677,16 +1729,18 @@ def plot_observable(flags, var, dataloaders, version):
         feed_dict["Djangoh"] = Djangoh_data
     else:
         if var == "Delta_zjet":
-            Djangoh_mask = (~np.isnan(dataloaders['Djangoh'][var])) & (np.max(dataloaders["Djangoh"]['zjet_centauro'], axis=1)>0.2)
+            Djangoh_mask = (~np.isnan(dataloaders["Djangoh"][var])) & (
+                np.max(dataloaders["Djangoh"]["zjet_centauro"], axis=1) > 0.2
+            )
         else:
-            Djangoh_mask = dataloaders['Djangoh']['jet_pt']>0
-        weights['Djangoh'] = dataloaders['Djangoh']['mc_weights'][Djangoh_mask]
-        feed_dict['Djangoh'] = dataloaders['Djangoh'][var][Djangoh_mask]
+            Djangoh_mask = dataloaders["Djangoh"]["jet_pt"] > 0
+        weights["Djangoh"] = dataloaders["Djangoh"]["mc_weights"][Djangoh_mask]
+        feed_dict["Djangoh"] = dataloaders["Djangoh"][var][Djangoh_mask]
 
     if flags.reco:
         if len(dataloaders["data"][var].shape) > 1:
             if "centauro" in var:
-                data_mask = dataloaders["data"]['zjet_centauro']>0.2
+                data_mask = dataloaders["data"]["zjet_centauro"] > 0.2
             else:
                 data_mask = dataloaders["data"]["jet_pt"] > 0
             data = ak.drop_none(ak.mask(dataloaders["data"][var], data_mask))
@@ -1696,11 +1750,13 @@ def plot_observable(flags, var, dataloaders, version):
             feed_dict["data"] = data
         else:
             if var == "Delta_zjet":
-                data_mask = (~np.isnan(dataloaders['data'][var])) & (np.max(dataloaders["data"]['zjet_centauro'], axis=1)>0.2)
+                data_mask = (~np.isnan(dataloaders["data"][var])) & (
+                    np.max(dataloaders["data"]["zjet_centauro"], axis=1) > 0.2
+                )
             else:
-                data_mask = dataloaders['data']['jet_pt']>0
-            weights['data'] = np.ones_like(dataloaders['data'][var][data_mask])
-            feed_dict['data'] = dataloaders['data'][var][data_mask]
+                data_mask = dataloaders["data"]["jet_pt"] > 0
+            weights["data"] = np.ones_like(dataloaders["data"][var][data_mask])
+            feed_dict["data"] = dataloaders["data"][var][data_mask]
 
     if flags.reco:
         ylabel = r"1/N $\mathrm{dN}/\mathrm{d}$%s" % info.name
@@ -2010,8 +2066,12 @@ def gather_data(dataloaders):
         dataloaders[dataloader].all_jets_breit = hvd.allgather(
             tf.constant(dataloaders[dataloader].all_jets_breit)
         ).numpy()
-        dataloaders[dataloader].all_jets_breit_centauro = hvd.allgather(tf.constant(dataloaders[dataloader].all_jets_breit_centauro)).numpy()
-        dataloaders[dataloader].Delta_zjet = hvd.allgather(tf.constant(dataloaders[dataloader].Delta_zjet)).numpy()
+        dataloaders[dataloader].all_jets_breit_centauro = hvd.allgather(
+            tf.constant(dataloaders[dataloader].all_jets_breit_centauro)
+        ).numpy()
+        dataloaders[dataloader].Delta_zjet = hvd.allgather(
+            tf.constant(dataloaders[dataloader].Delta_zjet)
+        ).numpy()
         dataloaders[dataloader].weight = hvd.allgather(
             tf.constant(dataloaders[dataloader].weight)
         ).numpy()

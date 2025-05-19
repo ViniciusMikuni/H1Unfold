@@ -13,7 +13,7 @@ hvd.init()
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
-    
+
     parser.add_argument(
         "--data_folder",
         default="/pscratch/sd/v/vmikuni/H1v2/h5",
@@ -151,7 +151,7 @@ def main():
     undo_standardizing(flags, dataloaders)
 
     cluster_jets(dataloaders)
-    cluster_breit(flags, dataloaders, fastjet_config = flags.fastjet_config_path)
+    cluster_breit(flags, dataloaders, fastjet_config=flags.fastjet_config_path)
     calculate_Delta_zjet(dataloaders)
     del dataloaders[flags.file].part, dataloaders[flags.file].mask
     gc.collect()
@@ -181,7 +181,6 @@ def main():
                         "closure_weights", data=weights["closure"]
                     )
 
-                
             dset = fh5.create_dataset(
                 "jet_pt", data=dataloaders[flags.file].all_jets[:, :, 0]
             )
@@ -204,18 +203,19 @@ def main():
                 "zjet_breit", data=dataloaders[flags.file].all_jets_breit[:, :, 7]
             )
             dset = fh5.create_dataset(
-                "zjet_centauro", data=dataloaders[flags.file].all_jets_breit_centauro[:, :, 7]
+                "zjet_centauro",
+                data=dataloaders[flags.file].all_jets_breit_centauro[:, :, 7],
             )
             dset = fh5.create_dataset(
                 "Delta_zjet", data=dataloaders[flags.file].Delta_zjet
             )
             dset = fh5.create_dataset(
-                "jet_centauro_pt", 
-                data=dataloaders[flags.file].all_jets_breit_centauro[:, :, 0]
+                "jet_centauro_pt",
+                data=dataloaders[flags.file].all_jets_breit_centauro[:, :, 0],
             )
             dset = fh5.create_dataset(
                 "jet_centauro_E",
-                data=dataloaders[flags.file].all_jets_breit_centauro[:, :, 3]
+                data=dataloaders[flags.file].all_jets_breit_centauro[:, :, 3],
             )
             dset = fh5.create_dataset("eec", data=dataloaders[flags.file].eec[:, :, 0])
             dset = fh5.create_dataset(
@@ -224,5 +224,7 @@ def main():
             dset = fh5.create_dataset(
                 "theta", data=dataloaders[flags.file].eec[:, :, 2]
             )
+
+
 if __name__ == "__main__":
     main()
