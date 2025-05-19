@@ -120,6 +120,9 @@ def cluster_jets(dataloaders):
         print("Lab clustering fastjet: ", fastjet.__file__)
     jetdef = fastjet.JetDefinition(fastjet.kt_algorithm, 1.0)
 
+    max_num_constituents = 25
+    number_of_unique_pairs = int(max_num_constituents * (max_num_constituents - 1) / 2)
+
     def _convert_kinematics(part, event, mask):
         """Convert particle kinematics to Cartesian coordinates."""
         new_particles = np.zeros((part.shape[0], part.shape[1], 4))
@@ -183,24 +186,56 @@ def cluster_jets(dataloaders):
         tau_11, tau_11p5, tau_12, tau_20, sumpt = 0, 0, 0, 0, 0
         zh, jt, jt_photon, R_L, EEC_energyweight = [], [], [], [], []
         constituents = jet.constituents()
+        subset = constituents[:max_num_constituents]
+        # jet.multiplicty = len(constituents)
         for part_i, constituent in enumerate(constituents):
-            for part_j in range(len(constituents)):
-                if part_j == part_i:
-                    continue
+            if part_i < max_num_constituents:
+                for part_j in range(part_i + 1, len(subset)):
+                    constituent_j = constituents[part_j]
+                    delta_phi = constituent.phi() - constituent_j.phi()
+                    delta_phi = (delta_phi + np.pi) % (2 * np.pi) - np.pi
 
-                delta_phi = constituents[part_i].phi() - constituents[part_j].phi()
-                delta_phi = (delta_phi + np.pi) % (2 * np.pi) - np.pi
-                R_L_ij = np.sqrt(
-                    (delta_phi) ** 2
-                    + (constituents[part_i].eta() - constituents[part_j].eta()) ** 2
+                    R_L_ij = np.sqrt(
+                        delta_phi**2 + (constituent.eta() - constituent_j.eta()) ** 2
+                    )
+                    energy_weight = (
+                        constituent.pt() * constituent_j.pt() / (jet.pt() ** 2)
+                    )
+
+                    R_L.append(R_L_ij)
+                    EEC_energyweight.append(energy_weight)
+                h_jet_dot = np.abs(
+                    jet.px() * constituent.px()
+                    + jet.py() * constituent.py()
+                    + jet.pz() * constituent.pz()
                 )
-                energy_weight = (
-                    constituents[part_i].pt()
-                    * constituents[part_j].pt()
-                    / (jet.pt() ** 2)
+                jet_magnitude = np.sqrt(
+                    jet.px() * jet.px() + jet.py() * jet.py() + jet.pz() * jet.pz()
                 )
-                R_L.append(R_L_ij)
-                EEC_energyweight.append(energy_weight)
+                zh.append(h_jet_dot / (jet_magnitude * jet_magnitude))
+
+                h_jet_cross_x = (
+                    jet.py() * constituent.pz() - jet.pz() * constituent.py()
+                )
+                h_jet_cross_y = (
+                    jet.pz() * constituent.px() - jet.px() * constituent.pz()
+                )
+                h_jet_cross_z = (
+                    jet.px() * constituent.py() - jet.py() * constituent.px()
+                )
+                cross_magnitude = np.sqrt(
+                    h_jet_cross_x**2 + h_jet_cross_y**2 + h_jet_cross_z**2
+                )
+                jt.append(cross_magnitude / jet_magnitude)
+
+                photon_magnitude = np.sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2])
+                h_photon_cross_x = q[1] * constituent.pz() - q[2] * constituent.py()
+                h_photon_cross_y = q[2] * constituent.px() - q[0] * constituent.pz()
+                h_photon_cross_z = q[0] * constituent.py() - q[1] * constituent.px()
+                h_photon_cross_magnitude = np.sqrt(
+                    h_photon_cross_x**2 + h_photon_cross_y**2 + h_photon_cross_z**2
+                )
+                jt_photon.append(h_photon_cross_magnitude / photon_magnitude)
             delta_r = jet.delta_R(constituent)
             pt = constituent.pt()
 
@@ -209,32 +244,6 @@ def cluster_jets(dataloaders):
             tau_12 += pt * delta_r**2
             tau_20 += pt**2
             sumpt += pt
-            h_jet_dot = np.abs(
-                jet.px() * constituent.px()
-                + jet.py() * constituent.py()
-                + jet.pz() * constituent.pz()
-            )
-            jet_magnitude = np.sqrt(
-                jet.px() * jet.px() + jet.py() * jet.py() + jet.pz() * jet.pz()
-            )
-            zh.append(h_jet_dot / (jet_magnitude * jet_magnitude))
-
-            h_jet_cross_x = jet.py() * constituent.pz() - jet.pz() * constituent.py()
-            h_jet_cross_y = jet.pz() * constituent.px() - jet.px() * constituent.pz()
-            h_jet_cross_z = jet.px() * constituent.py() - jet.py() * constituent.px()
-            cross_magnitude = np.sqrt(
-                h_jet_cross_x**2 + h_jet_cross_y**2 + h_jet_cross_z**2
-            )
-            jt.append(cross_magnitude / jet_magnitude)
-
-            photon_magnitude = np.sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2])
-            h_photon_cross_x = q[1] * constituent.pz() - q[2] * constituent.py()
-            h_photon_cross_y = q[2] * constituent.px() - q[0] * constituent.pz()
-            h_photon_cross_z = q[0] * constituent.py() - q[1] * constituent.px()
-            h_photon_cross_magnitude = np.sqrt(
-                h_photon_cross_x**2 + h_photon_cross_y**2 + h_photon_cross_z**2
-            )
-            jt_photon.append(h_photon_cross_magnitude / photon_magnitude)
 
         jet.tau_11 = np.log(tau_11 / jet.pt()) if jet.pt() > 0 else 0.0
         jet.tau_11p5 = np.log(tau_11p5 / jet.pt()) if jet.pt() > 0 else 0.0
@@ -242,9 +251,11 @@ def cluster_jets(dataloaders):
         jet.tau_20 = tau_20 / (jet.pt() ** 2) if jet.pt() > 0 else 0.0
         jet.ptD = np.sqrt(tau_20) / sumpt if sumpt > 0 else 0.0
 
-        jet.zh = np.concatenate((zh, np.zeros(70 - len(zh))))
-        jet.jt = np.concatenate((jt, np.zeros(70 - len(jt))))
-        jet.jt_photon = np.concatenate((jt_photon, np.zeros(70 - len(jt_photon))))
+        jet.zh = np.concatenate((zh, np.zeros(max_num_constituents - len(zh))))
+        jet.jt = np.concatenate((jt, np.zeros(max_num_constituents - len(jt))))
+        jet.jt_photon = np.concatenate(
+            (jt_photon, np.zeros(max_num_constituents - len(jt_photon)))
+        )
         # Calculating zjet
         P = np.array(
             [0, 0, 920, 920], dtype=np.float32
@@ -257,9 +268,9 @@ def cluster_jets(dataloaders):
 
         jet.qt = np.sqrt((jet.px() + elec_px) ** 2 + (jet.py() + elec_py) ** 2)
         jet.EEC_energyweight = np.concatenate(
-            (EEC_energyweight, np.zeros(4900 - len(EEC_energyweight)))
+            (EEC_energyweight, np.zeros(number_of_unique_pairs - len(EEC_energyweight)))
         )
-        jet.R_L = np.concatenate((R_L, -1 * np.ones(4900 - len(R_L))))
+        jet.R_L = np.concatenate((R_L, np.zeros(number_of_unique_pairs - len(R_L))))
 
     def _take_leading_jet(jets):
         """Extract features of the leading jet."""
@@ -288,11 +299,11 @@ def cluster_jets(dataloaders):
         if not jets:
             return (
                 np.zeros((max_num_jets, 11)),
-                np.zeros((max_num_jets, 70)),
-                np.zeros((max_num_jets, 70)),
-                np.zeros((max_num_jets, 70)),
-                np.zeros((max_num_jets, 4900)),
-                -1 * np.ones((max_num_jets, 4900)),
+                np.zeros((max_num_jets, max_num_constituents)),
+                np.zeros((max_num_jets, max_num_constituents)),
+                np.zeros((max_num_jets, max_num_constituents)),
+                np.zeros((max_num_jets, number_of_unique_pairs)),
+                np.zeros((max_num_jets, number_of_unique_pairs)),
             )
         jet_array = []
         zh_array, jt_array, jt_photon_array, EEC_energyweight_array, RL_array = (
@@ -317,6 +328,7 @@ def cluster_jets(dataloaders):
                     jet.ptD,
                     jet.zjet,
                     jet.qt,
+                    # jet.multiplicty,
                 ]
                 zh_array.append(jet.zh)
                 jt_array.append(jet.jt)
@@ -325,11 +337,11 @@ def cluster_jets(dataloaders):
                 RL_array.append(jet.R_L)
             else:
                 jet_info = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-                zh_array.append(np.zeros(70))
-                jt_array.append(np.zeros(70))
-                jt_photon_array.append(np.zeros(70))
-                EEC_energyweight_array.append(np.zeros(4900))
-                RL_array.append(-1 * np.ones(4900))
+                zh_array.append(np.zeros(max_num_constituents))
+                jt_array.append(np.zeros(max_num_constituents))
+                jt_photon_array.append(np.zeros(max_num_constituents))
+                EEC_energyweight_array.append(np.zeros(number_of_unique_pairs))
+                RL_array.append(np.zeros(number_of_unique_pairs))
             jet_array.append(jet_info)
         return (
             np.array(jet_array),
@@ -1447,6 +1459,314 @@ def cluster_breit(flags, dataloaders):
         )
 
 
+def plot_EEC_RL(flags, dataloaders, version):
+    # def compute_histogram(dataset_name, weights=None,density=True):
+    #     if len(dataloaders[dataset_name][var].shape) > 1:
+    #         multiple_jets_per_event = True
+    #         valid_indices = dataloaders[dataset_name]['jet_pt']>0
+    #         data = ak.mask(dataloaders[dataset_name][var], valid_indices)
+    #         data = ak.drop_none(data)
+    #         num_jets_per_event = ak.count(data, axis = 1)
+    #         data = ak.flatten(data)
+    #     else:
+    #         multiple_jets_per_event = False
+    #         valid_indices = dataloaders[dataset_name]['jet_pt'] > 0
+    #         data = dataloaders[dataset_name][var][valid_indices]
+    #     if weights is not None:
+    #         if multiple_jets_per_event:
+    #             weights = np.repeat(weights, num_jets_per_event, axis=0)
+    #         else:
+    #             weights = weights[valid_indices]
+    #     counts, bins = np.histogram(data, bins=binning, density=density, weights=weights)
+    #     return ak.to_numpy(counts), bins
+
+    # Determine weight name
+    weight_name = "closure_weights" if flags.blind else "weights"
+    if flags.blind:
+        data_name = "Rapgap_closure"
+    elif flags.reco:
+        data_name = "Rapgap_unfolded"
+    else:
+        data_name = "Data_unfolded"
+
+    # Set binning
+    binning = np.logspace(-2, 0, 15)
+    scaled_binning = np.logspace(-1, 1.5, 15)
+    # Compute nominal and closure histograms if systematic uncertainties are enabled
+    # total_unc = None
+    # if flags.sys:
+    #     nominal_weights = dataloaders['Rapgap']['weights'] if not flags.reco else np.ones_like(dataloaders['Rapgap']['weights'])
+
+    #     nominal, _ = compute_histogram('Rapgap', nominal_weights * dataloaders['Rapgap']['mc_weights'])
+    #     nominal_closure,   _ = compute_histogram('Djangoh', dataloaders['Djangoh']['mc_weights'])
+
+    #     total_unc = np.zeros_like(nominal)
+    #     for sys in dataloaders:
+    #         if 'boot' in sys: continue
+    #         print(sys)
+    #         if flags.reco:
+    #             #Skip model and closure uncertainties at reco level
+    #             if sys == 'Rapgap': continue
+    #             if sys == 'Djangoh': continue
+    #             if sys == 'data': continue
+
+    #         sys_weights = dataloaders[sys]['closure_weights'] if sys == 'Rapgap' else dataloaders[sys]['weights']
+    #         if flags.reco: sys_weights = np.ones_like(sys_weights)
+    #         sys_hist, _ = compute_histogram(sys, dataloaders[sys]['mc_weights'] * sys_weights)
+
+    #         ref_hist = nominal_closure if sys == 'Rapgap' else nominal
+    #         unc = (np.ma.divide(sys_hist, ref_hist).filled(1) - 1) ** 2
+    #         total_unc += unc
+
+    #         print(f"{sys}: max uncertainty = {np.max(np.sqrt(unc))}")
+
+    #     #Statistical Uncertainties
+    #     if flags.reco:
+    #         counts,_ = compute_histogram('data',density=False)
+    #         unc = 1.0/(1e-9+counts)
+
+    #         total_unc += unc
+    #         data_stat_unc = np.sqrt(unc)
+    #         print(f"stat: max uncertainty = {np.max(np.sqrt(unc))}")
+    #     else:
+    #         if flags.bootstrap:
+    #             print("Running over boostrap entries")
+    #             stat_unc = []
+    #             for boot in range(1,flags.nboot):
+    #                 if boot ==10: continue
+    #                 if boot == 23: continue
+    #                 sys_weights = dataloaders['bootstrap'][f'weights{boot}']
+    #                 sys_hist, _ = compute_histogram('bootstrap', dataloaders['bootstrap']['mc_weights'] * sys_weights)
+    #                 stat_unc.append(sys_hist)
+    #             stat_unc = np.ma.divide(np.std(stat_unc,0), np.mean(stat_unc,0)).filled(0)
+    #             data_stat_unc = stat_unc
+    #             total_unc += stat_unc**2
+    #             print(f"{sys}: max uncertainty = {np.max(stat_unc)}")
+    #     total_unc = np.sqrt(total_unc)
+    # print(f"data_stat_unc: {data_stat_unc}")
+
+    # Prepare weights and data for plotting
+    pt_ranges = [(0, None), (10, 30), (30, 50), (50, 70), (70, 100)]
+    y_limits = [(0, 2), (0, 2), (0, 3.5), (0, 6.5), (0, 8)]
+
+    for i, pt_range in enumerate(pt_ranges):
+        weights = {}
+        feed_dict = {}
+
+        pt_low, pt_high = pt_range[0], pt_range[1]
+        # Configuring Rapgap
+        if pt_high == None:
+            Rapgap_pt_mask = dataloaders["Rapgap"]["jet_pt"] > pt_low
+        else:
+            Rapgap_pt_mask = (dataloaders["Rapgap"]["jet_pt"] > pt_low) & (
+                dataloaders["Rapgap"]["jet_pt"] < pt_high
+            )
+
+        Rapgap_qt_mask_nonrepeated = (
+            dataloaders["Rapgap"]["jet_qt"][Rapgap_pt_mask]
+            / dataloaders["Rapgap"]["jet_pt"][Rapgap_pt_mask]
+            < 0.3
+        )
+        Rapgap_mean_pt = np.mean(
+            dataloaders["Rapgap"]["jet_pt"][Rapgap_pt_mask][Rapgap_qt_mask_nonrepeated]
+        )
+        Rapgap_qt_mask = np.repeat(
+            (
+                ak.mask(dataloaders["Rapgap"]["jet_qt"], Rapgap_pt_mask)
+                / ak.mask(dataloaders["Rapgap"]["jet_pt"], Rapgap_pt_mask)
+                < 0.3
+            )[:, :, np.newaxis],
+            dataloaders["Rapgap"]["R_L"].shape[2],
+            axis=2,
+        )
+        Rapgap_valid_jet_mask = (
+            ak.mask(dataloaders["Rapgap"]["jet_qt"], Rapgap_pt_mask)
+            / ak.mask(dataloaders["Rapgap"]["jet_pt"], Rapgap_pt_mask)
+            < 0.3
+        )
+        Rapgap_number_of_valid_jets = ak.count(Rapgap_valid_jet_mask)
+        Rapgap_mask = (dataloaders["Rapgap"]["EEC_energyweight"] > 0) & Rapgap_qt_mask
+        Rapgap_RL_masked = ak.flatten(
+            ak.drop_none(ak.mask(dataloaders["Rapgap"]["R_L"], Rapgap_mask)), axis=2
+        )
+        Rapgap_RL_masked = ak.flatten(Rapgap_RL_masked)
+        print(len(Rapgap_RL_masked))
+        Rapgap_energyweight_masked = ak.flatten(
+            ak.drop_none(
+                ak.mask(dataloaders["Rapgap"]["EEC_energyweight"], Rapgap_mask)
+            ),
+            axis=2,
+        )
+        num_Rapgap_entries_per_event = ak.count(Rapgap_energyweight_masked, axis=1)
+        Rapgap_energyweight_masked = ak.flatten(Rapgap_energyweight_masked)
+
+        weights[data_name] = (
+            2
+            * np.repeat(
+                dataloaders["Rapgap"]["mc_weights"]
+                * dataloaders["Rapgap"][weight_name],
+                num_Rapgap_entries_per_event,
+                axis=0,
+            )
+            * (Rapgap_energyweight_masked)
+            / Rapgap_number_of_valid_jets
+        )
+        weights["Rapgap"] = (
+            2
+            * np.repeat(
+                dataloaders["Rapgap"]["mc_weights"],
+                num_Rapgap_entries_per_event,
+                axis=0,
+            )
+            * (Rapgap_energyweight_masked)
+            / Rapgap_number_of_valid_jets
+        )
+        feed_dict[data_name] = Rapgap_RL_masked
+        feed_dict["Rapgap"] = Rapgap_RL_masked
+
+        # Configuring Djangoh
+        if pt_high == None:
+            Djangoh_pt_mask = dataloaders["Djangoh"]["jet_pt"] > pt_low
+        else:
+            Djangoh_pt_mask = (dataloaders["Djangoh"]["jet_pt"] > pt_low) & (
+                dataloaders["Djangoh"]["jet_pt"] < pt_high
+            )
+
+        Djangoh_qt_mask_nonrepeated = (
+            dataloaders["Djangoh"]["jet_qt"][Djangoh_pt_mask]
+            / dataloaders["Djangoh"]["jet_pt"][Djangoh_pt_mask]
+            < 0.3
+        )
+        Djangoh_mean_pt = np.mean(
+            dataloaders["Djangoh"]["jet_pt"][Djangoh_pt_mask][
+                Djangoh_qt_mask_nonrepeated
+            ]
+        )
+
+        Djangoh_qt_mask = np.repeat(
+            (
+                ak.mask(dataloaders["Djangoh"]["jet_qt"], Djangoh_pt_mask)
+                / ak.mask(dataloaders["Djangoh"]["jet_pt"], Djangoh_pt_mask)
+                < 0.3
+            )[:, :, np.newaxis],
+            dataloaders["Djangoh"]["R_L"].shape[2],
+            axis=2,
+        )
+        Djangoh_valid_jet_mask = (
+            ak.mask(dataloaders["Djangoh"]["jet_qt"], Djangoh_pt_mask)
+            / ak.mask(dataloaders["Djangoh"]["jet_pt"], Djangoh_pt_mask)
+            < 0.3
+        )
+        Djangoh_number_of_valid_jets = ak.count(Djangoh_valid_jet_mask)
+        Djangoh_mask = (
+            dataloaders["Djangoh"]["EEC_energyweight"] > 0
+        ) & Djangoh_qt_mask
+        Djangoh_RL_masked = ak.flatten(
+            ak.drop_none(ak.mask(dataloaders["Djangoh"]["R_L"], Djangoh_mask)), axis=2
+        )
+        Djangoh_RL_masked = ak.flatten(Djangoh_RL_masked)
+        Djangoh_energyweight_masked = ak.flatten(
+            ak.drop_none(
+                ak.mask(dataloaders["Djangoh"]["EEC_energyweight"], Djangoh_mask)
+            ),
+            axis=2,
+        )
+        num_Djangoh_entries_per_event = ak.count(Djangoh_energyweight_masked, axis=1)
+        Djangoh_energyweight_masked = ak.flatten(Djangoh_energyweight_masked)
+        weights["Djangoh"] = (
+            2
+            * np.repeat(
+                dataloaders["Djangoh"]["mc_weights"],
+                num_Djangoh_entries_per_event,
+                axis=0,
+            )
+            * (Djangoh_energyweight_masked)
+            / Djangoh_number_of_valid_jets
+        )
+        feed_dict["Djangoh"] = Djangoh_RL_masked
+
+        ylabel = r"$\Sigma_{EEC}(R_L)=\Sigma_{jet}\Sigma_{i,j}\frac{p_{T,i}p_{T,j}}{p_{T,jet}^2}/(N_{jets}\cdot \Delta R_L)$"
+
+        if pt_high is None:
+            phasespace_text = (
+                "\n"
+                + r"$p_{T}^{jet} > 10~GeV$"
+                + "\n"
+                + "$q_{{T}}/p_{{T}}^{{jet}} < 0.3$"
+            )
+        else:
+            phasespace_text = (
+                "\n"
+                + rf"${pt_low}~GeV < p_{{T}}^{{jet}} < {pt_high}~GeV$"
+                + "\n"
+                + "$q_{{T}}/p_{{T}}^{{jet}} < 0.3$"
+            )
+        # Generate histogram plot
+        fig, ax, counts_dict = utils.HistRoutine_nodensity(
+            feed_dict,
+            xlabel=r"$R_{L}=\sqrt{(\Delta \phi)^2 + (\Delta \eta^2)} $",
+            ylabel=ylabel,
+            weights=weights,
+            logy=False,
+            logx=True,
+            binning=binning,
+            reference_name="data" if flags.reco else data_name,
+            label_loc="upper left",
+            uncertainty=np.zeros(len(binning) - 1),
+            stat_uncertainty=np.zeros(len(binning) - 1),
+            extra_phasespace_text=phasespace_text,
+        )
+
+        # Set plot limits and save
+        ax.set_ylim(y_limits[i])
+        if pt_high is None:
+            fig.savefig(f"../plots/{version}_EEC_RL_jetpT_10GeV_all.pdf")
+        else:
+            fig.savefig(f"../plots/{version}_EEC_RL_jetpT_{pt_low}GeV_{pt_high}GeV.pdf")
+
+        bin_centers = (binning[:-1] + binning[1:]) / 2
+        feed_dict["Djangoh"] = bin_centers * Djangoh_mean_pt
+        feed_dict["Rapgap"] = bin_centers * Rapgap_mean_pt
+        feed_dict[data_name] = bin_centers * Rapgap_mean_pt
+
+        weights["Djangoh"] = (
+            counts_dict["Djangoh"] * np.log(Djangoh_mean_pt) / Djangoh_mean_pt
+        )
+        weights["Rapgap"] = (
+            counts_dict["Rapgap"] * np.log(Rapgap_mean_pt) / Rapgap_mean_pt
+        )
+        weights[data_name] = (
+            counts_dict[data_name] * np.log(Rapgap_mean_pt) / Rapgap_mean_pt
+        )
+
+        ylabel = r"$ln <p_{T}^{jet}>/<p_{T}^{jet}>\Sigma_{EEC}(R_L)~((GeV/c)^{-1})$"
+        fig, ax, _ = utils.HistRoutine_nodensity(
+            feed_dict,
+            xlabel=r"$ <p_{T}^{jet}> R_{L} (GeV/c)$",
+            ylabel=ylabel,
+            weights=weights,
+            logy=False,
+            logx=True,
+            binning=binning * Rapgap_mean_pt,
+            reference_name="data" if flags.reco else data_name,
+            label_loc="upper left",
+            uncertainty=np.zeros(len(binning) - 1),
+            stat_uncertainty=np.zeros(len(binning) - 1),
+            extra_phasespace_text=phasespace_text,
+            divide_by_binwidth=False,
+        )
+
+        # Set plot limits and save
+        ax.set_ylim(0, 0.5)
+        ax.set_xlim(0.2, 30)
+        if pt_high is None:
+            fig.savefig(f"../plots/{version}_EEC_RL_jetpT_10GeV_all_shifted.pdf")
+        else:
+            fig.savefig(
+                f"../plots/{version}_EEC_RL_jetpT_{pt_low}GeV_{pt_high}GeV_shifted.pdf"
+            )
+
+
 def plot_event(flags, dataloaders, data_weights, version, nbins=10):
     """
     Plot event-level observables for each feature in the dataset with optional systematic uncertainties.
@@ -1808,7 +2128,7 @@ def plot_observable(flags, var, dataloaders, version):
         reference_name="data" if flags.reco else data_name,
         label_loc="upper left",
         uncertainty=total_unc,
-        stat_uncertainty=data_stat_unc,
+        stat_uncertainty=np.zeros(len(binning) - 1),
     )
 
     # Set plot limits and save
