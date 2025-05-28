@@ -40,28 +40,17 @@ def label_smoothing(y_true,alpha=0):
     new_label = y_true*(1-alpha) + (1-y_true)*alpha
     return new_label
 
+
 def reset_weights(model):
     for layer in model.layers:
         if isinstance(layer, tf.keras.Model):
-            reset_weights(layer)  #sorry for the recursion, works well here
+            reset_weights(layer)
             continue
-
-        # Get the layer's configuration
-        config = layer.get_config()
-
-        # Reinitialize weights
-        if hasattr(layer, 'kernel') and layer.kernel is not None:
-            initializer = tf.keras.initializers.get(config.get('kernel_initializer',
-                                                               'glorot_uniform'))
-            layer.kernel.assign(initializer(shape=layer.kernel.shape,
-                                            dtype=layer.kernel.dtype))
-
-        # Reinitialize biases
-        if hasattr(layer, 'bias') and layer.bias is not None:
-            initializer = tf.keras.initializers.get(config.get('bias_initializer',
-                                                               'zeros'))
-            layer.bias.assign(initializer(shape=layer.bias.shape,
-                                          dtype=layer.bias.dtype))
+        if hasattr(layer, 'build') and layer.built:
+            try:
+                layer.build(layer.input_shape)
+            except Exception as e:
+                print(f"Could not rebuild {layer.name}: {e}")
 
 class Multifold:
     def __init__(
