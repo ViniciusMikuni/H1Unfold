@@ -1,15 +1,13 @@
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras.layers import  Input, Dropout
-from tensorflow.keras import Model
-from tensorflow.keras.callbacks import EarlyStopping,ModelCheckpoint, ReduceLROnPlateau
-import os, gc
+from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
+import os
+import gc
 import horovod.tensorflow.keras as hvd
-from sklearn.model_selection import train_test_split
 from scipy.special import expit
 import logging
-from architecture import Classifier,weighted_binary_crossentropy
+from architecture import Classifier
 import utils
 import pickle
 import time
@@ -65,41 +63,40 @@ def reset_weights(model):
             layer.bias.assign(initializer(shape=layer.bias.shape,
                                           dtype=layer.bias.dtype))
 
-
-class Multifold():
-    def __init__(self,
-                 nstrap=0,
-                 version = 'Closure',
-                 config_file='config_omnifold.json',
-                 pretrain = False,
-                 load_pretrain = False,
-                 fine_tune = False,
-                 verbose=1,
-                 start = 0,
-                 ):
-
+class Multifold:
+    def __init__(
+        self,
+        nstrap=0,
+        version="Closure",
+        config_file="config_omnifold.json",
+        pretrain=False,
+        load_pretrain=False,
+        finetune=False,
+        verbose=1,
+        start=0,
+    ):
         self.version = version
         self.verbose = verbose
-        self.log_file =  open('log_{}.txt'.format(self.version),'w')
+        self.log_file = open("log_{}.txt".format(self.version), "w")
         self.opt = utils.LoadJson(config_file)
         self.start = start
         self.train_frac = 0.8
-        self.niter = self.opt['NITER']        
-        self.num_feat = self.opt['NFEAT'] 
-        self.num_event = self.opt['NEVT']
-        self.lr = float(self.opt['LR'])
+        self.niter = self.opt["NITER"]
+        self.num_feat = self.opt["NFEAT"]
+        self.num_event = self.opt["NEVT"]
+        self.lr = float(self.opt["LR"])
         self.n_ensemble=self.opt['NENSEMBLE']
         self.size = hvd.size()
-        self.nstrap=nstrap
+        self.nstrap = nstrap
         self.pretrain = pretrain
-        self.load_pretrain = load_pretrain        
-        self.fine_tune = fine_tune        
+        self.load_pretrain = load_pretrain
+        self.fine_tune = finetune
 
-        #runs the pretraining (uses same inputs as closure)
+        # runs the pretraining (uses same inputs as closure)
         if self.pretrain:
-            self.niter = 1  # Skip iterative procedure when pretraining the model
+            self.niter = 1  # Skip iterative procedure when pretraining
 
-        if self.load_pretrain: 
+        if self.load_pretrain:
             self.version += '_pretrained'
             self.lr_factor = 5.  # default 5
 
@@ -122,8 +119,10 @@ class Multifold():
         if not os.path.exists(self.weights_folder):
             os.makedirs(self.weights_folder)
 
-        self.pre_train_name1 = '{}/OmniFold_pretrained_step1/checkpoint'.format(self.weights_folder)
-        self.pre_train_name2 = '{}/OmniFold_pretrained_step2/checkpoint'.format(self.weights_folder)
+        # self.pre_train_name1 = '{}/OmniFold_pretrained_step1/checkpoint'.format(self.weights_folder)
+        # self.pre_train_name2 = '{}/OmniFold_pretrained_step2/checkpoint'.format(self.weights_folder)
+        self.pre_train_name1 = '/global/cfs/cdirs/m3246/H1/weights/OmniFold_pretrained_step1/checkpoint'
+        self.pre_train_name2 = '/global/cfs/cdirs/m3246/H1/weights/OmniFold_pretrained_step1/checkpoint'
 
         # list of models, used in unfolding. Added to support
         # ensembling. Will deep-copy self.model1 or self.model2
@@ -142,6 +141,31 @@ class Multifold():
 
             # Load step1 starting point
             model_name = '{}/OmniFold_{}_iter{}_step1/checkpoint'.format(self.weights_folder,self.version,self.start-1)
+        self.weights_folder = "../weights"
+        # if self.nstrap>0:
+        #     self.weights_folder = '../weights_strap'
+        if not os.path.exists(self.weights_folder):
+            os.makedirs(self.weights_folder)
+
+    def Unfold(self):
+        self.BATCH_SIZE = self.opt["BATCH_SIZE"]
+        self.EPOCHS = self.opt["EPOCHS"]
+
+        self.weights_pull = np.ones(self.mc.weight.shape[0])
+        if self.start > 0:
+            if hvd.rank() == 0:
+                print("Loading step 2 weights from iteration {}".format(self.start - 1))
+            model_name = "{}/OmniFold_{}_iter{}_step2/checkpoint".format(
+                self.weights_folder, self.version, self.start - 1
+            )
+            self.model2.load_weights(model_name).expect_partial()
+            self.weights_push = self.reweight(
+                self.mc.gen, self.model2_ema, batch_size=1000
+            )
+            # Also load model 1 to have a better starting point
+            model_name = "{}/OmniFold_{}_iter{}_step1/checkpoint".format(
+                self.weights_folder, self.version, self.start - 1
+            )
             self.model1.load_weights(model_name).expect_partial()
 
             #Also load step1 starting point for model2
@@ -204,9 +228,8 @@ class Multifold():
 
         else:  # BaseLine
             reset_weights(self.model1)
-
-        if hvd.rank()==0:
-            print("Training From Scratch")
+            if hvd.rank()==0:
+                print("Training From Scratch")
 
 
         self.RunModel(
@@ -220,7 +243,7 @@ class Multifold():
             cached = (i>self.start)# cache the training data after 1st iter
         )
 
-        #Don't update weights where there's no reco events
+        # Don't update weights where there's no reco events
         new_weights = np.ones_like(self.weights_pull)
         new_weights[self.mc.pass_reco] = self.reweight(self.mc.reco,self.model1,
                                                        batch_size=1000)[self.mc.pass_reco]
@@ -248,8 +271,10 @@ class Multifold():
             self.model2.load_weights(self.pre_train_name1).expect_partial()
             reset_weights(self.model2.head)
 
-        if hvd.rank()==0:
-            print("Training Model 2 From Scratch")
+        else:  # Baseline
+            reset_weights(self.model2)
+            if hvd.rank()==0:
+                print("Training Model 2 From Scratch")
 
         self.RunModel(
             np.concatenate((self.labels_mc, self.labels_gen)),
@@ -296,7 +321,6 @@ class Multifold():
 
         if hvd.rank() == 0:
             print('Saving model', model_name)
-
 
         callbacks = [
             hvd.callbacks.BroadcastGlobalVariablesCallback(0),
@@ -404,30 +428,56 @@ class Multifold():
                 self.idx_1 = np.arange(label.shape[0])
                 np.random.shuffle(self.idx_1)
                 self.tf_data1 = tf.data.Dataset.from_tensor_slices(
-                    {'inputs_particle_1':np.concatenate((self.mc.reco[0][self.mc.pass_reco], self.data.reco[0][self.data.pass_reco]))[self.idx_1],
-                     'inputs_event_1':np.concatenate((self.mc.reco[1][self.mc.pass_reco], self.data.reco[1][self.data.pass_reco]))[self.idx_1],
-                     'inputs_mask_1':np.concatenate((self.mc.reco[2][self.mc.pass_reco], self.data.reco[2][self.data.pass_reco]))[self.idx_1],
-                     })
-                #del self.mc.reco, self.data.reco
-                #gc.collect()
-
-            elif stepn ==2:
+                    {
+                        "inputs_particle_1": np.concatenate(
+                            (
+                                self.mc.reco[0][self.mc.pass_reco],
+                                self.data.reco[0][self.data.pass_reco],
+                            )
+                        )[self.idx_1],
+                        "inputs_event_1": np.concatenate(
+                            (
+                                self.mc.reco[1][self.mc.pass_reco],
+                                self.data.reco[1][self.data.pass_reco],
+                            )
+                        )[self.idx_1],
+                        "inputs_mask_1": np.concatenate(
+                            (
+                                self.mc.reco[2][self.mc.pass_reco],
+                                self.data.reco[2][self.data.pass_reco],
+                            )
+                        )[self.idx_1],
+                    }
+                )
+                # del self.mc.reco, self.data.reco
+                # gc.collect()
+            elif stepn == 2:
                 self.idx_2 = np.arange(label.shape[0])
                 np.random.shuffle(self.idx_2)
                 self.tf_data2 = tf.data.Dataset.from_tensor_slices(
-                    {'inputs_particle_2':np.concatenate((self.mc.gen[0], self.mc.gen[0]))[self.idx_2],
-                     'inputs_event_2':np.concatenate((self.mc.gen[1], self.mc.gen[1]))[self.idx_2],
-                     'inputs_mask_2':np.concatenate((self.mc.gen[2], self.mc.gen[2]))[self.idx_2],
-                     })
-                #del self.mc.gen, self.data.gen
-                #gc.collect()
+                    {
+                        "inputs_particle_2": np.concatenate(
+                            (self.mc.gen[0], self.mc.gen[0])
+                        )[self.idx_2],
+                        "inputs_event_2": np.concatenate(
+                            (self.mc.gen[1], self.mc.gen[1])
+                        )[self.idx_2],
+                        "inputs_mask_2": np.concatenate(
+                            (self.mc.gen[2], self.mc.gen[2])
+                        )[self.idx_2],
+                    }
+                )
+                # del self.mc.gen, self.data.gen
+                # gc.collect()
 
-        idx = self.idx_1 if stepn==1 else self.idx_2
+        idx = self.idx_1 if stepn == 1 else self.idx_2
 
-        if hvd.rank()==0:
+        if hvd.rank() == 0:
             print(label[idx])
-            print(NTRAIN,idx.shape[0])
-        labels = tf.data.Dataset.from_tensor_slices(np.stack((label[idx],weights[idx]),axis=1))
+            print(NTRAIN, idx.shape[0])
+        labels = tf.data.Dataset.from_tensor_slices(
+            np.stack((label[idx], weights[idx]), axis=1)
+        )
 
         if stepn ==1:
             data = tf.data.Dataset.zip((self.tf_data1,labels))
@@ -439,6 +489,31 @@ class Multifold():
 
         train_data = data.take(NTRAIN).shuffle(NTRAIN).repeat().batch(self.BATCH_SIZE).prefetch(buffer_size=tf.data.AUTOTUNE)
         test_data  = data.skip(NTRAIN).repeat().batch(self.BATCH_SIZE).prefetch(buffer_size=tf.data.AUTOTUNE)
+        print(NTRAIN, idx.shape[0])
+        labels = tf.data.Dataset.from_tensor_slices(
+            np.stack((label[idx], weights[idx]), axis=1)
+        )
+
+        if stepn == 1:
+            data = tf.data.Dataset.zip((self.tf_data1, labels))
+        elif stepn == 2:
+            data = tf.data.Dataset.zip((self.tf_data2, labels))
+        else:
+            logging.error("ERROR: STEPN not recognized")
+
+        train_data = (
+            data.take(NTRAIN)
+            .shuffle(NTRAIN)
+            .repeat()
+            .batch(self.BATCH_SIZE)
+            .prefetch(buffer_size=tf.data.AUTOTUNE)
+        )
+        test_data = (
+            data.skip(NTRAIN)
+            .repeat()
+            .batch(self.BATCH_SIZE)
+            .prefetch(buffer_size=tf.data.AUTOTUNE)
+        )
         del data
         gc.collect()
         return train_data, test_data
@@ -447,6 +522,16 @@ class Multifold():
         self.PrepareInputs()
         self.PrepareModel()
 
+    def CompileModel(self, lr, fixed=False):
+        if self.num_steps_reco is None:
+            self.num_steps_reco = (
+                int(0.7 * (self.mc.nmax + self.data.nmax))
+                // hvd.size()
+                // self.BATCH_SIZE
+            )
+            self.num_steps_gen = 2 * self.mc.nmax // hvd.size() // self.BATCH_SIZE
+            if hvd.rank() == 0:
+                print(self.num_steps_reco, self.num_steps_gen)
 
     def CompileModels(self, lr, fixed=False):
 
@@ -501,11 +586,82 @@ class Multifold():
 
         model.compile(opt_body, opt_head)
 
+        lr_schedule_body_reco = keras.optimizers.schedules.CosineDecay(
+            initial_learning_rate=lr / self.lr_factor,
+            warmup_target=lr * np.sqrt(self.size) / self.lr_factor,
+            warmup_steps=3 * int(self.train_frac * self.num_steps_reco),
+            decay_steps=self.EPOCHS * int(self.train_frac * self.num_steps_reco),
+            alpha=1e-2,
+        )
+
+        lr_schedule_head_reco = keras.optimizers.schedules.CosineDecay(
+            initial_learning_rate=lr,
+            warmup_target=lr * np.sqrt(self.size),
+            warmup_steps=3 * int(self.train_frac * (self.num_steps_reco)),
+            decay_steps=self.EPOCHS * int(self.train_frac * self.num_steps_reco),
+            alpha=1e-2,
+        )
+
+        lr_schedule_body_gen = keras.optimizers.schedules.CosineDecay(
+            initial_learning_rate=lr / self.lr_factor,
+            warmup_target=lr * np.sqrt(self.size) / self.lr_factor,
+            warmup_steps=3 * int(self.train_frac * self.num_steps_gen),
+            decay_steps=self.EPOCHS * int(self.train_frac * self.num_steps_reco),
+            alpha=1e-2,
+        )
+
+        lr_schedule_head_gen = keras.optimizers.schedules.CosineDecay(
+            initial_learning_rate=lr,
+            warmup_target=lr * np.sqrt(self.size),
+            warmup_steps=3 * int(self.train_frac * self.num_steps_gen),
+            decay_steps=self.EPOCHS * int(self.train_frac * self.num_steps_reco),
+            alpha=1e-2,
+        )
+
+        min_learning_rate = 1e-5
+        opt_head1 = tf.keras.optimizers.Lion(
+            learning_rate=min_learning_rate if fixed else lr_schedule_head_reco,
+            weight_decay=0.0,
+            beta_1=0.95,
+            beta_2=0.99,
+        )
+
+        opt_head1 = hvd.DistributedOptimizer(opt_head1)
+
+        opt_body1 = tf.keras.optimizers.Lion(
+            learning_rate=min_learning_rate if fixed else lr_schedule_body_reco,
+            weight_decay=0.0,
+            beta_1=0.95,
+            beta_2=0.99,
+        )
+
+        opt_body1 = hvd.DistributedOptimizer(opt_body1)
+
+        opt_head2 = tf.keras.optimizers.Lion(
+            learning_rate=min_learning_rate if fixed else lr_schedule_head_gen,
+            weight_decay=0.0,
+            beta_1=0.95,
+            beta_2=0.99,
+        )
+
+        opt_head2 = hvd.DistributedOptimizer(opt_head2)
+
+        opt_body2 = tf.keras.optimizers.Lion(
+            learning_rate=min_learning_rate if fixed else lr_schedule_body_gen,
+            weight_decay=0.0,
+            beta_1=0.95,
+            beta_2=0.99,
+        )
+
+        opt_body2 = hvd.DistributedOptimizer(opt_body2)
+
+        self.model1.compile(opt_body1, opt_head1)
+        self.model2.compile(opt_body2, opt_head2)
 
     def PrepareInputs(self):
-        self.labels_mc = np.zeros(len(self.mc.pass_reco),dtype=np.float32)
-        self.labels_data = np.ones(len(self.data.pass_reco),dtype=np.float32)
-        self.labels_gen = np.ones(len(self.mc.pass_gen),dtype=np.float32)
+        self.labels_mc = np.zeros(len(self.mc.pass_reco), dtype=np.float32)
+        self.labels_data = np.ones(len(self.data.pass_reco), dtype=np.float32)
+        self.labels_gen = np.ones(len(self.mc.pass_gen), dtype=np.float32)
 
         if hvd.rank() == 0:
             print(f"Length of MC = {len(self.labels_mc)}")
@@ -514,7 +670,6 @@ class Multifold():
         # self.labels_mc = label_smoothing(np.zeros(len(self.mc.pass_reco)),0.1)
         # self.labels_data = label_smoothing(np.ones(len(self.data.pass_reco)),0.1)
         # self.labels_gen = label_smoothing(np.ones(len(self.mc.pass_gen)),0.1)
-
 
     def PrepareModel(self):
         #Will assume same number of features for simplicity
@@ -582,10 +737,10 @@ class Multifold():
             min_distance = distance
             patience = 0
         else:
-            print(80*'#')
-            print("Distance increased! before {} now {}".format(min_distance,distance))
-            print(80*'#')
-            patience+=1
+            print(80 * "#")
+            print("Distance increased! before {} now {}".format(min_distance, distance))
+            print(80 * "#")
+            patience += 1
         return patience, min_distance
 
     def log_string(self,out_str):

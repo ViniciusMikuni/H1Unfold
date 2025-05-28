@@ -1,4 +1,10 @@
+plots/
+weights/
+__pycache__/
+*~
+*.txt
 *.npy
 *.pdf
 *.pkl
 *.out
+#*

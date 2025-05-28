@@ -1,0 +1,7 @@
+{
+    'NAME': 'H1_May2025_sys0',
+    'MC_NAMES':['Rapgap_sys0'],
+    'MC_NAMES_FULL':['Rapgap_nominal','Djangoh_nominal','Rapgap_sys_0','Rapgap_sys_1','Rapgap_sys_5','Rapgap_sys_7','Rapgap_sys_11','Djangoh_sys_0','Djangoh_sys_1','Djangoh_sys_5','Djangoh_sys_7','Djangoh_sys_11'],
+    'NBOOTSTRAP':99,
+    'NITER':6,
+}
