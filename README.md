@@ -10,6 +10,24 @@ ruff format .
 ruff check --fix .
 ```
 
+## Step Ensemble Specific Tasks
+### Required Updates from arXiv
+1. Pretraining 200k -> 20M Events (re-run load_pretrain jobs)
+2. Merged 'main' branch INTO the step_ensemble feature branch
+3. Need to re-run from scratch with updates from main
+
+
+### Technical To-Do's:
+1. Make sure the plot_super_ensemble scripts work
+2. Make sure produced .npy files (plot_vals.npy) run in comparison notebook
+3. Convert notebook to scripts (same base for step and parallel jobs)
+4. See if variance increases in parallel jobs (paraleld jobs are scripted, not edited)
+5. If we see ONLY in step-ensemble jobs, there's a bug Fernando introduced. Either in the way the e_model loads from the base model OR its how I reset the weights.
+6. Re-evaluate message depending on results.
+7. Update numbers in paper
+8. IFF Step ensembling is clearly superior, then consider merger step_ensemble into the main branch.
+
+
 ## Packages
 
 You can run the code using the docker container with instructions written below or use the NERSC tensorflow module.
