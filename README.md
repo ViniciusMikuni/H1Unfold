@@ -98,6 +98,13 @@ Plotting can be performed using either multiple GPUs or in a single GPU. The scr
 module load tensorflow
 python plot.py --niter 4 [--closure] [--load_pretrain] [--reco]
 ```
+### Plotting Step Ensembles
+```bash
+module load tensorflow
+python python plot_superEnsembles.py --n_jobs 10 --load_pretrain --closure
+```
+The ensembling testing will always be closure, in this branch at least
+Ommit --load_pretrain for from_scratch results!
 
 The ```--reco``` flag is used to load reco level events to verify the reweighting of step 1. The ```--closure``` flag is used to load the training using the closure test. The ```--load_pretrain``` flag uses the training that starts from a pre-trained model
 

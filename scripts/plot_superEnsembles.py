@@ -10,9 +10,11 @@ from dataloader import Dataset
 import utils
 import horovod.tensorflow as hvd
 import warnings
+from train import get_sample_name
 
 hvd.init()
 utils.SetStyle()
+
 
 mc_file_names = {
     'Rapgap':'Rapgap_Eplus0607_prep.h5',
@@ -25,7 +27,9 @@ def parse_arguments():
     parser = argparse.ArgumentParser()
     
     # parser.add_argument('--data_folder', default='/pscratch/sd/v/vmikuni/H1v2/h5', help='Folder containing data and MC files')
-    parser.add_argument('--data_folder', default='/global/cfs/cdirs/m3246/vmikuni/H1v2/h5/', help='Folder containing data and MC files')
+    parser.add_argument('--data_folder', default='/global/cfs/cdirs/m3246/H1/h5', help='Folder containing data and MC files')
+    parser.add_argument(
+        "--dataset", default="ep", help="Choice between ep or em datasets",)
     parser.add_argument('--weights', default='../weights', help='Folder to store trained weights')
     parser.add_argument('--load_pretrain', action='store_true', default=False,help='Load pretrained model instead of starting from scratch')
     parser.add_argument('--finetuned', action='store_true', default=False,help='Load pretrained, but reset classifier head. All weight still trainable')
@@ -35,8 +39,8 @@ def parse_arguments():
     parser.add_argument('--load', action='store_true', default=False,help='Load unfolded weights (npy files in weights dir)')
     parser.add_argument('--closure', action='store_true', default=False,help='Plot closure results')
     parser.add_argument('--n_iter', type=int, default=5, help='Omnifold iteration to load (usually 0-4 for 5 iters)')
-    parser.add_argument('--n_ens', type=int, default=0, help='which ensemble to load')
-    parser.add_argument('--n_jobs', type=int, default=0, help='number of jobs (super-ensembels)')
+    parser.add_argument('--n_ens', type=int, default=5, help='which ensemble to load')
+    parser.add_argument('--n_jobs', type=int, default=10, help='number of jobs (super-ensembels)')
     parser.add_argument('--nmax', type=int, default=1000000, help='Maximum number of events to load')
     parser.add_argument('--img_fmt', default='pdf', help='Format of the output figures')
     
@@ -78,6 +82,8 @@ def get_version(flags, jobID, opt):
     '''OmniFold_H1_Feb_Seed1234_emaGetSetWeighs_archL61_closure_job9_pretrained_iter4_step2_ensemble3.pkl'''
 
     version = opt['NAME']
+
+    version += f'_{flags.dataset}'
 
     if flags.closure:
         version += '_closure'
