@@ -420,7 +420,7 @@ def plot_particles(flags,dataloaders,reference_name,version,num_part, axes, ens)
                 
 
         save_str = f"_{version}_particle{feature}_ens{ens}"
-        fig,ax = utils.HistRoutine(feed_dict,
+        fig,ax = utils.HistRoutinePart(feed_dict,
                                    xlabel=utils.particle_names[str(feature)],
                                    weights = weights,
                                    reference_name = reference_name,

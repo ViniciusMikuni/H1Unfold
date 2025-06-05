@@ -33,6 +33,7 @@ line_style = {
     'data': 'dotted',
     'Rapgap reco': '-',
     'Rapgap gen': '-',
+    'Rapgap_unfoldedAvg': "-",
 }
 
 
@@ -42,6 +43,7 @@ colors = {
     "data": "black",
     "Rapgap reco": "#7570b3",
     "Rapgap gen": "darkorange",
+    'Rapgap_unfoldedAvg': "blue",
 }
 
 # Generate colors for each label
@@ -375,6 +377,8 @@ def HistRoutine(
     weights=None,
     uncertainty=None,
     stat_uncertainty=None,
+    axes=None,
+    save_str="",
 ):
     """
     Generate a histogram plot with optional ratio and uncertainties.
@@ -409,12 +413,20 @@ def HistRoutine(
     other_plot_style = {"histtype": "step", "linewidth": 2}
 
     # Set up the figure and axes
-    fig, gs = SetGrid(ratio=plot_ratio)
-    ax0 = plt.subplot(gs[0])
+    if axes is not None:
+        ax0 = axes[0]
+        fig = axes[-1]
+    else:
+        fig,gs = SetGrid(ratio=plot_ratio)
+        ax0 = plt.subplot(gs[0])
 
     if plot_ratio:
-        ax1 = plt.subplot(gs[1], sharex=ax0)
-        ax0.xaxis.set_visible(False)
+        plt.xticks(fontsize=0)
+        if axes is not None:
+            ax1 = axes[1]
+        else:
+            ax1 = plt.subplot(gs[1],sharex=ax0)
+
 
     # Define binning if not provided
     if binning is None:
@@ -434,8 +446,22 @@ def HistRoutine(
 
     max_y = 0
     # Plot each distribution
+    ens0_flag = False #avoid saving reference hist constantly in closer
 
     for plot_name, data in feed_dict.items():
+
+        # Save to npy files for comparison
+        if '0' in plot_name:
+            ens0_flag = True
+            plot_vals = np.array([xaxis, reference_hist])
+            np.save(f'../plots/{plot_name}{save_str}_plot_vals.npy', plot_vals)
+        if not ens0_flag and (plot_name=='Djangoh'):
+            continue
+        if 'Avg' in plot_name:
+            plot_vals = np.array([xaxis, reference_hist])
+            np.save(f'../plots/{plot_name}{save_str}_plot_vals.npy', plot_vals)
+
+        #Set Plot Style
         # plot_style = ref_plot_style if plot_name == reference_name else other_plot_style
         if "data" in plot_name.lower():
             plot_style = data_plot_style
@@ -629,6 +655,8 @@ def HistRoutinePart(
     weights=None,
     uncertainty=None,
     stat_uncertainty=None,
+    axes=None,
+    save_str="",
 ):
     """
     Generate a histogram plot with optional ratio and uncertainties.
@@ -663,12 +691,19 @@ def HistRoutinePart(
     other_plot_style = {"histtype": "step", "linewidth": 2}
 
     # Set up the figure and axes
-    fig, gs = SetGrid(ratio=plot_ratio)
-    ax0 = plt.subplot(gs[0])
+    if axes is not None:
+        ax0 = axes[0]
+        fig = axes[-1]
+    else:
+        fig,gs = SetGrid(ratio=plot_ratio)
+        ax0 = plt.subplot(gs[0])
 
     if plot_ratio:
-        ax1 = plt.subplot(gs[1], sharex=ax0)
-        ax0.xaxis.set_visible(False)
+        plt.xticks(fontsize=0)
+        if axes is not None:
+            ax1 = axes[1]
+        else:
+            ax1 = plt.subplot(gs[1],sharex=ax0)
 
     # Define binning if not provided
     if binning is None:
@@ -689,8 +724,23 @@ def HistRoutinePart(
     max_y = 0
     # Plot each distribution
 
+    ens0_flag = False
+
     for plot_name, data in feed_dict.items():
-        # plot_style = ref_plot_style if plot_name == reference_name else other_plot_style
+
+        # Save to npy files for comparison
+        if '0' in plot_name:
+            ens0_flag = True
+            plot_vals = np.array([xaxis, reference_hist])
+            np.save(f'../plots/{plot_name}{save_str}_plot_vals.npy', plot_vals)
+        if not ens0_flag and (plot_name=='Djangoh'):
+            continue
+        if 'Avg' in plot_name:
+            plot_vals = np.array([xaxis, reference_hist])
+            np.save(f'../plots/{plot_name}{save_str}_plot_vals.npy', plot_vals)
+
+
+        #Set Plot Style
         if "data" in plot_name.lower():
             plot_style = data_plot_style
 
