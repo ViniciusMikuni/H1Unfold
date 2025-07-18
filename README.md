@@ -72,6 +72,14 @@ Right now the closure test, standard unfolding and bootstrapping are available. 
 python train.py [--closure] [--nstrap N] [--dataset ep/em]
 ```
 
+### Evaluating the unfolding results
+
+After the unfolding is done, you can run the evaluation code to load the trained network, determine the unfolded weights, and then save the results to a new file containing the same information as the original file on top of the new weights
+
+```bash
+python evaluate.py [--dataset ep/em] [--niter I] [--load_pretrain] [--file Rapgap] [--bootstrap]
+
+
 ## Plotting
 
 Plotting can be performed using either multiple GPUs or in a single GPU. The script to run is:

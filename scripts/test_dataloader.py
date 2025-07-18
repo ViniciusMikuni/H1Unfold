@@ -6,14 +6,9 @@ import os
 utils.SetStyle()
 
 if __name__ == "__main__":
-    # base_path = '/global/cfs/cdirs/m3246/vmikuni/H1v2/h5/'
-    base_path = "/pscratch/sd/v/vmikuni/H1v2/h5"
-    # file_mc = ['Rapgap_Eminus06.h5']
-    # file_mc = ['Rapgap_Eplus0607.h5']
-
-    # file_data = ['Data.h5']
-    file_mc = ["test_prep.h5"]
-    file_data = ["data_prep.h5"]
+    base_path = "/global/cfs/cdirs/m3246/H1/h5/"
+    file_mc = ["Rapgap_Eminus06_prep.h5"]
+    file_data = ["data_Eminus06_prep.h5"]
     dataloader_mc = Dataset(file_mc, base_path, is_mc=True)
 
     dataloader_data = Dataset(
@@ -26,7 +21,6 @@ if __name__ == "__main__":
     # Let's make some plots
     particles_mc, events_mc, mask_mc = dataloader_mc.reco
     particles_gen, events_gen, _ = dataloader_mc.gen
-    print(np.unique(particles_gen[:, :, -1]))
     # Undo the preprocessing
     particles_mc, events_mc = dataloader_mc.revert_standardize(
         particles_mc, events_mc, mask_mc

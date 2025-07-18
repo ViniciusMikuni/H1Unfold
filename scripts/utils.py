@@ -11,6 +11,12 @@ import json
 import yaml
 import options
 import tensorflow as tf
+import re
+import horovod.tensorflow as hvd
+import gc
+from omnifold import Multifold
+
+# General utilities file
 
 line_style = {
     "Baseline": "dotted",
@@ -189,19 +195,6 @@ def SetStyle():
     hep.style.use("CMS")
 
 
-# def SetGrid(npanels=2):
-#     fig = plt.figure(figsize=(9, 9))
-#     if npanels ==2:
-#         gs = gridspec.GridSpec(2, 1, height_ratios=[3,1])
-#         gs.update(wspace=0.025, hspace=0.1)
-#     elif npanels ==3:
-#         gs = gridspec.GridSpec(3, 1, height_ratios=[4,1,1])
-#         gs.update(wspace=0.025, hspace=0.1)
-#     else:
-#         gs = gridspec.GridSpec(1, 1)
-#     return fig,gs
-
-
 def SetGrid(ratio=True):
     # fig = plt.figure(figsize=(9, 9))
     fig = plt.figure(figsize=(12, 12))
@@ -257,6 +250,21 @@ def WriteText(xpos, ypos, text, ax0, fontsize=25, align="center"):
         transform=ax0.transAxes,
         fontsize=fontsize,
     )
+
+
+def get_sample_name(base_name, dataset, extension="_prep.h5"):
+    assert dataset in ["ep", "em"], (
+        "ERROR: Datasets can only be positron (ep) or electron (em)"
+    )
+    if "sys" in base_name:
+        sys_name = f"_{base_name.split('_')[-1]}"
+        base_name = base_name.split("_")[0]
+    else:
+        sys_name = ""
+
+    dataset = "Eplus0607" if dataset == "ep" else "Eminus06"
+    sample_name = f"{base_name}_{dataset}{sys_name}{extension}"
+    return sample_name
 
 
 def LoadJson(file_name, base_path="../JSON"):
@@ -818,3 +826,88 @@ def setup_gpus(local_rank):
         tf.config.experimental.set_memory_growth(gpu, True)
     if gpus:
         tf.config.experimental.set_visible_devices(gpus[local_rank], "GPU")
+
+
+def undo_standardizing(flags, dataloaders):
+    # Undo preprocessing
+    for mc in dataloaders:
+        if flags.reco:
+            dataloaders[mc].part, dataloaders[mc].event = dataloaders[
+                mc
+            ].revert_standardize(
+                dataloaders[mc].reco[0],
+                dataloaders[mc].reco[1],
+                dataloaders[mc].reco[-1],
+            )
+            dataloaders[mc].mask = dataloaders[mc].reco[-1]
+            del dataloaders[mc].reco
+        else:
+            dataloaders[mc].part, dataloaders[mc].event = dataloaders[
+                mc
+            ].revert_standardize(
+                dataloaders[mc].gen[0], dataloaders[mc].gen[1], dataloaders[mc].gen[-1]
+            )
+            dataloaders[mc].mask = dataloaders[mc].gen[-1]
+            del dataloaders[mc].gen
+
+        gc.collect()
+
+
+# def get_sample_names(
+#     use_sys,
+#     sys_list=["sys0", "sys1", "sys5", "sys7", "sys11"],
+#     nominal="Rapgap",
+#     period="Eplus0607",
+# ):
+#     mc_file_names = {
+#         "Rapgap": f"Rapgap_{period}_prep.h5",
+#         "Djangoh": f"Djangoh_{period}_prep.h5",
+#     }
+
+#     if use_sys:
+#         for sys in sys_list:
+#             mc_file_names[f"{sys}"] = f"{nominal}_{period}_{sys}_prep.h5"
+#     return mc_file_names
+
+
+def get_version(dataset, flags, opt):
+    version = opt["NAME"]
+    if "sys" in dataset:
+        match = re.search(r"sys(\d+)", dataset)
+        version += f"_sys{match.group(1)}"
+    if "Djangoh" in dataset:
+        # Djangoh used for model uncertainty
+        version += "_sys_model"
+    version += f"_{flags.dataset}"
+    if flags.load_pretrain:
+        version += "_pretrained"
+    return version
+
+
+def evaluate_model(
+    flags, opt, dataset, dataloaders, version=None, bootstrap=False, nboot=0
+):
+    if version is None:
+        version = get_version(dataset, flags, opt)
+
+    model_name = "{}/OmniFold_{}_iter{}_step2/checkpoint".format(
+        flags.weights, version, flags.niter
+    )
+    if bootstrap:
+        model_name = "{}/OmniFold_{}_iter{}_step2_strap{}/checkpoint".format(
+            flags.weights, version, flags.niter, nboot
+        )
+
+    if hvd.rank() == 0:
+        print("Loading model {}".format(model_name))
+
+    mfold = Multifold(version=version, verbose=hvd.rank() == 0)
+    mfold.PrepareModel()
+    mfold.model2.load_weights(
+        model_name
+    ).expect_partial()  # Doesn't matter which model is loaded since both have the same architecture
+    unfolded_weights = mfold.reweight(
+        dataloaders[dataset].gen, mfold.model2_ema, batch_size=1000
+    )
+    # return unfolded_weights
+    return hvd.allgather(tf.constant(unfolded_weights)).numpy()

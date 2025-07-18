@@ -17,12 +17,14 @@ class Dataset:
         norm=None,
         pass_fiducial=False,
         pass_reco=False,
+        preprocess=True,
     ):
         self.rank = rank
         self.size = size
         self.base_path = base_path
         self.is_mc = is_mc
         self.nmax = nmax
+        self.preprocess = preprocess
 
         # Preprocessing parameters
 
@@ -55,8 +57,7 @@ class Dataset:
         # print("Total number of reco events {}".format(self.num_pass_reco))
         self.weight = (norm * self.weight / self.num_pass_reco).astype(np.float32)
 
-    def standardize(self, data):
-        new_p, new_e = data
+    def standardize(self, new_p, new_e, mask):
         mask = new_p[:, :, 2] != 0
         p = mask[:, :, None] * (new_p - self.mean_part) / self.std_part
         e = (new_e - self.mean_event) / self.std_event
@@ -74,9 +75,10 @@ class Dataset:
         # Concatenate along the first axis (N * M)
         concatenated_part1 = np.concatenate(data_part1, axis=0)
         concatenated_part2 = np.concatenate(data_part2, axis=0)
+        mask = concatenated_part1[:, :, 2] != 0
         del data_list
         gc.collect()
-        return concatenated_part1, concatenated_part2
+        return concatenated_part1, concatenated_part2, mask
 
     def prepare_dataset(self, file_names, pass_fiducial, pass_reco):
         """Load h5 files containing the data. The structure of the h5 file should be
@@ -115,12 +117,16 @@ class Dataset:
                 ]
             )
 
+            per_rank = (self.nmax + self.size - 1) // self.size  # ceiling division
+            start = self.rank * per_rank
+            end = min(start + per_rank, self.nmax)
+
             reco_p = h5.File(os.path.join(self.base_path, f), "r")[
                 "reco_particle_features"
-            ][self.rank : self.nmax : self.size].astype(np.float32)
+            ][start:end].astype(np.float32)
             reco_e = h5.File(os.path.join(self.base_path, f), "r")[
                 "reco_event_features"
-            ][self.rank : self.nmax : self.size].astype(np.float32)
+            ][start:end].astype(np.float32)
 
             self.weight.append(reco_e[:, -2].astype(np.float32))
             self.pass_reco.append(reco_e[:, -1] == 1)
@@ -133,10 +139,10 @@ class Dataset:
             if self.is_mc:
                 gen_p = h5.File(os.path.join(self.base_path, f), "r")[
                     "gen_particle_features"
-                ][self.rank : self.nmax : self.size].astype(np.float32)
+                ][start:end].astype(np.float32)
                 gen_e = h5.File(os.path.join(self.base_path, f), "r")[
                     "gen_event_features"
-                ][self.rank : self.nmax : self.size].astype(np.float32)
+                ][start:end].astype(np.float32)
 
                 self.pass_gen.append(gen_e[:, -1] == 1)
 
@@ -163,8 +169,11 @@ class Dataset:
         self.weight = np.concatenate(self.weight)
         self.pass_reco = np.concatenate(self.pass_reco)
 
-        # self.reco = self.preprocess(self.concatenate(reco))
-        self.reco = self.standardize(self.concatenate(reco))
+        if self.preprocess:
+            self.reco = self.standardize(*self.concatenate(reco))
+        else:
+            self.reco = self.concatenate(reco)
+
         del reco
         gc.collect()
         assert not np.any(np.isnan(self.reco[0])), "ERROR: NAN in particle dataset"
@@ -173,7 +182,10 @@ class Dataset:
         # self.reco =  self.return_dataset(reco)
         if self.is_mc:
             self.pass_gen = np.concatenate(self.pass_gen)
-            self.gen = self.standardize(self.concatenate(gen))
+            if self.preprocess:
+                self.gen = self.standardize(*self.concatenate(gen))
+            else:
+                self.gen = self.concatenate(gen)
             del gen
             gc.collect()
             assert not np.any(np.isnan(self.gen[0])), "ERROR: NAN in particle dataset"
