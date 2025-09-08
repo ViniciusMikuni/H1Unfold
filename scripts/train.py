@@ -1,10 +1,10 @@
 import numpy as np
 import argparse
-from omnifold import Multifold
 import horovod.tensorflow.keras as hvd
 import tensorflow as tf
 import tensorflow.keras.backend as K
 import utils
+from omnifold import Multifold
 from dataloader import Dataset
 
 # tf.random.set_seed(1234)
@@ -48,6 +48,12 @@ if __name__ == "__main__":
         action="store_true",
         default=False,
         help="Train omnifold for a closure test using simulation",
+    )
+    parser.add_argument(
+        "--QED_corrections",
+        action="store_true",
+        default=False,
+        help="Train a classifier using simulation with and without QED radiation",
     )
     parser.add_argument(
         "--pretrain",
@@ -99,6 +105,13 @@ if __name__ == "__main__":
         version += "_closure"
         # Keep closure data with around the same amount as the true data
         nmax = 350000 if flags.closure else None
+    elif flags.QED_corrections:
+        data_file_names = [
+            utils.get_sample_name(name, flags.dataset, extension="_NoRad_prep.h5")
+            for name in mc_names
+        ]
+        version += "_QEDcorrections"
+        nmax = None
     else:
         nmax = None
 
@@ -111,10 +124,11 @@ if __name__ == "__main__":
     data = Dataset(
         data_file_names,
         flags.data_folder,
-        is_mc=False,
+        is_mc=flags.QED_corrections,  # QED corrections model should use gen-level for data, but not others
         rank=hvd.rank(),
         size=hvd.size(),
         nmax=nmax,
+        use_reco=not flags.QED_corrections,
     )  # match the normalization from MC files
 
     mc = Dataset(
@@ -123,8 +137,9 @@ if __name__ == "__main__":
         is_mc=True,
         rank=hvd.rank(),
         size=hvd.size(),
-        nmax=None if flags.pretrain else 5_000_000,
+        nmax=None if flags.pretrain or flags.QED_corrections else 5_000_000,
         norm=data.nmax,
+        use_reco=not flags.QED_corrections,
     )  # Pretrain using all the events, but use smaller dataset during normal training
 
     if flags.nstrap > 0:

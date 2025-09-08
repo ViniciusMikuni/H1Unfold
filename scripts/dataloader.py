@@ -13,6 +13,7 @@ class Dataset:
         rank=0,
         size=1,
         is_mc=False,
+        use_reco=True,
         nmax=None,
         norm=None,
         pass_fiducial=False,
@@ -23,9 +24,11 @@ class Dataset:
         self.size = size
         self.base_path = base_path
         self.is_mc = is_mc
+        self.use_reco = use_reco
         self.nmax = nmax
         self.preprocess = preprocess
 
+        assert is_mc or use_reco, "ERROR: Dataset must have reco, mc, or both"
         # Preprocessing parameters
 
         self.mean_part = [
@@ -55,7 +58,10 @@ class Dataset:
 
     def normalize_weights(self, norm):
         # print("Total number of reco events {}".format(self.num_pass_reco))
-        self.weight = (norm * self.weight / self.num_pass_reco).astype(np.float32)
+        if self.use_reco:
+            self.weight = (norm * self.weight / self.num_pass_reco).astype(np.float32)
+        else:
+            self.weight = (norm * self.weight / self.num_pass_gen).astype(np.float32)
 
     def standardize(self, new_p, new_e, mask):
         mask = new_p[:, :, 2] != 0
@@ -90,6 +96,7 @@ class Dataset:
 
         """
         self.num_pass_reco = 0
+        self.num_pass_gen = 0
         self.weight = []
         self.pass_reco = []
         self.pass_gen = []
@@ -129,7 +136,13 @@ class Dataset:
             ][start:end].astype(np.float32)
 
             self.weight.append(reco_e[:, -2].astype(np.float32))
-            self.pass_reco.append(reco_e[:, -1] == 1)
+            if not self.use_reco:
+                reco_e = np.nan_to_num(
+                    reco_e
+                )  # reco_e has a nan entry (reco_e[:,3]) when there's not proper reco info
+                self.pass_reco.append(np.full_like(reco_e[:, -1], False, dtype=bool))
+            else:
+                self.pass_reco.append(reco_e[:, -1] == 1)
 
             if pass_reco:
                 mask_reco = self.pass_reco[-1]
@@ -143,6 +156,16 @@ class Dataset:
                 gen_e = h5.File(os.path.join(self.base_path, f), "r")[
                     "gen_event_features"
                 ][start:end].astype(np.float32)
+                self.num_pass_gen += np.sum(
+                    h5.File(os.path.join(self.base_path, f), "r")[
+                        "reco_event_features"
+                    ][: self.nmax, -2][
+                        h5.File(os.path.join(self.base_path, f), "r")[
+                            "gen_event_features"
+                        ][: self.nmax, -1]
+                        == 1
+                    ]
+                )
 
                 self.pass_gen.append(gen_e[:, -1] == 1)
 

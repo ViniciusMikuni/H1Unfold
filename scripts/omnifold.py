@@ -127,6 +127,9 @@ class Multifold:
                 )
             )
 
+        if not np.any(self.mc.pass_reco) and not np.any(self.data.pass_reco):
+            print("No events passed reconstruction for MC or data! Skipping step 1.")
+            return
         self.RunModel(
             np.concatenate(
                 (
