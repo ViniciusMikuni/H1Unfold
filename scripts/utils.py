@@ -885,7 +885,14 @@ def get_version(dataset, flags, opt):
 
 
 def evaluate_model(
-    flags, opt, dataset, dataloaders, version=None, bootstrap=False, nboot=0
+    flags,
+    opt,
+    dataset,
+    dataloaders,
+    version=None,
+    bootstrap=False,
+    nboot=0,
+    QED_corrections=False,
 ):
     if version is None:
         version = get_version(dataset, flags, opt)
@@ -897,7 +904,8 @@ def evaluate_model(
         model_name = "{}/OmniFold_{}_iter{}_step2_strap{}/checkpoint".format(
             flags.weights, version, flags.niter, nboot
         )
-
+    if QED_corrections:
+        model_name = "/global/cfs/cdirs/m3246/rmilton/H1Unfold_centaurointomain_branch/weights_fiducial_20miljob_100epochs/OmniFold_pretrained_step1/checkpoint"
     if hvd.rank() == 0:
         print("Loading model {}".format(model_name))
 
