@@ -136,13 +136,7 @@ class Dataset:
             ][start:end].astype(np.float32)
 
             self.weight.append(reco_e[:, -2].astype(np.float32))
-            if not self.use_reco:
-                reco_e = np.nan_to_num(
-                    reco_e
-                )  # reco_e has a nan entry (reco_e[:,3]) when there's not proper reco info
-                self.pass_reco.append(np.full_like(reco_e[:, -1], False, dtype=bool))
-            else:
-                self.pass_reco.append(reco_e[:, -1] == 1)
+            self.pass_reco.append(reco_e[:, -1] == 1)
 
             if pass_reco:
                 mask_reco = self.pass_reco[-1]
@@ -187,7 +181,11 @@ class Dataset:
             self.weight[-1] = self.weight[-1][mask_fid * mask_reco]
             self.pass_reco[-1] = self.pass_reco[-1][mask_fid * mask_reco]
 
-            reco.append((reco_p, reco_e[:, :-2]))
+            if self.use_reco:
+                reco.append((reco_p, reco_e[:, :-2]))
+            else:
+                reco.append((gen_p, gen_e[:, :-1]))
+                self.pass_reco[-1] = self.pass_gen[-1]
 
         self.weight = np.concatenate(self.weight)
         self.pass_reco = np.concatenate(self.pass_reco)
@@ -215,3 +213,4 @@ class Dataset:
             assert not np.any(np.isnan(self.gen[1])), "ERROR: NAN in event dataset"
         else:
             self.gen = None
+        self.num_steps_reco_factor = .7 if self.use_reco else .5
