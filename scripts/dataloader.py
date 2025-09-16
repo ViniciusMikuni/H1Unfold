@@ -213,4 +213,4 @@ class Dataset:
             assert not np.any(np.isnan(self.gen[1])), "ERROR: NAN in event dataset"
         else:
             self.gen = None
-        self.num_steps_reco_factor = .7 if self.use_reco else .5
+        self.num_steps_reco_factor = 0.7 if self.use_reco else 0.5
