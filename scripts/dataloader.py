@@ -13,6 +13,7 @@ class Dataset:
         rank=0,
         size=1,
         is_mc=False,
+        use_reco=True,
         nmax=None,
         norm=None,
         pass_fiducial=False,
@@ -23,9 +24,11 @@ class Dataset:
         self.size = size
         self.base_path = base_path
         self.is_mc = is_mc
+        self.use_reco = use_reco
         self.nmax = nmax
         self.preprocess = preprocess
 
+        assert is_mc or use_reco, "ERROR: Dataset must have reco, mc, or both"
         # Preprocessing parameters
 
         self.mean_part = [
@@ -55,7 +58,10 @@ class Dataset:
 
     def normalize_weights(self, norm):
         # print("Total number of reco events {}".format(self.num_pass_reco))
-        self.weight = (norm * self.weight / self.num_pass_reco).astype(np.float32)
+        if self.use_reco:
+            self.weight = (norm * self.weight / self.num_pass_reco).astype(np.float32)
+        else:
+            self.weight = (norm * self.weight / self.num_pass_gen).astype(np.float32)
 
     def standardize(self, new_p, new_e, mask):
         mask = new_p[:, :, 2] != 0
@@ -90,6 +96,7 @@ class Dataset:
 
         """
         self.num_pass_reco = 0
+        self.num_pass_gen = 0
         self.weight = []
         self.pass_reco = []
         self.pass_gen = []
@@ -143,6 +150,16 @@ class Dataset:
                 gen_e = h5.File(os.path.join(self.base_path, f), "r")[
                     "gen_event_features"
                 ][start:end].astype(np.float32)
+                self.num_pass_gen += np.sum(
+                    h5.File(os.path.join(self.base_path, f), "r")[
+                        "reco_event_features"
+                    ][: self.nmax, -2][
+                        h5.File(os.path.join(self.base_path, f), "r")[
+                            "gen_event_features"
+                        ][: self.nmax, -1]
+                        == 1
+                    ]
+                )
 
                 self.pass_gen.append(gen_e[:, -1] == 1)
 
@@ -164,7 +181,11 @@ class Dataset:
             self.weight[-1] = self.weight[-1][mask_fid * mask_reco]
             self.pass_reco[-1] = self.pass_reco[-1][mask_fid * mask_reco]
 
-            reco.append((reco_p, reco_e[:, :-2]))
+            if self.use_reco:
+                reco.append((reco_p, reco_e[:, :-2]))
+            else:
+                reco.append((gen_p, gen_e[:, :-1]))
+                self.pass_reco[-1] = self.pass_gen[-1]
 
         self.weight = np.concatenate(self.weight)
         self.pass_reco = np.concatenate(self.pass_reco)
@@ -192,3 +213,4 @@ class Dataset:
             assert not np.any(np.isnan(self.gen[1])), "ERROR: NAN in event dataset"
         else:
             self.gen = None
+        self.num_steps_reco_factor = 0.7 if self.use_reco else 0.5
