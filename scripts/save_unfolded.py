@@ -60,6 +60,12 @@ def parse_arguments():
         "--verbose", action="store_true", default=False, help="Increase print level"
     )
     parser.add_argument("--eec", action="store_true", default=False, help="Get EEC")
+    parser.add_argument("--ignore_reco", action="store_true", default=False, help="Ignore reco within the dataloader")
+    parser.add_argument(
+        "--dataset",
+        default="ep",
+        help="Choice between ep or em datasets",
+    )
     flags = parser.parse_args()
 
     return flags
@@ -79,6 +85,7 @@ def get_dataloaders(flags, file_names):
                 size=hvd.size(),
                 nmax=None,
                 pass_reco=True,
+                use_reco = not flags.ignore_reco,
             )
 
         else:
@@ -91,10 +98,10 @@ def get_dataloaders(flags, file_names):
                 nmax=flags.nmax,
                 pass_fiducial=not flags.reco,
                 pass_reco=flags.reco,
+                use_reco = not flags.ignore_reco,
             )
 
     return dataloaders
-
 
 def get_deltaphi(jet, elec):
     delta_phi = np.abs(np.pi + jet[:, :, 2] - elec[:, None, 4])
@@ -113,7 +120,7 @@ def main():
 
     dataloaders = get_dataloaders(flags, mc_files)
 
-    if "data" not in flags.file:
+    if "data" not in flags.file and "NoRad" not in flags.file:
         weights = {}
         for dataset in dataloaders:
             if flags.verbose and hvd.rank() == 0:
@@ -121,19 +128,19 @@ def main():
 
             if flags.bootstrap:
                 for i in range(1, flags.nboot):
-                    weights[str(i)] = evaluate_model(
+                    weights[str(i)] = utils.evaluate_model(
                         flags, opt, dataset, dataloaders, bootstrap=True, nboot=i
                     )
             else:
-                weights[dataset] = evaluate_model(flags, opt, dataset, dataloaders)
+                weights[dataset] = utils.evaluate_model(flags, opt, dataset, dataloaders)
                 if "Rapgap" in flags.file and "sys" not in flags.file:
-                    weights["closure"] = evaluate_model(
+                    weights["closure"] = utils.evaluate_model(
                         flags,
                         opt,
                         dataset,
                         dataloaders,
                         version=(
-                            opt["NAME"] + "_closure" + "_pretrained"
+                            opt["NAME"] + f"_{flags.dataset}" + "_closure" + "_pretrained"
                             if flags.load_pretrain
                             else ""
                         ),
@@ -142,7 +149,7 @@ def main():
     if hvd.rank() == 0:
         print("Done with network evaluation")
     # Important to only undo the preprocessing after the weights are derived!
-    undo_standardizing(flags, dataloaders)
+    utils.undo_standardizing(flags, dataloaders)
 
     cluster_jets(dataloaders)
     cluster_breit(flags, dataloaders)
@@ -160,7 +167,7 @@ def main():
 
     if hvd.rank() == 0:
         with h5.File(os.path.join(flags.data_folder, output_file_name), "w") as fh5:
-            if "data" not in flags.file:
+            if "data" not in flags.file and "NoRad" not in flags.file:
                 if flags.bootstrap:
                     for i in range(1, flags.nboot):
                         dset = fh5.create_dataset(f"weights{i}", data=weights[str(i)])
