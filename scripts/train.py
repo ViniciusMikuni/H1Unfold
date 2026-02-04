@@ -129,17 +129,20 @@ if __name__ == "__main__":
         size=hvd.size(),
         nmax=nmax,
         use_reco=not flags.QED_corrections,
+        pass_gen_Empz = True,
     )  # match the normalization from MC files
 
     mc = Dataset(
         mc_file_names,
-        flags.data_folder,
+        "/pscratch/sd/r/rmilton/",
         is_mc=True,
         rank=hvd.rank(),
         size=hvd.size(),
         nmax=None if flags.pretrain or flags.QED_corrections else 5_000_000,
         norm=data.nmax,
         use_reco=not flags.QED_corrections,
+        pass_gen_Empz = True,
+        rescale_eptQ=True,
     )  # Pretrain using all the events, but use smaller dataset during normal training
 
     if flags.nstrap > 0:
