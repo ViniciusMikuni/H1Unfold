@@ -356,6 +356,7 @@ def HistRoutine(
     weights=None,
     uncertainty=None,
     stat_uncertainty=None,
+    binned_corrections_dict=None,
 ):
     """
     Generate a histogram plot with optional ratio and uncertainties.
@@ -412,6 +413,12 @@ def HistRoutine(
     reference_hist, _ = np.histogram(
         feed_dict[reference_name], bins=binning, density=True, weights=ref_weights
     )
+    if (
+        binned_corrections_dict is not None
+        and binned_corrections_dict.get("reference_name") is not None
+    ):
+        reference_hist *= binned_corrections_dict["reference_name"]
+
 
     max_y = 0
     # Plot each distribution
@@ -421,7 +428,7 @@ def HistRoutine(
         if "data" in plot_name.lower():
             plot_style = data_plot_style
 
-        elif "Rapgap_closure" in plot_name:
+        elif "Rapgap_closure" in plot_name or "Rapgap_QED" in plot_name:
             plot_style = ref_plot_style
         else:
             plot_style = other_plot_style
@@ -433,6 +440,11 @@ def HistRoutine(
             dist, _ = np.histogram(
                 data, bins=binning, density=True, weights=plot_weights
             )
+            if (
+                binned_corrections_dict is not None
+                and binned_corrections_dict.get(plot_name) is not None
+            ):
+                dist = dist * binned_corrections_dict[plot_name]
             bin_centers = (binning[:-1] + binning[1:]) / 2
             errors_low = dist * (1 - stat_uncertainty)
             errors_high = dist * (1 + stat_uncertainty)
@@ -447,11 +459,20 @@ def HistRoutine(
                 markersize=8,
             )
         else:
-            dist, _, _ = ax0.hist(
-                data,
+            dist, _ = np.histogram(
+                data, bins=binning, density=True, weights=plot_weights
+            )
+            bin_centers = (binning[:-1] + binning[1:]) / 2
+            if (
+                binned_corrections_dict is not None
+                and binned_corrections_dict.get(plot_name) is not None
+            ):
+                dist = dist * binned_corrections_dict[plot_name]
+            
+            ax0.hist(
+                bin_centers,
                 bins=binning,
-                density=True,
-                weights=plot_weights,
+                weights=dist,
                 label=options.name_translate[plot_name],
                 color=options.colors[plot_name],
                 **plot_style,
@@ -507,14 +528,14 @@ def HistRoutine(
                         edgecolor="grey",
                         label="Systematic Uncertainty",
                     )
-
-    grey_patch = Patch(
-        facecolor="grey",
-        alpha=0.5,
-        hatch="//",
-        edgecolor="black",
-        label="Systematic Uncertainty",
-    )
+    if uncertainty is not None:
+        grey_patch = Patch(
+            facecolor="grey",
+            alpha=0.5,
+            hatch="//",
+            edgecolor="black",
+            label="Systematic Uncertainty",
+        )
 
     ## draw data points at 1 with stat uncertainties on the bottom panel
     if "data" in reference_name.lower():
@@ -544,7 +565,8 @@ def HistRoutine(
     # Add legend and format axes
     # ax0.legend(loc=label_loc, fontsize=16, ncol=2)
     handles, labels = ax0.get_legend_handles_labels()
-    handles.append(grey_patch)
+    if uncertainty is not None:
+        handles.append(grey_patch)
     labels.append("Systematic Uncertainty")
     ax0.legend(handles, labels, loc=label_loc, fontsize=20, ncol=1)
 
@@ -905,7 +927,7 @@ def evaluate_model(
             flags.weights, version, flags.niter, nboot
         )
     if QED_corrections:
-        model_name = "/global/cfs/cdirs/m3246/rmilton/H1Unfold_centaurointomain_branch/weights_fiducial_20miljob_100epochs/OmniFold_pretrained_step1/checkpoint"
+        model_name = "/global/cfs/cdirs/m3246/rmilton/H1Unfold_QEDcorrections_intomain/weights/OmniFold_H1_May2025_ep_QEDcorrections_iter0_step1/checkpoint"
     if hvd.rank() == 0:
         print("Loading model {}".format(model_name))
 

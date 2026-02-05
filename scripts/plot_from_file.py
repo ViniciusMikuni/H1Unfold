@@ -30,6 +30,7 @@ def get_sample_names(
     bootstrap=False,
     nboot=1,
     prelim=False,
+    binned_QED = False,
 ):
     add_string = "_reco" if reco else ""
     prelim_string = "_prelimnote" if prelim else ""
@@ -52,6 +53,10 @@ def get_sample_names(
     if bootstrap:
         mc_file_names["bootstrap"] = (
             f"{nominal}_{period}_unfolded_{niter}{prelim_string}_boot.h5"
+        )
+    if binned_QED:
+        mc_file_names["binned_QED"] = (
+            f"{nominal}_{period}_NoRad_observables.h5"
         )
 
     return mc_file_names
@@ -117,6 +122,12 @@ def parse_arguments():
     parser.add_argument(
         "--verbose", action="store_true", default=False, help="Increase print level"
     )
+    parser.add_argument(
+        "--binned_QED",
+        action="store_true",
+        default=False,
+        help="Use binned QED corrections",
+    )
 
     flags = parser.parse_args()
 
@@ -149,6 +160,7 @@ def main():
         bootstrap=flags.bootstrap,
         nboot=flags.nboot,
         prelim=flags.prelim,
+        binned_QED = flags.binned_QED,
     )
     if flags.verbose:
         print(f"Will load the following files : {mc_files.keys()}")

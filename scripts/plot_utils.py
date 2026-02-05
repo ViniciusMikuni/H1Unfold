@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import horovod.tensorflow as hvd
 import options
+import tensorflow as tf
 # Calculating particle-level Empz. This is sum(E_i - pz_i) where i runs over all HFS particles
 def calculate_Empz(dataloaders):
     import fastjet
@@ -2032,6 +2033,26 @@ def plot_observable(flags, var, dataloaders, version):
         total_unc = np.sqrt(total_unc)
         # print(f"data_stat_unc: {data_stat_unc}")
 
+    binned_corrections_dict = {}
+
+    if flags.binned_QED:
+        withRad_hist, _ = compute_histogram(
+            "Rapgap", dataloaders["Rapgap"]["mc_weights"]
+        )
+        NoRad_hist, bin_edges = compute_histogram(
+            "binned_QED", dataloaders["binned_QED"]["mc_weights"]
+        )
+        binned_QED_corrections = (np.ma.divide(NoRad_hist, withRad_hist).filled(1))
+        binned_corrections_dict[data_name] = binned_QED_corrections
+        bin_centers = (bin_edges[1:]+bin_edges[:-1])/2
+        QED_corrections_fig = plt.figure(figsize=(8,8))
+        plt.scatter(bin_centers, binned_QED_corrections)
+        plt.xlabel(info.name)
+        plt.ylabel("Binned QED corrections")
+        QED_corrections_fig.savefig(f"../plots/{version}_{var}_binnedQEDcorrections.pdf")
+        plt.close(QED_corrections_fig)
+    else:
+        binned_QED_corrections = None
     # Prepare weights and data for plotting
     weights = {}
     feed_dict = {}
@@ -2052,6 +2073,7 @@ def plot_observable(flags, var, dataloaders, version):
         )
         feed_dict[data_name] = Rapgap_data
         feed_dict["Rapgap"] = Rapgap_data
+        
     else:
         weights[data_name] = (
             dataloaders["Rapgap"]["mc_weights"] * dataloaders["Rapgap"][weight_name]
@@ -2065,6 +2087,7 @@ def plot_observable(flags, var, dataloaders, version):
         feed_dict["Rapgap"] = dataloaders["Rapgap"][var][
             dataloaders["Rapgap"]["jet_pt"] > 0
         ]
+    binned_corrections_dict["Rapgap"] = None
 
     if len(dataloaders["Djangoh"][var].shape) > 1:
         Djangoh_mask = dataloaders["Djangoh"]["jet_pt"] > 0
@@ -2083,6 +2106,7 @@ def plot_observable(flags, var, dataloaders, version):
         feed_dict["Djangoh"] = dataloaders["Djangoh"][var][
             dataloaders["Djangoh"]["jet_pt"] > 0
         ]
+    binned_corrections_dict["Djangoh"] = None
 
     if flags.reco:
         if len(dataloaders["data"][var].shape) > 1:
@@ -2117,7 +2141,8 @@ def plot_observable(flags, var, dataloaders, version):
         reference_name="data" if flags.reco else data_name,
         label_loc="upper left",
         uncertainty=total_unc,
-        stat_uncertainty=data_stat_unc,
+        stat_uncertainty=np.zeros(len(binning) - 1),
+        binned_corrections_dict=binned_corrections_dict,
     )
 
     # Set plot limits and save
@@ -2389,3 +2414,24 @@ def plot_part_observable(flags, var, dataloaders, version):
     # Set plot limits and save
     ax.set_ylim(info.ylow, info.yhigh)
     fig.savefig(flags.plot_folder + f"/{version}_{var}.pdf")
+
+def gather_data(dataloaders):
+    for dataloader in dataloaders:
+        # dataloaders[dataloader].mask = np.reshape(dataloaders[dataloader].mask,(-1))
+        # dataloaders[dataloader].part = hvd.allgather(tf.constant(dataloaders[dataloader].part.reshape(
+        #     (-1,dataloaders[dataloader].part.shape[-1]))[dataloaders[dataloader].mask])).numpy()
+
+        dataloaders[dataloader].event = hvd.allgather(
+            tf.constant(dataloaders[dataloader].event)
+        ).numpy()
+        # dataloaders[dataloader].jet = hvd.allgather(tf.constant(dataloaders[dataloader].jet)).numpy()
+        # dataloaders[dataloader].jet_breit = hvd.allgather(tf.constant(dataloaders[dataloader].jet_breit)).numpy()
+        dataloaders[dataloader].all_jets = hvd.allgather(
+            tf.constant(dataloaders[dataloader].all_jets)
+        ).numpy()
+        dataloaders[dataloader].all_jets_breit = hvd.allgather(
+            tf.constant(dataloaders[dataloader].all_jets_breit)
+        ).numpy()
+        dataloaders[dataloader].weight = hvd.allgather(
+            tf.constant(dataloaders[dataloader].weight)
+        ).numpy()
