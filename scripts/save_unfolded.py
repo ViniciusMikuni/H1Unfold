@@ -61,6 +61,7 @@ def parse_arguments():
     )
     parser.add_argument("--eec", action="store_true", default=False, help="Get EEC")
     parser.add_argument("--ignore_reco", action="store_true", default=False, help="Ignore reco within the dataloader")
+    parser.add_argument("--unbinned_QED_corrections", action="store_true", default=False, help="Get the unbinned QED corrections")
     parser.add_argument(
         "--dataset",
         default="ep",
@@ -86,6 +87,8 @@ def get_dataloaders(flags, file_names):
                 nmax=None,
                 pass_reco=True,
                 use_reco = not flags.ignore_reco,
+                pass_gen_Empz = flags.unbinned_QED_corrections,
+                rescale_eptQ=flags.unbinned_QED_corrections,
             )
 
         else:
@@ -99,6 +102,8 @@ def get_dataloaders(flags, file_names):
                 pass_fiducial=not flags.reco,
                 pass_reco=flags.reco,
                 use_reco = not flags.ignore_reco,
+                pass_gen_Empz = flags.unbinned_QED_corrections,
+                rescale_eptQ=flags.unbinned_QED_corrections,
             )
 
     return dataloaders
@@ -145,6 +150,11 @@ def main():
                             else ""
                         ),
                     )
+                if flags.unbinned_QED_corrections:
+                    weights['QED_corrections'] = utils.evaluate_model(
+                        flags,opt,dataset,dataloaders,
+                            version = opt['NAME'], QED_corrections=True
+                    )
 
     if hvd.rank() == 0:
         print("Done with network evaluation")
@@ -162,24 +172,29 @@ def main():
         replace_string += "_reco"
     if flags.bootstrap:
         replace_string += "_boot"
+    if flags.bootstrap:
+        replace_string += "_QEDcorrections"
 
-    output_file_name = flags.file.replace("prep", replace_string)
+    output_file_name = flags.file.replace("prep", "testing")
 
     if hvd.rank() == 0:
-        with h5.File(os.path.join(flags.data_folder, output_file_name), "w") as fh5:
-            if "data" not in flags.file and "NoRad" not in flags.file:
-                if flags.bootstrap:
-                    for i in range(1, flags.nboot):
-                        dset = fh5.create_dataset(f"weights{i}", data=weights[str(i)])
-                else:
-                    dset = fh5.create_dataset("weights", data=weights[flags.file])
+        with h5.File(os.path.join("./", output_file_name), "w") as fh5:
+            if "data" not in flags.file:
+                if "NoRad" not in flags.file:
+                    if flags.bootstrap:
+                        for i in range(1, flags.nboot):
+                            dset = fh5.create_dataset(f"weights{i}", data=weights[str(i)])
+                    else:
+                        dset = fh5.create_dataset("weights", data=weights[flags.file])
+                    if "closure" in weights:
+                        dset = fh5.create_dataset(
+                            "closure_weights", data=weights["closure"]
+                        )
                 dset = fh5.create_dataset(
                     "mc_weights", data=dataloaders[flags.file].weight
                 )
-                if "closure" in weights:
-                    dset = fh5.create_dataset(
-                        "closure_weights", data=weights["closure"]
-                    )
+                if 'QED_corrections' in weights:
+                    dset = fh5.create_dataset('QED_corrections', data=weights['QED_corrections'])
 
             dset = fh5.create_dataset(
                 "jet_pt", data=dataloaders[flags.file].all_jets[:, :, 0]
@@ -202,13 +217,13 @@ def main():
             dset = fh5.create_dataset(
                 "zjet_breit", data=dataloaders[flags.file].all_jets_breit[:, :, 7]
             )
-            dset = fh5.create_dataset("eec", data=dataloaders[flags.file].eec[:, :, 0])
-            dset = fh5.create_dataset(
-                "E_wgt", data=dataloaders[flags.file].eec[:, :, 1]
-            )  # per particle energy weighting
-            dset = fh5.create_dataset(
-                "theta", data=dataloaders[flags.file].eec[:, :, 2]
-            )
+            # dset = fh5.create_dataset("eec", data=dataloaders[flags.file].eec[:, :, 0])
+            # dset = fh5.create_dataset(
+            #     "E_wgt", data=dataloaders[flags.file].eec[:, :, 1]
+            # )  # per particle energy weighting
+            # dset = fh5.create_dataset(
+            #     "theta", data=dataloaders[flags.file].eec[:, :, 2]
+            # )
 
 
 if __name__ == "__main__":
