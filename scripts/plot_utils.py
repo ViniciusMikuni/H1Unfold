@@ -1917,6 +1917,194 @@ def plot_event(flags, dataloaders, data_weights, version, nbins=10):
         fig.savefig(f"../plots/{version}_event_{feature}.pdf")
 
 
+def plot_QEDcorrections(flags, var, dataloaders, version):
+    info = utils.ObservableInfo(var)
+
+    def compute_histogram(dataset_name, weights=None, density=True):
+        if len(dataloaders[dataset_name][var].shape) > 1:
+            multiple_jets_per_event = True
+            valid_indices = dataloaders[dataset_name]["jet_pt"] > 0
+            data = ak.mask(dataloaders[dataset_name][var], valid_indices)
+            data = ak.drop_none(data)
+            num_jets_per_event = ak.count(data, axis=1)
+            data = ak.flatten(data)
+        else:
+            multiple_jets_per_event = False
+            valid_indices = dataloaders[dataset_name]["jet_pt"] > 0
+            data = dataloaders[dataset_name][var][valid_indices]
+        if weights is not None:
+            if multiple_jets_per_event:
+                weights = np.repeat(weights, num_jets_per_event, axis=0)
+            else:
+                weights = weights[valid_indices]
+        counts, bins = np.histogram(
+            data, bins=binning, density=density, weights=weights
+        )
+        return ak.to_numpy(counts), bins
+    
+    def binned_mean(x, y, bins):
+        """
+        Compute mean of y in bins of x.
+        """
+        bin_indices = np.digitize(x, bins) - 1
+        means = np.full(len(bins) - 1, np.nan)
+
+        for i in range(len(means)):
+            mask = bin_indices == i
+            if np.any(mask):
+                means[i] = np.mean(y[mask])
+
+        return means
+
+    # Determine weight name
+    weight_name = "closure_weights" if flags.blind else "weights"
+    if flags.blind:
+        data_name = "Rapgap_closure"
+    elif flags.reco:
+        data_name = "Rapgap_unfolded"
+    else:
+        data_name = "Data_unfolded"
+
+    # Set binning
+    binning = info.binning
+
+    binned_corrections_dict = {}
+    corrections_plot_feed_dict = {}
+    if flags.binned_QED:
+        withRad_hist, _ = compute_histogram(
+            "Rapgap", dataloaders["Rapgap"]["mc_weights"]
+        )
+        NoRad_hist, bin_edges = compute_histogram(
+            "NoRad", dataloaders["NoRad"]["mc_weights"]
+        )
+        binned_QED_corrections = (np.ma.divide(NoRad_hist, withRad_hist).filled(1))
+        binned_corrections_dict["Rapgap_binnedQED"] = binned_QED_corrections
+        bin_centers = (bin_edges[1:]+bin_edges[:-1])/2
+        corrections_plot_feed_dict["RAPGAP Binned QED"] = (bin_centers, binned_QED_corrections)
+    else:
+        binned_QED_corrections = None
+    # Prepare weights and data for plotting
+    weights = {}
+    feed_dict = {}
+
+    if len(dataloaders["Rapgap"][var].shape) > 1:
+        Rapgap_mask = dataloaders["Rapgap"]["jet_pt"] > 0
+        Rapgap_data = ak.drop_none(ak.mask(dataloaders["Rapgap"][var], Rapgap_mask))
+        num_Rapgap_jets_per_event = ak.count(Rapgap_data, axis=1)
+        Rapgap_data = ak.flatten(Rapgap_data)
+
+        if flags.unbinned_QED:
+            weights["Rapgap_unbinnedQED"] = np.repeat(
+                dataloaders["Rapgap"]["mc_weights"] * dataloaders["Rapgap"]["QED_corrections"],
+                num_Rapgap_jets_per_event,
+                axis=0,
+            )
+            feed_dict["Rapgap_unbinnedQED"] = Rapgap_data
+        if flags.binned_QED:
+            weights["Rapgap_binnedQED"] = np.repeat(
+                dataloaders["Rapgap"]["mc_weights"], num_Rapgap_jets_per_event, axis=0
+            )
+            feed_dict["Rapgap_binnedQED"] = Rapgap_data
+        weights["Rapgap"] = np.repeat(
+                dataloaders["Rapgap"]["mc_weights"],
+                num_Rapgap_jets_per_event,
+                axis=0,
+            )
+        feed_dict["Rapgap"] = Rapgap_data
+        
+    else:
+        if flags.unbinned_QED:
+            weights["Rapgap_unbinnedQED"] = (
+                dataloaders["Rapgap"]["mc_weights"] * dataloaders["Rapgap"]["QED_corrections"]
+            )[dataloaders["Rapgap"]["jet_pt"] > 0]
+            feed_dict["Rapgap_unbinnedQED"] = dataloaders["Rapgap"][var][
+                dataloaders["Rapgap"]["jet_pt"] > 0
+            ]
+        if flags.binned_QED:
+            weights["Rapgap_binnedQED"] = dataloaders["Rapgap"]["mc_weights"][
+                dataloaders["Rapgap"]["jet_pt"] > 0
+            ]
+            
+            feed_dict["Rapgap_binnedQED"] = dataloaders["Rapgap"][var][
+                dataloaders["Rapgap"]["jet_pt"] > 0
+            ]
+        weights["Rapgap"] = dataloaders["Rapgap"]["mc_weights"][
+                dataloaders["Rapgap"]["jet_pt"] > 0
+            ]
+            
+        feed_dict["Rapgap"] = dataloaders["Rapgap"][var][
+            dataloaders["Rapgap"]["jet_pt"] > 0
+        ]
+    if flags.unbinned_QED:
+        # Flattened unbinned values already exist here
+        unbinned_QED = np.asarray(
+            dataloaders["Rapgap"]["QED_corrections"]
+        )
+
+        if len(dataloaders["Rapgap"][var].shape) > 1:
+            unbinned_QED = np.repeat(unbinned_QED, num_Rapgap_jets_per_event, axis=0)
+        avg_unbinned_QED = binned_mean(
+            np.asarray(Rapgap_data),
+            np.asarray(unbinned_QED),
+            binning,
+        )
+        bin_centers = (binning[1:] + binning[:-1]) / 2
+        corrections_plot_feed_dict["RAPGAP Avg. Unbinned QED"] = (
+            bin_centers,
+            avg_unbinned_QED,
+        )
+
+    if len(dataloaders["NoRad"][var].shape) > 1:
+        NoRad_mask = dataloaders["NoRad"]["jet_pt"] > 0
+        NoRad_data = ak.drop_none(ak.mask(dataloaders["NoRad"][var], NoRad_mask))
+        num_NoRad_jets_per_event = ak.count(NoRad_data, axis=1)
+        NoRad_data = ak.flatten(NoRad_data)
+
+        weights["Rapgap_no_rad"] = np.repeat(
+            dataloaders["NoRad"]["mc_weights"],
+            num_NoRad_jets_per_event,
+            axis=0,
+        )
+        feed_dict["Rapgap_no_rad"] = NoRad_data
+    else:
+        weights["Rapgap_no_rad"] = (
+            dataloaders["NoRad"]["mc_weights"]
+        )[dataloaders["NoRad"]["jet_pt"] > 0]
+        feed_dict["Rapgap_no_rad"] = dataloaders["NoRad"][var][
+            dataloaders["NoRad"]["jet_pt"] > 0
+        ]
+    binned_corrections_dict["Rapgap_unbinnedQED"] = None
+    binned_corrections_dict["Rapgap_no_rad"] = None
+    binned_corrections_dict["Rapgap"] = None
+
+    if flags.reco:
+        ylabel = r"1/N $\mathrm{dN}/\mathrm{d}$%s" % info.name
+    else:
+        ylabel = r"$1/\sigma$ $\mathrm{d}\sigma/\mathrm{d}$%s" % info.name
+
+    # Generate histogram plot
+    fig, ax = utils.HistRoutine(
+        feed_dict,
+        xlabel=info.name,
+        ylabel=ylabel,
+        weights=weights,
+        logy=info.logy,
+        logx=info.logx,
+        binning=binning,
+        reference_name="Rapgap_no_rad",
+        label_loc="upper left",
+        uncertainty=None,
+        stat_uncertainty=np.zeros(len(binning) - 1),
+        binned_corrections_dict=binned_corrections_dict,
+    )
+
+    # Set plot limits and save
+    ax.set_ylim(info.ylow, info.yhigh)
+    fig.savefig(f"../plots/{version}_{var}_QEDcorrections_comparison.pdf")
+    plt.close(fig)
+    fig,ax = utils.ScatterRoutine(corrections_plot_feed_dict,xlabel=info.name,ylabel='QED correction value')
+    fig.savefig(f"../plots/{version}_{var}_QEDcorrections.pdf")
+
 def plot_observable(flags, var, dataloaders, version):
     info = utils.ObservableInfo(var)
 
@@ -2034,28 +2222,27 @@ def plot_observable(flags, var, dataloaders, version):
         # print(f"data_stat_unc: {data_stat_unc}")
 
     binned_corrections_dict = {}
-
+    use_unbinned_QED_corrections = flags.unbinned_QED
     if flags.binned_QED:
+        # Only use binned QED corrections if both unbinned and binned are true
+        use_unbinned_QED_corrections = False
         withRad_hist, _ = compute_histogram(
             "Rapgap", dataloaders["Rapgap"]["mc_weights"]
         )
         NoRad_hist, bin_edges = compute_histogram(
-            "binned_QED", dataloaders["binned_QED"]["mc_weights"]
+            "NoRad", dataloaders["NoRad"]["mc_weights"]
         )
         binned_QED_corrections = (np.ma.divide(NoRad_hist, withRad_hist).filled(1))
         binned_corrections_dict[data_name] = binned_QED_corrections
-        bin_centers = (bin_edges[1:]+bin_edges[:-1])/2
-        QED_corrections_fig = plt.figure(figsize=(8,8))
-        plt.scatter(bin_centers, binned_QED_corrections)
-        plt.xlabel(info.name)
-        plt.ylabel("Binned QED corrections")
-        QED_corrections_fig.savefig(f"../plots/{version}_{var}_binnedQEDcorrections.pdf")
-        plt.close(QED_corrections_fig)
+        
     else:
         binned_QED_corrections = None
     # Prepare weights and data for plotting
     weights = {}
     feed_dict = {}
+
+    if use_unbinned_QED_corrections:
+        dataloaders["Rapgap"][weight_name] = dataloaders["Rapgap"][weight_name] * dataloaders["Rapgap"]["QED_corrections"]
 
     if len(dataloaders["Rapgap"][var].shape) > 1:
         Rapgap_mask = dataloaders["Rapgap"]["jet_pt"] > 0
@@ -2148,6 +2335,10 @@ def plot_observable(flags, var, dataloaders, version):
     # Set plot limits and save
     ax.set_ylim(info.ylow, info.yhigh)
     add_string = "reco" if flags.reco else "unfolded"
+    if use_unbinned_QED_corrections:
+        add_string = add_string + "_unbinnedQED"
+    elif flags.binned_QED:
+        add_string = add_string + "_binnedQED"
     fig.savefig(f"../plots/{version}_{var}_{add_string}.pdf")
 
 

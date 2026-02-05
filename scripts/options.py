@@ -14,6 +14,9 @@ colors = {
     "Rapgap": "darkorange",
     "Rapgap_unfolded": "darkolivegreen",
     # 'Data_unfolded':'darkolivegreen',
+    'Rapgap_unbinnedQED':'darkolivegreen',
+    'Rapgap_binnedQED': "#8c564b",
+    'Rapgap_no_rad':'blue',
     "Data_unfolded": "black",
     "Rapgap_closure": "darkolivegreen",
     "Herwig": "crimson",
@@ -34,6 +37,9 @@ markers = {
     "Rapgap_unfolded": "X",
     "Data_unfolded": "X",
     "Rapgap_closure": "X",
+    'Rapgap_unbinnedQED':'X',
+    'Rapgap_binnedQED':'X',
+    'Rapgap_no_rad':'X',
     "mc": "X",
     "data": "X",
     "Pythia": "^",
@@ -143,6 +149,9 @@ name_translate = {
     "Djangoh": "DJANGOH",
     "data": "Data (inc. stat uncertainty)",
     "Data_unfolded": "Data Unfolded (inc. stat uncertainty)",
+    'Rapgap_no_rad':"RAPGAP without QED rad.",
+    'Rapgap_unbinnedQED':"RAPGAP + unbinned QED corrections",
+    'Rapgap_binnedQED':"RAPGAP + binned QED corrections"
 }
 
 reco_vars = {

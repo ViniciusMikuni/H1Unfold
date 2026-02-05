@@ -36,8 +36,10 @@ def get_sample_names(
     prelim_string = "_prelimnote" if prelim else ""
 
     mc_file_names = {
-        "Rapgap": f"Rapgap_{period}_unfolded_{niter}{prelim_string}{add_string}.h5",
-        "Djangoh": f"Djangoh_{period}_unfolded_{niter}{prelim_string}{add_string}.h5",
+        # "Rapgap": f"Rapgap_{period}_unfolded_{niter}{prelim_string}{add_string}.h5",
+        "Rapgap": f"Rapgap_{period}_testing.h5",
+        # "Djangoh": f"Djangoh_{period}_unfolded_{niter}{prelim_string}{add_string}.h5",
+        "Djangoh": f"Djangoh_{period}_testing.h5",
     }
     if reco:
         mc_file_names["data"] = (
@@ -55,8 +57,8 @@ def get_sample_names(
             f"{nominal}_{period}_unfolded_{niter}{prelim_string}_boot.h5"
         )
     if binned_QED:
-        mc_file_names["binned_QED"] = (
-            f"{nominal}_{period}_NoRad_observables.h5"
+        mc_file_names["NoRad"] = (
+            f"{nominal}_{period}_NoRad_testing.h5"
         )
 
     return mc_file_names
@@ -128,6 +130,12 @@ def parse_arguments():
         default=False,
         help="Use binned QED corrections",
     )
+    parser.add_argument(
+        "--unbinned_QED",
+        action="store_true",
+        default=False,
+        help="Use unbinned QED corrections.",
+    )
 
     flags = parser.parse_args()
 
@@ -152,6 +160,8 @@ def get_dataloaders(flags, mc_file_names):
 
 def main():
     flags = parse_arguments()
+    if flags.unbinned_QED and flags.binned_QED:
+        print("Both unbinned_QED and binned_QED flags are used. Only using binned QED corrections in observable plots!")
     opt = utils.LoadJson(flags.config)
     mc_files = get_sample_names(
         niter=flags.niter,
@@ -171,7 +181,7 @@ def main():
         if "weight" in var:
             continue
         plot_observable(flags, var, dataloaders, opt["NAME"])
-
+        plot_QEDcorrections(flags, var, dataloaders, opt["NAME"])
 
 if __name__ == "__main__":
     main()

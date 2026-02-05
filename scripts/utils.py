@@ -24,6 +24,8 @@ line_style = {
     "data": "dotted",
     "Rapgap reco": "-",
     "Rapgap gen": "-",
+    "RAPGAP Binned QED": "-",
+    "RAPGAP Avg. Unbinned QED": "-"
 }
 
 colors = {
@@ -32,6 +34,8 @@ colors = {
     "data": "black",
     "Rapgap reco": "#7570b3",
     "Rapgap gen": "darkorange",
+    "RAPGAP Binned QED": "darkorange",
+    "RAPGAP Avg. Unbinned QED": "#7570b3",
 }
 
 
@@ -341,6 +345,47 @@ def PlotRoutine(
         FormatFig(xlabel=xlabel, ylabel=ylabel, ax0=ax0)
 
     return fig, ax0
+def ScatterRoutine(
+    feed_dict, xlabel="", ylabel="", reference_name="gen", plot_ratio=False
+):
+    if plot_ratio:
+        assert reference_name in feed_dict.keys(), (
+            "ERROR: Don't know the reference distribution"
+        )
+
+    fig, gs = SetGrid(ratio=plot_ratio)
+    ax0 = plt.subplot(gs[0])
+    if plot_ratio:
+        plt.xticks(fontsize=0)
+        ax1 = plt.subplot(gs[1], sharex=ax0)
+
+    for ip, plot in enumerate(feed_dict.keys()):
+        ax0.scatter(
+            *feed_dict[plot],
+            label=plot,
+            color=colors[plot],
+        )
+        if reference_name != plot and plot_ratio:
+            ratio = 100 * np.divide(
+                feed_dict[reference_name] - feed_dict[plot], feed_dict[reference_name]
+            )
+            ax1.plot(ratio, color=colors[plot], linewidth=2, linestyle=line_style[plot])
+
+    ax0.legend(loc="best", fontsize=18, ncol=1)
+    if plot_ratio:
+        FormatFig(xlabel="", ylabel=ylabel, ax0=ax0)
+        plt.ylabel("Difference. (%)")
+        plt.xlabel(xlabel)
+        plt.axhline(y=0.0, color="r", linestyle="--", linewidth=1)
+        plt.axhline(y=10, color="r", linestyle="--", linewidth=1)
+        plt.axhline(y=-10, color="r", linestyle="--", linewidth=1)
+        plt.ylim([-100, 100])
+
+    else:
+        FormatFig(xlabel=xlabel, ylabel=ylabel, ax0=ax0)
+
+    return fig, ax0
+
 
 
 def HistRoutine(
