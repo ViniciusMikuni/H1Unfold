@@ -3,7 +3,62 @@ import utils
 import awkward as ak
 
 
-def cluster_jets(dataloaders):
+def _cluster_chunk(args):
+    """Process a chunk of events for jet clustering (runs in a worker process)."""
+    import fastjet
+    import numpy as np
+
+    cartesian_chunk, q_chunk = args
+    jetdef = fastjet.JetDefinition(fastjet.kt_algorithm, 1.0)
+
+    def _calculate_jet_features(jet, q):
+        tau_11, tau_11p5, tau_12, tau_20, sumpt = 0, 0, 0, 0, 0
+        for constituent in jet.constituents():
+            delta_r = jet.delta_R(constituent)
+            pt = constituent.pt()
+            tau_11 += pt * delta_r**1
+            tau_11p5 += pt * delta_r**1.5
+            tau_12 += pt * delta_r**2
+            tau_20 += pt**2
+            sumpt += pt
+        jet.tau_11 = np.log(tau_11 / jet.pt()) if jet.pt() > 0 else 0.0
+        jet.tau_11p5 = np.log(tau_11p5 / jet.pt()) if jet.pt() > 0 else 0.0
+        jet.tau_12 = np.log(tau_12 / jet.pt()) if jet.pt() > 0 else 0.0
+        jet.tau_20 = tau_20 / (jet.pt() ** 2) if jet.pt() > 0 else 0.0
+        jet.ptD = np.sqrt(tau_20) / sumpt if sumpt > 0 else 0.0
+        P = np.array([0, 0, 920, 920], dtype=np.float32)
+        P_dot_q = P[3] * q[3] - P[0] * q[0] - P[1] * q[1] - P[2] * q[2]
+        z_jet_numerator = P[3] * jet.E() - P[0] * jet.px() - P[1] * jet.py() - P[2] * jet.pz()
+        jet.zjet = z_jet_numerator / P_dot_q
+
+    def _take_all_jets(jets):
+        max_num_jets = 4
+        if not jets:
+            return np.zeros((max_num_jets, 10))
+        jet_array = []
+        for i in range(max_num_jets):
+            if i < len(jets):
+                jet = jets[i]
+                jet_info = [jet.pt(), jet.eta(), (jet.phi() + np.pi) % (2 * np.pi) - np.pi,
+                            jet.E(), jet.tau_11, jet.tau_11p5, jet.tau_12, jet.tau_20, jet.ptD, jet.zjet]
+            else:
+                jet_info = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            jet_array.append(jet_info)
+        return np.array(jet_array)
+
+    list_of_all_jets = []
+    for i, event in enumerate(cartesian_chunk):
+        particles = [fastjet.PseudoJet(p[0], p[1], p[2], p[3]) for p in event if np.abs(p[0]) != 0]
+        cluster = fastjet.ClusterSequence(particles, jetdef)
+        sorted_jets = fastjet.sorted_by_pt(cluster.inclusive_jets(ptmin=10))
+        for jet in sorted_jets:
+            _calculate_jet_features(jet, q_chunk[i])
+        list_of_all_jets.append(_take_all_jets(sorted_jets))
+
+    return np.array(list_of_all_jets, dtype=np.float32)
+
+
+def cluster_jets(dataloaders, n_workers=None):
     """
     Update dataloaders with clustered jet information.
 
@@ -150,39 +205,30 @@ def cluster_jets(dataloaders):
 
         return np.array(jet_array)
 
-    for dataloader_name, data in dataloaders.items():
-        # print(f"----------------- Started working with {dataloader_name} -------------------")
+    import os
+    from multiprocessing import Pool
 
-        # Convert particles to Cartesian coordinates
+    if n_workers is None:
+        n_workers = os.cpu_count() or 1
+
+    for dataloader_name, data in dataloaders.items():
         cartesian = _convert_kinematics(data.part, data.event, data.mask)
         electron_momentum = _convert_electron_kinematics(data.event)
-        # print(cartesian)
         q = _calculate_q(cartesian, electron_momentum)
-        list_of_jets = []
-        list_of_all_jets = []
-        for i, event in enumerate(cartesian):
-            particles = [
-                fastjet.PseudoJet(p[0], p[1], p[2], p[3])
-                for p in event
-                if np.abs(p[0]) != 0
-            ]
 
-            # Cluster jets and sort by pt
-            cluster = fastjet.ClusterSequence(particles, jetdef)
-            sorted_jets = fastjet.sorted_by_pt(cluster.inclusive_jets(ptmin=10))
-            # Calculate jet features
-            for jet in sorted_jets:
-                _calculate_jet_features(jet, q[i])
+        n_events = cartesian.shape[0]
+        chunk_size = (n_events + n_workers - 1) // n_workers
+        chunks = [
+            (cartesian[i:i + chunk_size], q[i:i + chunk_size])
+            for i in range(0, n_events, chunk_size)
+        ]
 
-            # Take the leading jet's features
-            # leading_jet = _take_leading_jet(sorted_jets)
-            # list_of_jets.append(leading_jet)
-            all_jets = _take_all_jets(sorted_jets)
-            list_of_all_jets.append(all_jets)
-        # Store the jet features in the dataloader
-        # data.jet = np.array(list_of_jets, dtype=np.float32)
-        data.all_jets = np.array(list_of_all_jets, dtype=np.float32)
-        # print(f"----------------- Done working with {dataloader_name} -------------------")
+        print(f"[cluster_jets] {dataloader_name}: {n_events} events, {n_workers} workers", flush=True)
+
+        with Pool(processes=n_workers) as pool:
+            results = pool.map(_cluster_chunk, chunks)
+
+        data.all_jets = np.concatenate(results, axis=0).astype(np.float32)
 
 
 def plot_particles(flags, dataloaders, data_weights, version, num_part, nbins=10):
@@ -1355,7 +1401,7 @@ def plot_observable(flags, var, dataloaders, version):
         return ak.to_numpy(counts), bins
 
     # Determine weight name
-    weight_name = "closure_weights" if flags.blind else "weights"
+    weight_name = "closure_weights" if flags.blind else "weights1"
     if flags.blind:
         data_name = "Rapgap_closure"
     elif flags.reco:

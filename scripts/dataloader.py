@@ -18,12 +18,14 @@ class Dataset:
         pass_fiducial=False,
         pass_reco=False,
         preprocess=True,
+        global_start=0,
     ):
         self.rank = rank
         self.size = size
         self.base_path = base_path
         self.is_mc = is_mc
         self.nmax = nmax
+        self.global_start = global_start
         self.preprocess = preprocess
 
         # Preprocessing parameters
@@ -51,7 +53,8 @@ class Dataset:
         self.std_event = [0.97656405, 0.1895471, 0.14934653, 0.4191545, 1.734126]
 
         self.prepare_dataset(file_names, pass_fiducial, pass_reco)
-        self.normalize_weights(self.nmax if norm is None else norm)
+        batch_events = self.nmax - self.global_start
+        self.normalize_weights(batch_events if norm is None else norm)
 
     def normalize_weights(self, norm):
         # print("Total number of reco events {}".format(self.num_pass_reco))
@@ -105,20 +108,18 @@ class Dataset:
                     "reco_event_features"
                 ].shape[0]
 
-            # Sum of weighted events for collisions passing the reco cuts
+            # Sum of weighted events for collisions passing the reco cuts (within batch window)
+            reco_e_batch = h5.File(os.path.join(self.base_path, f), "r")[
+                "reco_event_features"
+            ][self.global_start : self.nmax]
             self.num_pass_reco += np.sum(
-                h5.File(os.path.join(self.base_path, f), "r")["reco_event_features"][
-                    : self.nmax, -2
-                ][
-                    h5.File(os.path.join(self.base_path, f), "r")[
-                        "reco_event_features"
-                    ][: self.nmax, -1]
-                    == 1
-                ]
+                reco_e_batch[:, -2][reco_e_batch[:, -1] == 1]
             )
+            del reco_e_batch
 
-            per_rank = (self.nmax + self.size - 1) // self.size  # ceiling division
-            start = self.rank * per_rank
+            batch_events = self.nmax - self.global_start
+            per_rank = (batch_events + self.size - 1) // self.size  # ceiling division
+            start = self.global_start + self.rank * per_rank
             end = min(start + per_rank, self.nmax)
 
             reco_p = h5.File(os.path.join(self.base_path, f), "r")[

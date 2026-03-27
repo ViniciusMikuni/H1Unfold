@@ -264,7 +264,41 @@ def get_sample_name(base_name, dataset, extension="_prep.h5"):
 
     dataset = "Eplus0607" if dataset == "ep" else "Eminus06"
     sample_name = f"{base_name}_{dataset}{sys_name}{extension}"
+
+    print(f"sample name: {sample_name}")
     return sample_name
+
+# Rapgap_Eplus0607_unfolded_niter_4.h5
+
+def get_sample_name_weights(dataset="ep", niter="4"):
+    """
+    Returns MC filenames for Rapgap and Djangoh in a dictionary usable by dataloaders.
+    Example return value:
+        {
+            "Rapgap":  "Rapgap_Eplus0607_prep.h5",
+            "Djangoh": "Djangoh_Eplus0607_prep.h5"
+        }
+    """
+
+    assert dataset in ["ep", "em"], (
+        "ERROR: Datasets must be 'ep' (positron) or 'em' (electron)."
+    )
+
+    # Map ep/em to dataset tag
+    dataset_tag = "Eplus0607" if dataset == "ep" else "Eminus06"
+    extension = "_unfolded_niter_"+str(niter)+".h5"
+    # Construct both filenames
+    rapgap = f"Rapgap_{dataset_tag}{extension}"
+    djangoh = f"Djangoh_{dataset_tag}{extension}"
+
+    print("MC sample names:")
+    print("  Rapgap  →", rapgap)
+    print("  Djangoh →", djangoh)
+
+    return {
+        "Rapgap": rapgap,
+        "Djangoh": djangoh
+    }
 
 
 def LoadJson(file_name, base_path="../JSON"):
@@ -870,17 +904,54 @@ def undo_standardizing(flags, dataloaders):
 #     return mc_file_names
 
 
+# def get_version(dataset, flags, opt):
+#     version = opt["NAME"]
+#     if "sys" in dataset:
+#         match = re.search(r"sys(\d+)", dataset)
+#         version += f"_sys{match.group(1)}"
+#     if "Djangoh" in dataset:
+#         # Djangoh used for model uncertainty
+#         version += "_sys_model"
+#     version += f"_{dataset}"
+
+#     # version += f"_{flags.dataset}"
+#     if flags.load_pretrain:
+#         version += "_pretrained"
+#     return version
+
 def get_version(dataset, flags, opt):
-    version = opt["NAME"]
+    """Generate version string for model loading"""
+    version = opt["NAME"]  # This should be "H1_May2025"
+    
+    # Extract dataset type (ep/em) from filename
+    if "Eplus" in dataset or "ep" in dataset.lower():
+        dataset_type = "ep"
+    elif "Eminus" in dataset or "em" in dataset.lower():
+        dataset_type = "em" 
+    else:
+        # Fallback - extract from filename
+        if "Eplus0607" in dataset:
+            dataset_type = "ep"
+        elif "Eminus06" in dataset:
+            dataset_type = "em"
+        else:
+            dataset_type = "ep"  # Default fallback
+    
+    # Handle systematic variations
     if "sys" in dataset:
         match = re.search(r"sys(\d+)", dataset)
-        version += f"_sys{match.group(1)}"
+        if match:
+            version += f"_sys{match.group(1)}"
+    
     if "Djangoh" in dataset:
-        # Djangoh used for model uncertainty
         version += "_sys_model"
-    version += f"_{flags.dataset}"
-    if flags.load_pretrain:
-        version += "_pretrained"
+    
+    # Add dataset type (ep/em)
+    version += f"_{dataset_type}"
+    
+    # if flags.load_pretrain:
+    #     version += "_pretrained"
+        
     return version
 
 
@@ -889,7 +960,7 @@ def evaluate_model(
 ):
     if version is None:
         version = get_version(dataset, flags, opt)
-
+    print(f"version: {version}")
     model_name = "{}/OmniFold_{}_iter{}_step2/checkpoint".format(
         flags.weights, version, flags.niter
     )
@@ -897,7 +968,7 @@ def evaluate_model(
         model_name = "{}/OmniFold_{}_iter{}_step2_strap{}/checkpoint".format(
             flags.weights, version, flags.niter, nboot
         )
-
+    print(f"model name: {model_name}")
     if hvd.rank() == 0:
         print("Loading model {}".format(model_name))
 
