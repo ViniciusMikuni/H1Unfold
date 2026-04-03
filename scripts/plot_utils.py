@@ -217,15 +217,20 @@ def cluster_jets(dataloaders, n_workers=None):
         q = _calculate_q(cartesian, electron_momentum)
 
         n_events = cartesian.shape[0]
-        chunk_size = (n_events + n_workers - 1) // n_workers
+        print(f"[cluster_jets] {dataloader_name}: {n_events} events, {n_workers} workers", flush=True)
+
+        if n_events == 0:
+            data.all_jets = np.zeros((0, 4, 10), dtype=np.float32)
+            continue
+
+        effective_workers = min(n_workers, n_events)
+        chunk_size = (n_events + effective_workers - 1) // effective_workers
         chunks = [
             (cartesian[i:i + chunk_size], q[i:i + chunk_size])
             for i in range(0, n_events, chunk_size)
         ]
 
-        print(f"[cluster_jets] {dataloader_name}: {n_events} events, {n_workers} workers", flush=True)
-
-        with Pool(processes=n_workers) as pool:
+        with Pool(processes=effective_workers) as pool:
             results = pool.map(_cluster_chunk, chunks)
 
         data.all_jets = np.concatenate(results, axis=0).astype(np.float32)
@@ -1144,6 +1149,10 @@ def cluster_breit(flags, dataloaders):
     jetdef = fastjet.JetDefinition(fastjet.kt_algorithm, 1.0)
 
     for dataloader_name, data in dataloaders.items():
+        if data.event.shape[0] == 0:
+            dataloaders[dataloader_name].all_jets_breit = np.zeros((0, 4, 8), dtype=np.float32)
+            continue
+
         electron_momentum = _convert_electron_kinematics(data.event)
         cartesian = _convert_kinematics(data.part, data.event, data.mask)
         boosted_vectors = boost_particles(cartesian, electron_momentum)

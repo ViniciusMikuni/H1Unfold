@@ -390,6 +390,7 @@ def HistRoutine(
     weights=None,
     uncertainty=None,
     stat_uncertainty=None,
+    show_stat_points=True,
 ):
     """
     Generate a histogram plot with optional ratio and uncertainties.
@@ -551,7 +552,7 @@ def HistRoutine(
     )
 
     ## draw data points at 1 with stat uncertainties on the bottom panel
-    if "data" in reference_name.lower():
+    if show_stat_points:
         ax1.errorbar(
             xaxis,
             np.ones_like(xaxis),
@@ -644,6 +645,7 @@ def HistRoutinePart(
     weights=None,
     uncertainty=None,
     stat_uncertainty=None,
+    show_stat_points=True,
 ):
     """
     Generate a histogram plot with optional ratio and uncertainties.
@@ -805,7 +807,7 @@ def HistRoutinePart(
     )
 
     ## draw data points at 1 with stat uncertainties on the bottom panel
-    if "data" in reference_name.lower():
+    if show_stat_points:
         ax1.errorbar(
             xaxis,
             np.ones_like(xaxis),

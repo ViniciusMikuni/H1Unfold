@@ -1,14 +1,22 @@
 """
 plot_from_batches.py
 
-Loads Rapgap and Djangoh batch h5 files one at a time and accumulates weighted
-histograms to avoid holding all events in memory simultaneously.
+Memory-efficient version of plot_part_from_file.py for EEC observables.
+Instead of loading all events at once, it reads multiple batch h5 files
+(e.g. Rapgap_Eplus0607_unfolded_4_centauro_boot_batch0000.h5, batch0001.h5, ...)
+and accumulates weighted histograms across them.
 
-Expected h5 keys per batch file:
-  jet_pt, jet_breit_pt, deltaphi, jet_tau10, zjet, zjet_breit  -- shape (n_events, n_jets)
-  mc_weights                                                     -- shape (n_events,)
-  weights_nominal                                                -- shape (n_events,)  [nominal unfolded]
-  weights1 .. weightsN                                           -- shape (n_events,)  [bootstrap]
+Systematics are calculated and applied exactly as in plot_part_from_file.py
+(plot_part_observable in plot_utils.py):
+  - nominal         = Rapgap   mc_weights * weights        (density)
+  - nominal_closure = Djangoh  mc_weights only             (density)
+  - For 'Rapgap' sys source : closure_weights, reference = nominal_closure
+  - For all other sys sources: weights,        reference = nominal
+  - Per-source uncertainty: (sys_hist / ref_hist - 1)^2
+  - Bootstrap stat uncertainty: std / mean over bootstrap replicas
+  - total_unc = sqrt( sum of squared uncertainties )
+
+Plot style uses utils.HistRoutinePart (same as plot_part_from_file.py).
 """
 
 import argparse
@@ -18,9 +26,6 @@ import gc
 
 import numpy as np
 import h5py as h5
-import matplotlib.pyplot as plt
-from matplotlib import gridspec
-from matplotlib.patches import Patch
 
 import utils
 import options
@@ -28,244 +33,105 @@ from utils import ObservableInfo
 
 utils.SetStyle()
 
-VAR_NAMES = [
-    "jet_pt",
-    "jet_breit_pt",
-    "deltaphi",
-    "jet_tau10",
-    "zjet",
-    "zjet_breit",
-]
-
-SYS_LIST_DEFAULT = ["sys0", "sys1", "sys5", "sys7", "sys11"]
+var_names = ['deltaphi', 'jet_pt', 'jet_tau10', 'zjet', 'zjet_breit']#, 'eec', 'theta']
 
 
 # ---------------------------------------------------------------------------
-# CLI
+# Batch file discovery
+# ---------------------------------------------------------------------------
+
+def get_batch_files(data_folder, period, niter, suffix,
+                    use_sys, sys_list=None, nominal='Rapgap',
+                    reco=False):
+    """
+    Return a dict mapping dataset label -> sorted list of batch h5 file paths.
+
+    File naming convention (example):
+      Rapgap_Eplus0607_unfolded_4_centauro_boot_batch0000.h5
+      Rapgap_Eplus0607_sys0_unfolded_4_centauro_boot_batch0000.h5
+      Djangoh_Eplus0607_unfolded_4_centauro_boot_batch0000.h5
+      data_Eplus0607_unfolded_4_centauro_reco_batch0000.h5  (reco mode, data only)
+    """
+    if sys_list is None:
+        sys_list = ['sys0', 'sys1', 'sys5', 'sys7', 'sys11']
+
+    mc_suffix = suffix.replace('_boot', '_reco_boot') if reco else suffix
+
+    def _glob(base_name):
+        pattern = os.path.join(
+            data_folder,
+            f'{base_name}_unfolded_{niter}_{mc_suffix}_batch*.h5'
+        )
+        files = sorted(glob.glob(pattern))
+        return files
+
+    batch_files = {
+        'Rapgap':  _glob(f'Rapgap_{period}'),
+        'Djangoh': _glob(f'Djangoh_{period}'),
+    }
+
+    if reco:
+        reco_data_suffix = suffix.replace('_boot', '') + '_reco'
+        data_pattern = os.path.join(
+            data_folder,
+            f'data_{period}_unfolded_{niter}_{reco_data_suffix}_batch*.h5'
+        )
+        batch_files['data'] = sorted(glob.glob(data_pattern))
+
+    if use_sys:
+        for sys in sys_list:
+            batch_files[sys] = _glob(f'{nominal}_{period}_{sys}')
+
+    return batch_files
+
+
+# ---------------------------------------------------------------------------
+# Argument parsing
 # ---------------------------------------------------------------------------
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
-        description="Plot unfolded observables from batch h5 files without loading all data at once."
+        description='Memory-efficient EEC plot from batch h5 files.'
     )
-    parser.add_argument(
-        "--data_folder",
-        default="/global/cfs/cdirs/m3246/H1/h5",
-        help="Directory containing the batch h5 files",
-    )
-    parser.add_argument(
-        "--plot_folder",
-        default="../plots",
-        help="Directory to write output PDF plots",
-    )
-    parser.add_argument(
-        "--niter", type=int, default=4, help="OmniFold iteration used in file names"
-    )
-    parser.add_argument(
-        "--period", default="Eplus0607", help="Data-taking period string in file names"
-    )
-    parser.add_argument(
-        "--nboot",
-        type=int,
-        default=49,
-        help="Number of bootstrap weight sets (weights1..weightsN) to use for stat uncertainty",
-    )
-    parser.add_argument(
-        "--nominal_weight",
-        default="weights_nominal",
-        help="Key to use as the nominal unfolded weight (default: weights_nominal)",
-    )
-    parser.add_argument(
-        "--sys",
-        action="store_true",
-        default=False,
-        help="Load systematic variation batch files and compute systematic uncertainties",
-    )
-    parser.add_argument(
-        "--sys_list",
-        nargs="+",
-        default=SYS_LIST_DEFAULT,
-        help="List of systematic labels to include (default: sys0 sys1 sys5 sys7 sys11)",
-    )
-    parser.add_argument(
-        "--blind",
-        action="store_true",
-        default=False,
-        help="Closure mode: plot closure_weights result vs RAPGAP truth instead of data",
-    )
-    parser.add_argument(
-        "--verbose", action="store_true", default=False
-    )
-    return parser.parse_args()
+    parser.add_argument('--data_folder', default='/pscratch/sd/v/vmikuni/H1v2/h5',
+                        help='Folder containing the batch h5 files')
+    parser.add_argument('--config', default='config_general.json',
+                        help='Basic config file containing general options')
+    parser.add_argument('--plot_folder', default='../plots',
+                        help='Folder to store plots')
+    parser.add_argument('--period', default='Eplus0607',
+                        help='Data-taking period string in file names')
+    parser.add_argument('--suffix', default='centauro_boot',
+                        help='Middle suffix in batch file names (e.g. centauro_boot)')
+    parser.add_argument('--reco', action='store_true', default=False,
+                        help='Plot reco level results')
+    parser.add_argument('--sys', action='store_true', default=False,
+                        help='Load systematic variations')
+    parser.add_argument('--blind', action='store_true', default=False,
+                        help='Show results based on closure instead of data')
+    parser.add_argument('--niter', type=int, default=4,
+                        help='OmniFold iteration to load')
+    parser.add_argument('--bootstrap', action='store_true', default=False,
+                        help='Compute stat uncertainty from bootstrap replicas in batch files')
+    parser.add_argument('--nboot', type=int, default=50,
+                        help='Number of bootstrap replicas (weights1..weightsN) in the files')
+    parser.add_argument('--eec', action='store_true', default=False,
+                        help='Use eec mask and E_wgt (EEC mode)')
+    parser.add_argument('--verbose', action='store_true', default=False,
+                        help='Increase print level')
+    flags = parser.parse_args()
+
+    if flags.blind and flags.reco:
+        raise ValueError('Unable to run blinded and reco modes at the same time')
+    return flags
 
 
 # ---------------------------------------------------------------------------
-# Histogram accumulation helpers
-# ---------------------------------------------------------------------------
-
-def _valid_mask(jet_pt):
-    """Return boolean mask of jets with pt > 0; shape matches jet_pt."""
-    return jet_pt > 0
-
-
-def accumulate_var_histograms(batch_files, var, binning, nominal_wkey, nboot, verbose):
-    """
-    Iterate over batch files and accumulate histogram counts without keeping
-    raw arrays in memory across iterations.
-
-    Parameters
-    ----------
-    batch_files : list of str
-    var : str
-        Observable key in the h5 file.
-    binning : 1-D array
-    nominal_wkey : str
-        Dataset key for the nominal unfolded weight (e.g. 'weights_nominal').
-    nboot : int
-        Number of bootstrap weight sets (weights1..weightsN). Pass 0 to skip.
-    verbose : bool
-
-    Returns
-    -------
-    counts_mc : (n_bins,)      mc_weights only
-    counts_unf : (n_bins,)     mc_weights * nominal_wkey
-    counts_boot : (nboot, n_bins)  mc_weights * weightsI, I = 1..nboot
-    counts_closure : (n_bins,) mc_weights * closure_weights (zeros if key absent)
-    """
-    n_bins = len(binning) - 1
-    counts_mc = np.zeros(n_bins)
-    counts_unf = np.zeros(n_bins)
-    counts_boot = np.zeros((nboot, n_bins))
-    counts_closure = np.zeros(n_bins)
-
-    for fpath in batch_files:
-        if verbose:
-            print(f"  reading {os.path.basename(fpath)}")
-        with h5.File(fpath, "r") as fh5:
-            values = fh5[var][:]
-            jet_pt = fh5["jet_pt"][:]
-            mc_w = fh5["mc_weights"][:]
-            nominal_w = fh5[nominal_wkey][:] if nominal_wkey in fh5 else None
-
-            valid = _valid_mask(jet_pt)
-            per_jet = values.ndim == 2
-
-            if per_jet:
-                flat_vals = values[valid]
-            else:
-                flat_vals = values
-
-            # --- MC (mc_weights only) ---
-            if per_jet:
-                w_mc = np.where(valid, mc_w[:, None], 0.0)[valid]
-            else:
-                w_mc = mc_w
-            counts_mc += np.histogram(flat_vals, bins=binning, weights=w_mc)[0]
-
-            # --- Unfolded (mc_weights * nominal_w) ---
-            if nominal_w is not None:
-                combined = mc_w * nominal_w
-                if per_jet:
-                    w_unf = np.where(valid, combined[:, None], 0.0)[valid]
-                else:
-                    w_unf = combined
-                counts_unf += np.histogram(flat_vals, bins=binning, weights=w_unf)[0]
-
-            # --- Bootstrap ---
-            for i in range(1, nboot + 1):
-                key = f"weights{i}"
-                if key not in fh5:
-                    continue
-                boot_w = fh5[key][:]
-                combined_b = mc_w * boot_w
-                if per_jet:
-                    w_b = np.where(valid, combined_b[:, None], 0.0)[valid]
-                else:
-                    w_b = combined_b
-                counts_boot[i - 1] += np.histogram(flat_vals, bins=binning, weights=w_b)[0]
-
-            # --- Closure (mc_weights * closure_weights) ---
-            if "closure_weights" in fh5:
-                closure_w = fh5["closure_weights"][:]
-                combined_c = mc_w * closure_w
-                if per_jet:
-                    w_c = np.where(valid, combined_c[:, None], 0.0)[valid]
-                else:
-                    w_c = combined_c
-                counts_closure += np.histogram(flat_vals, bins=binning, weights=w_c)[0]
-
-        del values, jet_pt, mc_w, valid
-        gc.collect()
-
-    return counts_mc, counts_unf, counts_boot, counts_closure
-
-
-def accumulate_sys_histogram(batch_files, var, binning, nominal_wkey, verbose):
-    """
-    Accumulate mc_weights * nominal_wkey histogram for a systematic variation.
-    Returns counts_unf of shape (n_bins,).
-    """
-    n_bins = len(binning) - 1
-    counts_unf = np.zeros(n_bins)
-
-    for fpath in batch_files:
-        if verbose:
-            print(f"  reading {os.path.basename(fpath)}")
-        with h5.File(fpath, "r") as fh5:
-            if var not in fh5 or nominal_wkey not in fh5:
-                continue
-            values = fh5[var][:]
-            jet_pt = fh5["jet_pt"][:]
-            mc_w = fh5["mc_weights"][:]
-            nominal_w = fh5[nominal_wkey][:]
-
-            valid = _valid_mask(jet_pt)
-            per_jet = values.ndim == 2
-
-            combined = mc_w * nominal_w
-            if per_jet:
-                flat_vals = values[valid]
-                w_unf = np.where(valid, combined[:, None], 0.0)[valid]
-            else:
-                flat_vals = values
-                w_unf = combined
-            counts_unf += np.histogram(flat_vals, bins=binning, weights=w_unf)[0]
-
-        del values, jet_pt, mc_w, valid
-        gc.collect()
-
-    return counts_unf
-
-
-# ---------------------------------------------------------------------------
-# Uncertainty helpers
-# ---------------------------------------------------------------------------
-
-def bootstrap_stat_unc(counts_boot, binning):
-    """
-    Compute relative statistical uncertainty per bin as std/mean over bootstrap
-    replicas. Returns array of shape (n_bins,) with values in [0, inf).
-    """
-    mean = np.mean(counts_boot, axis=0)
-    std = np.std(counts_boot, axis=0)
-    return np.where(mean > 0, std / mean, 0.0)
-
-
-def systematic_unc(sys_hist, ref_hist):
-    """
-    Fractional systematic uncertainty from one source: |sys/ref - 1|.
-    Returns array of shape (n_bins,).
-    """
-    safe_ref = np.where(ref_hist > 0, ref_hist, np.nan)
-    return np.abs(np.nan_to_num(sys_hist / safe_ref, nan=1.0) - 1.0)
-
-
-# ---------------------------------------------------------------------------
-# Normalise to density
+# Normalisation helper
 # ---------------------------------------------------------------------------
 
 def to_density(counts, binning):
-    """Normalise counts to unit-area density; returns copy."""
+    """Normalise raw counts to unit-area density histogram."""
     bin_widths = np.diff(binning)
     total = np.sum(counts * bin_widths)
     if total <= 0:
@@ -274,236 +140,456 @@ def to_density(counts, binning):
 
 
 # ---------------------------------------------------------------------------
-# Plotting
+# Per-file histogram accumulation helpers
 # ---------------------------------------------------------------------------
 
-def plot_var(var, info, rapgap_mc, rapgap_unf, djangoh_mc,
-             stat_unc, plot_folder, version, total_unc=None, blind=False):
+def _accumulate_eec_file(fh5, binning, weight_keys, include_E_wgt):
     """
-    Build a main + ratio panel plot for one observable and save to PDF.
+    Accumulate EEC histograms from one open h5 file (read fully).
 
-    Parameters
-    ----------
-    var : str
-    info : ObservableInfo
-    rapgap_mc   : density-normalised counts (n_bins,) -- RAPGAP MC only
-    rapgap_unf  : density-normalised counts (n_bins,) -- RAPGAP unfolded (or closure)
-    djangoh_mc  : density-normalised counts (n_bins,) -- DJANGOH MC only
-    stat_unc    : relative stat uncertainty per bin (n_bins,), from bootstrap
-    plot_folder : str
-    version     : str
-    total_unc   : relative total uncertainty per bin (n_bins,), stat + sys combined.
-                  If None, only stat_unc is shown.
-    blind       : if True, label the unfolded points as the closure result
+    weight_keys : list of (label, h5_key_or_None)
+        If h5_key_or_None is not None: weight = mc_weights * fh5[h5_key]
+        If h5_key_or_None is None:     weight = mc_weights only
+    include_E_wgt : bool
+        Multiply pair weights by E_wgt (for plot feed_dict, not systematics).
+
+    Returns dict label -> raw count array of shape (n_bins,).
     """
-    data_name = "Rapgap_closure" if blind else "Data_unfolded"
+    n_bins = len(binning) - 1
+    out = {lbl: np.zeros(n_bins) for lbl, _ in weight_keys}
+
+    eec_vals = fh5['eec'][:]      # (N, P)
+    E_wgt_vals = fh5['E_wgt'][:]  # (N, P)
+    mc_w = fh5['mc_weights'][:]   # (N,)
+    valid = eec_vals != -100      # (N, P)
+
+    for lbl, wk in weight_keys:
+        # 'weights' is absent in bootstrap-mode batch files; fall back to 'weights_nominal'
+        if wk == 'weights' and wk not in fh5 and 'weights_nominal' in fh5:
+            wk = 'weights_nominal'
+        if wk is not None and wk in fh5:
+            event_w = mc_w * fh5[wk][:]
+        else:
+            event_w = mc_w.copy()
+
+        if include_E_wgt:
+            pair_w = event_w[:, None] * E_wgt_vals
+        else:
+            pair_w = np.broadcast_to(event_w[:, None], eec_vals.shape).copy()
+
+        out[lbl] += np.histogram(eec_vals[valid], bins=binning,
+                                 weights=pair_w[valid])[0]
+
+    return out
+
+
+def _accumulate_jet_file(fh5, var, binning, weight_keys):
+    """
+    Accumulate jet-observable histograms from one open h5 file (read fully).
+    Same interface as _accumulate_eec_file (minus include_E_wgt).
+    """
+    n_bins = len(binning) - 1
+    out = {lbl: np.zeros(n_bins) for lbl, _ in weight_keys}
+
+    values = fh5[var][:]        # (N, J) or (N,)
+    jet_pt = fh5['jet_pt'][:]   # (N, J)
+    mc_w = fh5['mc_weights'][:] # (N,)
+
+    per_jet = values.ndim == 2
+    if per_jet:
+        valid = jet_pt > 0
+        flat_vals = values[valid]
+    else:
+        flat_vals = values
+
+    for lbl, wk in weight_keys:
+        # 'weights' is absent in bootstrap-mode batch files; fall back to 'weights_nominal'
+        if wk == 'weights' and wk not in fh5 and 'weights_nominal' in fh5:
+            wk = 'weights_nominal'
+        if wk is not None and wk in fh5:
+            event_w = mc_w * fh5[wk][:]
+        else:
+            event_w = mc_w.copy()
+
+        if per_jet:
+            flat_w = np.broadcast_to(event_w[:, None], values.shape).copy()[valid]
+        else:
+            flat_w = event_w
+
+        out[lbl] += np.histogram(flat_vals, bins=binning, weights=flat_w)[0]
+
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Multi-file accumulation (iterates over batch file list)
+# ---------------------------------------------------------------------------
+
+def accumulate_histograms(file_list, var, binning, weight_keys,
+                          eec_mode=False, include_E_wgt=False, verbose=False):
+    """
+    Iterate over a list of batch h5 files and accumulate weighted histograms.
+
+    Returns dict: label -> raw count array of shape (n_bins,)
+    """
+    n_bins = len(binning) - 1
+    totals = {lbl: np.zeros(n_bins) for lbl, _ in weight_keys}
+
+    for fpath in file_list:
+        with h5.File(fpath, 'r') as fh5:
+            n_events = fh5['mc_weights'].shape[0]
+            if verbose:
+                print(f'  {os.path.basename(fpath)}  ({n_events} events)')
+            if eec_mode:
+                batch = _accumulate_eec_file(fh5, binning, weight_keys, include_E_wgt)
+            else:
+                batch = _accumulate_jet_file(fh5, var, binning, weight_keys)
+        for lbl in totals:
+            totals[lbl] += batch[lbl]
+        gc.collect()
+
+    return totals
+
+
+def accumulate_bootstrap_histograms(file_list, var, binning, nboot,
+                                    eec_mode=False, include_E_wgt=False,
+                                    verbose=False):
+    """
+    Accumulate one histogram per bootstrap replica (weights1 .. weightsN)
+    across all batch files.
+
+    Returns array of shape (nboot, n_bins) with raw counts.
+    """
+    n_bins = len(binning) - 1
+    boot_counts = np.zeros((nboot, n_bins))
+
+    for fpath in file_list:
+        with h5.File(fpath, 'r') as fh5:
+            n_events = fh5['mc_weights'].shape[0]
+            if verbose:
+                print(f'  [bootstrap] {os.path.basename(fpath)}  ({n_events} events)')
+            weight_keys = [
+                (str(i), f'weights{i}')
+                for i in range(1, nboot)
+                if f'weights{i}' in fh5
+            ]
+            if eec_mode:
+                batch = _accumulate_eec_file(fh5, binning, weight_keys, include_E_wgt)
+            else:
+                batch = _accumulate_jet_file(fh5, var, binning, weight_keys)
+
+        for i in range(1, nboot):
+            if str(i) in batch:
+                boot_counts[i - 1] += batch[str(i)]
+        gc.collect()
+
+    return boot_counts
+
+
+# ---------------------------------------------------------------------------
+# Per-variable plot function
+# ---------------------------------------------------------------------------
+
+def plot_observable(flags, var, batch_files, version):
+    info = ObservableInfo(var)
     binning = info.binning
+    bin_widths = np.diff(binning)
     bin_centers = 0.5 * (binning[:-1] + binning[1:])
-    unc_band = total_unc if total_unc is not None else stat_unc
 
-    fig = plt.figure(figsize=(12, 12))
-    gs = gridspec.GridSpec(2, 1, height_ratios=[3, 1])
-    gs.update(wspace=0.025, hspace=0.1)
-    ax0 = plt.subplot(gs[0])
-    ax1 = plt.subplot(gs[1], sharex=ax0)
-    ax0.xaxis.set_visible(False)
+    eec_mode = flags.eec and var in ('eec', 'theta')
 
-    # ---- main panel ----
-    ax0.stairs(
-        rapgap_mc, binning,
-        color=options.colors["Rapgap"],
-        fill=True, alpha=0.2,
-        label=options.name_translate["Rapgap"],
+    weight_name = 'closure_weights' if flags.blind else 'weights'
+    if flags.blind:
+        data_name = 'Rapgap_closure'
+    elif flags.reco:
+        data_name = 'Rapgap_unfolded'
+    else:
+        data_name = 'Data_unfolded'
+
+    rapgap_files  = batch_files['Rapgap']
+    djangoh_files = batch_files['Djangoh']
+
+    # ------------------------------------------------------------------
+    # Debug: summarise input files and event counts
+    # ------------------------------------------------------------------
+    if flags.verbose:
+        print(f'\n=== {var} ===')
+        for label, flist in batch_files.items():
+            if not flist:
+                print(f'  {label}: no files found')
+                continue
+            total_events = 0
+            for fpath in flist:
+                with h5.File(fpath, 'r') as fh5:
+                    count_key = 'mc_weights' if label != 'data' else 'jet_pt'
+                    total_events += fh5[count_key].shape[0]
+            print(f'  {label}: {len(flist)} file(s), {total_events} events total')
+
+    # ------------------------------------------------------------------
+    # Accumulate raw histograms
+    # ------------------------------------------------------------------
+
+    # Rapgap: always collect mc, weights, and closure_weights separately
+    # so we can replicate plot_part_observable's systematics exactly.
+    if flags.verbose:
+        print(f'Accumulating Rapgap ({var}) ...')
+    rapgap_sys_keys = [
+        ('mc',      None),
+        ('weights', 'weights'),
+        ('closure', 'closure_weights'),
+    ]
+    rapgap_sys = accumulate_histograms(
+        rapgap_files, var, binning, rapgap_sys_keys,
+        eec_mode=eec_mode, include_E_wgt=False, verbose=flags.verbose,
     )
-    ax0.stairs(
-        djangoh_mc, binning,
-        color=options.colors["Djangoh"],
-        linewidth=2,
-        label=options.name_translate["Djangoh"],
-    )
-    ax0.errorbar(
-        bin_centers, rapgap_unf,
-        yerr=[rapgap_unf * stat_unc, rapgap_unf * stat_unc],
-        fmt="o", color=options.colors[data_name],
-        markersize=6,
-        label=options.name_translate[data_name],
-    )
-    # Total uncertainty band on main panel
-    ax0.fill_between(
-        bin_centers,
-        rapgap_unf * (1 - unc_band),
-        rapgap_unf * (1 + unc_band),
-        alpha=0.2, color=options.colors[data_name],
-        step=None,
-    )
 
-    ylabel = r"$1/\sigma$ $\mathrm{d}\sigma/\mathrm{d}$%s" % info.name
-    ax0.set_ylabel(ylabel)
-    if info.logy:
-        ax0.set_yscale("log")
-    if info.logx:
-        ax0.set_xscale("log")
-    ax0.set_ylim(info.ylow, info.yhigh)
-    ax0.legend(loc="upper left")
-    utils.FormatFig(info.name, ylabel, ax0)
-
-    # ---- ratio panel: MC / unfolded ----
-    ref = rapgap_unf
-    safe_ref = np.where(ref > 0, ref, np.nan)
-
-    ratio_rapgap  = rapgap_mc  / safe_ref
-    ratio_djangoh = djangoh_mc / safe_ref
-
-    ax1.stairs(ratio_rapgap,  binning, color=options.colors["Rapgap"],  linewidth=2)
-    ax1.stairs(ratio_djangoh, binning, color=options.colors["Djangoh"], linewidth=2)
-
-    # Total uncertainty band around 1
-    for ibin in range(len(binning) - 1):
-        xlow, xup = binning[ibin], binning[ibin + 1]
-        unc = unc_band[ibin]
-        ax1.fill_between(
-            [xlow, xup], 1.0 - unc, 1.0 + unc,
-            alpha=0.15, color="black",
+    # For the plot feed_dict, include E_wgt in EEC mode
+    if eec_mode:
+        rapgap_plot_keys = [
+            ('mc',       None),
+            ('unfolded', weight_name),
+        ]
+        rapgap_plot = accumulate_histograms(
+            rapgap_files, var, binning, rapgap_plot_keys,
+            eec_mode=True, include_E_wgt=True, verbose=flags.verbose,
         )
-        ax1.bar(
-            (xlow + xup) / 2, 2 * unc, width=(xup - xlow),
-            bottom=1.0 - unc, hatch="//",
-            color="none", edgecolor="grey",
+    else:
+        rapgap_plot = {
+            'mc':       rapgap_sys['mc'],
+            'unfolded': rapgap_sys['closure'] if flags.blind else rapgap_sys['weights'],
+        }
+
+    # Djangoh: mc only (for nominal_closure) + weights (for model uncertainty sys)
+    if flags.verbose:
+        print(f'Accumulating Djangoh ({var}) ...')
+    djangoh_sys = accumulate_histograms(
+        djangoh_files, var, binning, [('mc', None), ('weights', 'weights')],
+        eec_mode=eec_mode, include_E_wgt=False, verbose=flags.verbose,
+    )
+    if eec_mode:
+        djangoh_plot = accumulate_histograms(
+            djangoh_files, var, binning, [('mc', None)],
+            eec_mode=True, include_E_wgt=True, verbose=flags.verbose,
+        )
+    else:
+        djangoh_plot = djangoh_sys
+
+    # Systematic variation files
+    sys_raw = {}
+    if flags.sys:
+        for sys_label, sfiles in batch_files.items():
+            if sys_label in ('Rapgap', 'Djangoh', 'data'):
+                continue
+            if flags.verbose:
+                print(f'Accumulating {sys_label} ({var}) ...')
+            # In reco mode use mc_weights only (unit unfolded weights),
+            # matching plot_part_observable's `if flags.reco: sys_weights = np.ones_like(...)`
+            sys_weight_key = None if flags.reco else 'weights'
+            res = accumulate_histograms(
+                sfiles, var, binning, [('weights', sys_weight_key)],
+                eec_mode=eec_mode, include_E_wgt=False, verbose=flags.verbose,
+            )
+            sys_raw[sys_label] = res['weights']
+
+    # Reco data raw counts (for stat uncertainty)
+    data_raw_counts = None
+    if flags.reco and 'data' in batch_files:
+        if flags.verbose:
+            print(f'Accumulating data counts ({var}) ...')
+        n_bins = len(binning) - 1
+        data_raw_counts = np.zeros(n_bins)
+        for fpath in batch_files['data']:
+            with h5.File(fpath, 'r') as fh5:
+                n_events = fh5['jet_pt'].shape[0]
+                if flags.verbose:
+                    print(f'  {os.path.basename(fpath)}  ({n_events} events)')
+                if eec_mode:
+                    eec_b = fh5['eec'][:]
+                    valid = eec_b != -100
+                    data_raw_counts += np.histogram(eec_b[valid], bins=binning)[0]
+                else:
+                    vals = fh5[var][:]
+                    jpt = fh5['jet_pt'][:]
+                    valid = jpt > 0
+                    flat = vals[valid] if vals.ndim == 2 else vals
+                    data_raw_counts += np.histogram(flat, bins=binning)[0]
+            gc.collect()
+
+    # Bootstrap (weights1..weightsN stored inside the same Rapgap batch files)
+    boot_raw = None
+    if flags.bootstrap:
+        if flags.verbose:
+            print(f'Accumulating bootstrap ({var}) ...')
+        boot_raw = accumulate_bootstrap_histograms(
+            rapgap_files, var, binning, flags.nboot,
+            eec_mode=eec_mode, include_E_wgt=False, verbose=flags.verbose,
         )
 
-    ax1.errorbar(
-        bin_centers, np.ones_like(bin_centers),
-        yerr=stat_unc,
-        fmt="o", color=options.colors[data_name], markersize=6,
+    # ------------------------------------------------------------------
+    # Density-normalise for systematics
+    # ------------------------------------------------------------------
+    # In reco mode, nominal uses mc_weights only (no unfolded reweighting)
+    nominal         = to_density(rapgap_sys['mc'] if flags.reco else rapgap_sys['weights'], binning)
+    nominal_closure = to_density(djangoh_sys['mc'], binning)
+
+    # ------------------------------------------------------------------
+    # Systematic uncertainty -- EXACT same formula as plot_part_observable
+    # ------------------------------------------------------------------
+    total_unc = None
+    data_stat_unc = np.zeros(len(binning) - 1)
+
+    if flags.sys:
+        total_unc = np.zeros(len(binning) - 1)
+
+        all_sources = list(batch_files.keys())
+        for sys_label in all_sources:
+            if flags.reco and sys_label in ('Rapgap', 'Djangoh', 'data'):
+                continue
+
+            print(sys_label)
+
+            if sys_label == 'Rapgap':
+                sys_hist = to_density(
+                    rapgap_sys['mc'] if flags.reco else rapgap_sys['closure'],
+                    binning
+                )
+                ref_hist = nominal_closure
+
+            elif sys_label == 'Djangoh':
+                sys_hist = to_density(djangoh_sys['weights'], binning)
+                ref_hist = nominal
+
+            elif sys_label in sys_raw:
+                sys_hist = to_density(sys_raw[sys_label], binning)
+                ref_hist = nominal
+
+            else:
+                continue
+
+            unc = (np.ma.divide(sys_hist, ref_hist).filled(1) - 1) ** 2
+            total_unc += unc
+            print(f'{sys_label}: max uncertainty = {np.max(np.sqrt(unc)):.4f}')
+
+        # Statistical uncertainties
+        if flags.reco:
+            unc = 1.0 / (1e-9 + data_raw_counts)
+            total_unc += unc
+            data_stat_unc = np.sqrt(unc)
+            print(f'stat: max uncertainty = {np.max(data_stat_unc):.4f}')
+        else:
+            if flags.bootstrap and boot_raw is not None:
+                print('Running over bootstrap entries')
+                valid_boots = [
+                    boot_raw[i - 1]
+                    for i in range(1, flags.nboot)
+                    if np.any(boot_raw[i - 1] > 0)
+                ]
+                if valid_boots:
+                    boot_densities = np.array(
+                        [to_density(b, binning) for b in valid_boots]
+                    )
+                    stat_unc = np.ma.divide(
+                        np.std(boot_densities, axis=0),
+                        np.mean(boot_densities, axis=0),
+                    ).filled(0)
+                    data_stat_unc = stat_unc
+                    total_unc += stat_unc ** 2
+                    print(f'bootstrap: max uncertainty = {np.max(stat_unc):.4f}')
+
+        total_unc = np.sqrt(total_unc)
+
+    # ------------------------------------------------------------------
+    # Build feed_dict for utils.HistRoutine / HistRoutinePart
+    #
+    # Bin-centers trick: pass bin_centers as "data" with
+    # weight = density * bin_width, so np.histogram(..., density=True)
+    # inside HistRoutinePart recovers the pre-computed density exactly.
+    # ------------------------------------------------------------------
+    rapgap_mc_density  = to_density(rapgap_plot['mc'],      binning)
+    rapgap_unf_density = to_density(rapgap_plot['unfolded'], binning)
+    djangoh_mc_density = to_density(djangoh_plot['mc'],      binning)
+
+    feed_dict = {
+        data_name: bin_centers,
+        'Rapgap':  bin_centers,
+        'Djangoh': bin_centers,
+    }
+    weights_dict = {
+        data_name: rapgap_unf_density * bin_widths,
+        'Rapgap':  rapgap_mc_density  * bin_widths,
+        'Djangoh': djangoh_mc_density * bin_widths,
+    }
+
+    if flags.reco and data_raw_counts is not None:
+        data_density = to_density(data_raw_counts, binning)
+        feed_dict['data']    = bin_centers
+        weights_dict['data'] = data_density * bin_widths
+
+    ylabel = (
+        r'1/N $\mathrm{dN}/\mathrm{d}$%s' % info.name
+        if flags.reco
+        else r'$1/\sigma$ $\mathrm{d}\sigma/\mathrm{d}$%s' % info.name
     )
 
-    ax1.axhline(1.0, color="black", linestyle="--", linewidth=1)
-    ax1.set_ylim(0.5, 1.5)
-    ax1.set_ylabel("MC / Unfolded")
-    ax1.set_xlabel(info.name)
-    if info.logx:
-        ax1.set_xscale("log")
+    hist_routine = utils.HistRoutinePart if eec_mode else utils.HistRoutine
+    fig, ax = hist_routine(
+        feed_dict,
+        xlabel=info.name,
+        ylabel=ylabel,
+        weights=weights_dict,
+        logy=info.logy,
+        logx=info.logx,
+        binning=binning,
+        reference_name='data' if flags.reco else data_name,
+        label_loc='upper left',
+        uncertainty=total_unc,
+        stat_uncertainty=data_stat_unc,
+        show_stat_points=not flags.blind,
+    )
 
-    os.makedirs(plot_folder, exist_ok=True)
-    suffix = "closure" if blind else "unfolded"
-    out_path = os.path.join(plot_folder, f"{version}_{var}_{suffix}.pdf")
-    fig.savefig(out_path, bbox_inches="tight")
-    plt.close(fig)
-    print(f"Saved {out_path}")
+    ax.set_ylim(info.ylow, info.yhigh)
+    os.makedirs(flags.plot_folder, exist_ok=True)
+    if flags.blind:
+        plot_tag = 'closure'
+    elif flags.reco:
+        plot_tag = 'reco'
+    else:
+        plot_tag = 'unfolded'
+    fig.savefig(os.path.join(flags.plot_folder, f'{version}_{var}_{plot_tag}.pdf'))
 
 
 # ---------------------------------------------------------------------------
-# Main
+# Entry point
 # ---------------------------------------------------------------------------
 
 def main():
     flags = parse_arguments()
+    opt = utils.LoadJson(flags.config)
 
-    replace_string = f"unfolded_{flags.niter}_centauro_boot"
-    rapgap_pattern  = os.path.join(
-        flags.data_folder, f"Rapgap_{flags.period}_{replace_string}_batch*.h5"
+    batch_files = get_batch_files(
+        data_folder=flags.data_folder,
+        period=flags.period,
+        niter=flags.niter,
+        suffix=flags.suffix,
+        use_sys=flags.sys,
+        reco=flags.reco,
     )
-    djangoh_pattern = os.path.join(
-        flags.data_folder, f"Djangoh_{flags.period}_{replace_string}_batch*.h5"
-    )
 
-    rapgap_files  = sorted(glob.glob(rapgap_pattern))
-    djangoh_files = sorted(glob.glob(djangoh_pattern))
+    for label, files in batch_files.items():
+        if not files:
+            print(f'WARNING: no batch files found for {label}, skipping')
+        else:
+            print(f'{label}: {len(files)} file(s)')
+            for f in files:
+                print(f'  {os.path.basename(f)}')
 
-    if not rapgap_files:
-        raise FileNotFoundError(f"No Rapgap batch files found: {rapgap_pattern}")
-    if not djangoh_files:
-        raise FileNotFoundError(f"No Djangoh batch files found: {djangoh_pattern}")
+    version = opt['NAME']
 
-    print(f"Found {len(rapgap_files)} Rapgap  batch files")
-    print(f"Found {len(djangoh_files)} Djangoh batch files")
-
-    # Collect systematic batch file lists once
-    sys_files = {}
-    if flags.sys:
-        for sys_label in flags.sys_list:
-            pattern = os.path.join(
-                flags.data_folder,
-                f"Rapgap_{flags.period}_{sys_label}_{replace_string}_batch*.h5",
-            )
-            files = sorted(glob.glob(pattern))
-            if not files:
-                print(f"WARNING: no batch files found for {sys_label} ({pattern}), skipping")
-            else:
-                print(f"Found {len(files)} batch files for {sys_label}")
-                sys_files[sys_label] = files
-
-    version = f"Rapgap_{flags.period}"
-
-    for var in VAR_NAMES:
-        info = ObservableInfo(var)
-        binning = info.binning
-        print(f"\n--- {var} ---")
-
-        print("  Rapgap ...")
-        rapgap_mc_raw, rapgap_unf_raw, rapgap_boot_raw, rapgap_closure_raw = accumulate_var_histograms(
-            rapgap_files, var, binning,
-            flags.nominal_weight, flags.nboot, flags.verbose,
-        )
-
-        print("  Djangoh ...")
-        djangoh_mc_raw, _, _, _ = accumulate_var_histograms(
-            djangoh_files, var, binning,
-            flags.nominal_weight, 0, flags.verbose,
-        )
-
-        # Normalise to density
-        rapgap_mc      = to_density(rapgap_mc_raw,      binning)
-        rapgap_unf     = to_density(rapgap_unf_raw,     binning)
-        rapgap_closure = to_density(rapgap_closure_raw, binning)
-        djangoh_mc     = to_density(djangoh_mc_raw,     binning)
-
-        # Statistical uncertainty from bootstrap replicas
-        stat_unc = bootstrap_stat_unc(rapgap_boot_raw, binning)
-
-        # Systematic uncertainties
-        total_unc = None
-        if flags.sys:
-            total_unc_sq = stat_unc ** 2
-
-            # Model uncertainty: Rapgap closure vs Djangoh MC (matches plot_from_file)
-            has_closure = np.any(rapgap_closure > 0)
-            if not has_closure:
-                print("  WARNING: no closure_weights found in Rapgap batch files; skipping model uncertainty")
-            else:
-                model_unc = systematic_unc(rapgap_closure, djangoh_mc)
-                total_unc_sq += model_unc ** 2
-                print(f"  model: max unc = {np.max(model_unc):.4f}")
-
-            # Each systematic variation
-            for sys_label, sfiles in sys_files.items():
-                print(f"  {sys_label} ...")
-                sys_raw = accumulate_sys_histogram(
-                    sfiles, var, binning, flags.nominal_weight, flags.verbose
-                )
-                sys_hist = to_density(sys_raw, binning)
-                unc = systematic_unc(sys_hist, rapgap_unf)
-                total_unc_sq += unc ** 2
-                print(f"  {sys_label}: max unc = {np.max(unc):.4f}")
-                del sys_raw, sys_hist
-                gc.collect()
-
-            total_unc = np.sqrt(total_unc_sq)
-            print(f"  total: max unc = {np.max(total_unc):.4f}")
-
-        plot_ref = rapgap_closure if flags.blind else rapgap_unf
-        plot_var(
-            var, info,
-            rapgap_mc, plot_ref, djangoh_mc,
-            stat_unc,
-            flags.plot_folder, version,
-            total_unc=total_unc,
-            blind=flags.blind,
-        )
-
-        del rapgap_mc_raw, rapgap_unf_raw, rapgap_boot_raw, rapgap_closure_raw, djangoh_mc_raw
-        gc.collect()
+    for var in var_names:
+        if 'weight' in var:
+            continue
+        plot_observable(flags, var, batch_files, version)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
