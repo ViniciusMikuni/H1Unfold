@@ -78,9 +78,8 @@ After the unfolding is done, you can run the evaluation code to load the trained
 
 ```bash
 python evaluate.py [--dataset ep/em] [--niter I] [--load_pretrain] [--file Rapgap] [--bootstrap]
-
-
-## Saving unfolded weights to batch files
+```
+### Saving unfolded weights to batch files
 
 `save_unfolded_weights.py` reads a pre-evaluated weights file (produced by `evaluate.py`), clusters jets, computes observables, and writes the results to per-batch HDF5 files. Each MPI rank processes one independent batch of events in parallel, so the script scales to large datasets without loading everything into memory at once.
 
@@ -92,9 +91,9 @@ and contains datasets: `jet_pt`, `jet_breit_pt`, `deltaphi`, `jet_tau10`, `zjet`
 
 Start by initiating an interactive SLURM session:
 ```bash
-
-```
 salloc -C cpu -q interactive -t 240 -N 4 -A m3246 --image=vmikuni/tensorflow:ngc-23.12-tf2-v1 --cpus-per-task=64 --ntasks=16
+```
+Then,
 ```bash
 srun --mpi=pmi2 shifter python save_unfolded_weights.py \
     --niter 4 \
