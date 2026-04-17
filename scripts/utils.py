@@ -69,13 +69,11 @@ particle_names = {
 
 observable_names = {
     "jet_pt": r"$p_{T}^{jet}$ [GeV]",
-    # 'jet_breit_pt': r'$p_{T}^{jet}$ [GeV] Breit frame',
-    "jet_breit_pt": r"$p_{T}^{jet}$ [GeV]",
+    'jet_breit_pt': r'$p_{T}^{jet}$ [GeV] Breit frame',
     "deltaphi": r"$\Delta\phi^{jet}$ [rad]",
     "jet_tau10": r"$\mathrm{ln}(\lambda_1^1)$",
     "zjet": r"$z^{jet}$",
-    # 'zjet_breit':r'$z^{jet}$ Breit frame'
-    "zjet_breit": r"$z^{jet}$ ",
+    'zjet_breit':r'$z^{jet}$ Breit frame'
 }
 
 dedicated_binning = {
