@@ -80,7 +80,83 @@ After the unfolding is done, you can run the evaluation code to load the trained
 python evaluate.py [--dataset ep/em] [--niter I] [--load_pretrain] [--file Rapgap] [--bootstrap]
 
 
-## Plotting
+## Saving unfolded weights to batch files
+
+`save_unfolded_weights.py` reads a pre-evaluated weights file (produced by `evaluate.py`), clusters jets, computes observables, and writes the results to per-batch HDF5 files. Each MPI rank processes one independent batch of events in parallel, so the script scales to large datasets without loading everything into memory at once.
+
+Each output file is named:
+```
+<base>_unfolded_<niter>[_reco][_boot]_batch<NNNN>.h5
+```
+and contains datasets: `jet_pt`, `jet_breit_pt`, `deltaphi`, `jet_tau10`, `zjet`, `zjet_breit`, plus `weights_nominal`, `weights<i>` (bootstrap), `mc_weights`, and `closure_weights` for MC files.
+
+Start by initiating an interactive SLURM session:
+```bash
+
+```
+salloc -C cpu -q interactive -t 240 -N 4 -A m3246 --image=vmikuni/tensorflow:ngc-23.12-tf2-v1 --cpus-per-task=64 --ntasks=16
+```bash
+srun --mpi=pmi2 shifter python save_unfolded_weights.py \
+    --niter 4 \
+    --load_pretrain \
+    --file Rapgap_Eplus0607_prep.h5 \
+    --nmax 18000000 \
+    --batch_size 30000 \
+    --data_folder /path/to/h5 \
+    --pre_weights_file Rapgap_Eplus0607_unfolded_niter_4.h5 \
+    --bootstrap \
+    --nboot 50
+```
+Key arguments:
+
+| Argument | Default | Description |
+|---|---|---|
+| `--data_folder` | `/pscratch/sd/v/vmikuni/H1v2/h5` | Folder containing input and output h5 files |
+| `--weights` | `../weights` | Folder with trained model weights |
+| `--file` | `Rapgap_Eplus0607_prep.h5` | Input MC (or data) file |
+| `--pre_weights_file` | `None` | HDF5 file with pre-evaluated unfolded weights from `evaluate.py` |
+| `--niter` | `4` | OmniFold iteration to load |
+| `--nmax` | `10000000` | Total number of events to process |
+| `--batch_size` | `30000` | Events per rank/batch |
+| `--bootstrap` | `False` | Save per-replica bootstrap weights |
+| `--nboot` | `50` | Number of bootstrap replicas |
+| `--reco` | `False` | Process reco-level events instead of gen-level |
+
+## Plotting from batch files
+
+`plot_from_batches.py` is a memory-efficient alternative to `plot.py`. Instead of loading all events at once, it iterates over the batch HDF5 files produced by `save_unfolded_weights.py` and accumulates weighted histograms for each observable.
+
+Systematics, closure, and bootstrap statistical uncertainties are computed in the same way as the standard plotting code.
+
+```bash
+python plot_from_batches.py \
+    --data_folder /path/to/h5 \
+    --period Eplus0607 \
+    --suffix boot \
+    --niter 4 \
+    --bootstrap \
+    --nboot 50 \
+    [--sys] [--reco] [--blind]
+```
+
+Key arguments:
+
+| Argument | Default | Description |
+|---|---|---|
+| `--data_folder` | `/pscratch/sd/v/vmikuni/H1v2/h5` | Folder containing the batch h5 files |
+| `--plot_folder` | `../plots` | Output directory for plots |
+| `--period` | `Eplus0607` | Data-taking period string used in file names |
+| `--suffix` | `boot` | Middle suffix in batch file names (e.g. `boot`) |
+| `--niter` | `4` | OmniFold iteration to load |
+| `--bootstrap` | `False` | Compute stat uncertainty from bootstrap replicas |
+| `--nboot` | `50` | Number of bootstrap replicas |
+| `--sys` | `False` | Load and propagate systematic variations |
+| `--reco` | `False` | Plot reco-level results |
+| `--blind` | `False` | Show closure results instead of data |
+
+Plots are saved as PDFs named `<version>_<period>_<var>_<tag>.pdf` where `tag` is `unfolded`, `reco`, or `closure`.
+
+<!-- ## Plotting
 
 Plotting can be performed using either multiple GPUs or in a single GPU. The script to run is:
 
@@ -98,4 +174,4 @@ salloc -C gpu -q interactive  -t 40 -n 16 --ntasks-per-node=4 --gpus-per-task=1 
 module load tensorflow
 [pip install --user fastjet] #Do it only once
 srun  python plot.py --niter 5 --closure --load_pretrain --data_folder /global/cfs/cdirs/m3246/H1/h5/ --weights /global/cfs/cdirs/m3246/H1/weights/
-```
+``` -->
