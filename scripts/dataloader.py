@@ -3,6 +3,8 @@ import numpy as np
 import os
 import h5py as h5
 import gc
+from sklearn.ensemble import GradientBoostingRegressor
+import pickle
 
 
 class Dataset:
@@ -13,19 +15,24 @@ class Dataset:
         rank=0,
         size=1,
         is_mc=False,
+        use_reco=True,
         nmax=None,
         norm=None,
         pass_fiducial=False,
         pass_reco=False,
         preprocess=True,
+        pass_gen_Empz=False,
+        rescale_eptQ=False,
     ):
         self.rank = rank
         self.size = size
         self.base_path = base_path
         self.is_mc = is_mc
+        self.use_reco = use_reco
         self.nmax = nmax
         self.preprocess = preprocess
 
+        assert is_mc or use_reco, "ERROR: Dataset must have reco, mc, or both"
         # Preprocessing parameters
 
         self.mean_part = [
@@ -50,12 +57,15 @@ class Dataset:
         self.mean_event = [6.4188385, 0.3331013, 0.8914633, -0.8352072, -0.07296985]
         self.std_event = [0.97656405, 0.1895471, 0.14934653, 0.4191545, 1.734126]
 
-        self.prepare_dataset(file_names, pass_fiducial, pass_reco)
+        self.prepare_dataset(file_names, pass_fiducial, pass_reco, pass_gen_Empz, rescale_eptQ)
         self.normalize_weights(self.nmax if norm is None else norm)
 
     def normalize_weights(self, norm):
         # print("Total number of reco events {}".format(self.num_pass_reco))
-        self.weight = (norm * self.weight / self.num_pass_reco).astype(np.float32)
+        if self.use_reco:
+            self.weight = (norm * self.weight / self.num_pass_reco).astype(np.float32)
+        else:
+            self.weight = (norm * self.weight / self.num_pass_gen).astype(np.float32)
 
     def standardize(self, new_p, new_e, mask):
         mask = new_p[:, :, 2] != 0
@@ -79,8 +89,47 @@ class Dataset:
         del data_list
         gc.collect()
         return concatenated_part1, concatenated_part2, mask
+    
+    def calculate_Empz(self, particles, event):
+        mask = particles[:, :, 2] != 0
+        def _convert_kinematics(part, event, mask):
+            """Convert particle kinematics to Cartesian coordinates."""
+            new_particles = np.zeros((part.shape[0], part.shape[1], 4))
+            new_particles[:, :, 0] = np.ma.exp(part[:, :, 2]) * np.cos(
+                np.pi + part[:, :, 1] + event[:, 4, None]
+            )
+            new_particles[:, :, 1] = np.ma.exp(part[:, :, 2]) * np.sin(
+                np.pi + part[:, :, 1] + event[:, 4, None]
+            )
+            new_particles[:, :, 2] = np.ma.exp(part[:, :, 2]) * np.sinh(
+                part[:, :, 0] + event[:, 3, None]
+            )
+            new_particles[:, :, 3] = np.ma.exp(part[:, :, 5])
 
-    def prepare_dataset(self, file_names, pass_fiducial, pass_reco):
+            return new_particles * mask[:, :, None]
+        
+        def _convert_electron_kinematics(event_list):
+            pt = event_list[:, 2] * np.sqrt(np.exp(event_list[:, 0]))
+            phi = event_list[:, 4]
+            eta = event_list[:, 3]
+            px = pt * np.cos(phi)
+            py = pt * np.sin(phi)
+            pz = pt * np.sinh(eta)
+            E = np.sqrt(px**2 + py**2 + pz**2)
+            electron_cartesian_dict = {"px": px, "py": py, "pz": pz, "E": E}
+            return electron_cartesian_dict
+        
+
+            
+        cartesian = _convert_kinematics(particles, event, mask)
+        electron_cartesian = _convert_electron_kinematics(event)
+        Empz = np.array([sum([p[3] - p[2] for p in event if p[3]>0]) for event in cartesian])
+        electron_Empz = np.array(electron_cartesian["E"] - electron_cartesian["pz"])
+        total_Empz = Empz + electron_Empz
+        total_Empz = total_Empz[:, None]
+        return total_Empz
+
+    def prepare_dataset(self, file_names, pass_fiducial, pass_reco, pass_gen_Empz, rescale_eptQ):
         """Load h5 files containing the data. The structure of the h5 file should be
         reco_particle_features: p_pt,p_eta,p_phi,p_charge (B,N,4)
         reco_event_features   : Q2, e_px, e_py, e_pz, wgt, pass_reco (B,6)
@@ -90,11 +139,14 @@ class Dataset:
 
         """
         self.num_pass_reco = 0
+        self.num_pass_gen = 0
         self.weight = []
         self.pass_reco = []
         self.pass_gen = []
+        self.pass_gen_Empz = []
         reco = []
         gen = []
+        all_gen_Empz = []
         for ifile, f in enumerate(file_names):
             if self.rank == 0:
                 print("Loading file {}".format(f))
@@ -104,7 +156,7 @@ class Dataset:
                 self.nmax = h5.File(os.path.join(self.base_path, f), "r")[
                     "reco_event_features"
                 ].shape[0]
-
+            print("Num events total: ", self.nmax)
             # Sum of weighted events for collisions passing the reco cuts
             self.num_pass_reco += np.sum(
                 h5.File(os.path.join(self.base_path, f), "r")["reco_event_features"][
@@ -144,16 +196,56 @@ class Dataset:
                     "gen_event_features"
                 ][start:end].astype(np.float32)
 
+               
+                batch_size = 100000
+                with h5.File(os.path.join(self.base_path, f), "r") as hf:
+                    N = min(self.nmax, hf["gen_event_features"].shape[0])
+
+                    for start in range(0, N, batch_size):
+                        stop = min(start + batch_size, N)
+
+                        gen_parts = hf["gen_particle_features"][start:stop]
+                        gen_events = hf["gen_event_features"][start:stop]
+                        reco_ev = hf["reco_event_features"][start:stop, -2]
+
+                        gen_Empz_batch = self.calculate_Empz(gen_parts, gen_events)
+                        if pass_gen_Empz:
+                            mask = (gen_events[:, -1] == 1) & (gen_Empz_batch[:, 0] > 45)
+                        else:
+                            mask = gen_events[:, -1] == 1
+                        self.num_pass_gen += np.sum(reco_ev[mask])
+
                 self.pass_gen.append(gen_e[:, -1] == 1)
+                # Calculate gen-level E-pz
+                
+                if rescale_eptQ:
+                    with open('eptQ_y_regressor_nonfiducial_1million_nestimators2k_Empzcut.pkl', 'rb') as f:
+                        regression_model = pickle.load(f)
+                    gen_e[:, 2] = regression_model.predict(gen_e[:, 1].reshape(-1, 1))
+                gen_Empz = self.calculate_Empz(gen_p, gen_e)
+                # Apply gen-level E-pz cut
+                self.pass_gen_Empz.append(gen_Empz[:, 0] > 45)
 
                 if pass_fiducial:
                     mask_fid = self.pass_gen[-1]
                 else:
                     mask_fid = np.ones_like(self.pass_gen[-1])
+
+                if pass_gen_Empz:
+                    mask_gen_Empz = self.pass_gen_Empz[-1]
+                else:
+                    mask_gen_Empz = np.ones_like(self.pass_gen_Empz[-1])
+                
+                mask_fid = mask_fid * mask_gen_Empz
+
+
                 gen_p = gen_p[mask_fid * mask_reco]
                 gen_e = gen_e[mask_fid * mask_reco]
                 self.pass_gen[-1] = self.pass_gen[-1][mask_fid * mask_reco]
-
+                self.pass_gen_Empz[-1] = self.pass_gen_Empz[-1][mask_fid * mask_reco]
+                self.gen_Empz = gen_Empz[mask_fid * mask_reco]
+                all_gen_Empz.append(self.gen_Empz)
+                
                 gen.append((gen_p, gen_e[:, :-1]))
             else:
                 self.pass_gen = None
@@ -164,7 +256,15 @@ class Dataset:
             self.weight[-1] = self.weight[-1][mask_fid * mask_reco]
             self.pass_reco[-1] = self.pass_reco[-1][mask_fid * mask_reco]
 
-            reco.append((reco_p, reco_e[:, :-2]))
+            if self.use_reco:
+                reco.append((reco_p, reco_e[:, :-2]))
+            else:
+                reco.append((gen_p, gen_e[:, :-1]))
+                # self.pass_reco[-1] = self.pass_gen[-1]
+                if pass_gen_Empz:
+                    self.pass_reco[-1] = self.pass_gen_Empz[-1]
+                else:
+                    self.pass_reco[-1] = np.ones_like(self.pass_gen[-1])
 
         self.weight = np.concatenate(self.weight)
         self.pass_reco = np.concatenate(self.pass_reco)
@@ -186,9 +286,12 @@ class Dataset:
                 self.gen = self.standardize(*self.concatenate(gen))
             else:
                 self.gen = self.concatenate(gen)
+            self.gen_Empz = np.concatenate(all_gen_Empz, axis=0)
             del gen
             gc.collect()
             assert not np.any(np.isnan(self.gen[0])), "ERROR: NAN in particle dataset"
             assert not np.any(np.isnan(self.gen[1])), "ERROR: NAN in event dataset"
+
         else:
             self.gen = None
+        self.num_steps_reco_factor = 0.7 if self.use_reco else .5

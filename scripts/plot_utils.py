@@ -1,6 +1,65 @@
 import numpy as np
 import utils
 import awkward as ak
+import matplotlib.pyplot as plt
+import matplotlib.colors as colors
+import horovod.tensorflow as hvd
+import options
+import tensorflow as tf
+# Calculating particle-level Empz. This is sum(E_i - pz_i) where i runs over all HFS particles
+def calculate_Empz(dataloaders):
+    import fastjet
+    import numpy as np
+
+
+    # Returns (px, py, pz, E)
+    def _convert_kinematics(part, event, mask):
+        """Convert particle kinematics to Cartesian coordinates."""
+        new_particles = np.zeros((part.shape[0], part.shape[1], 4))
+        new_particles[:, :, 0] = np.ma.exp(part[:, :, 2]) * np.cos(
+            np.pi + part[:, :, 1] + event[:, 4, None]
+        )
+        new_particles[:, :, 1] = np.ma.exp(part[:, :, 2]) * np.sin(
+            np.pi + part[:, :, 1] + event[:, 4, None]
+        )
+        new_particles[:, :, 2] = np.ma.exp(part[:, :, 2]) * np.sinh(
+            part[:, :, 0] + event[:, 3, None]
+        )
+        new_particles[:, :, 3] = np.ma.exp(part[:, :, 5])
+
+        return new_particles * mask[:, :, None]
+    
+    def _convert_electron_kinematics(event_list):
+        pt = event_list[:, 2] * np.sqrt(np.exp(event_list[:, 0]))
+        phi = event_list[:, 4]
+        eta = event_list[:, 3]
+        px = pt * np.cos(phi)
+        py = pt * np.sin(phi)
+        pz = pt * np.sinh(eta)
+        E = np.sqrt(px**2 + py**2 + pz**2)
+        electron_cartesian_dict = {"px": px, "py": py, "pz": pz, "E": E}
+        return electron_cartesian_dict
+    
+
+    for dataloader_name, data in dataloaders.items():
+        
+        cartesian = _convert_kinematics(data.part, data.event, data.mask)
+        electron_cartesian = _convert_electron_kinematics(data.event)
+        Empz_all_events = []
+        Empz_per_particle = np.array([[p[3]-p[2] for p in event] for event in cartesian])
+        data.Empz_per_particle = Empz_per_particle
+        Empz = np.array([sum([p[3] - p[2] for p in event if p[3]>0]) for event in cartesian])
+        electron_phi = np.arctan2(electron_cartesian["py"], electron_cartesian["px"])
+        particle_phi = np.array([[np.arctan2(p[1],p[0]) for p in event] for event in cartesian])
+        delta_phi = particle_phi - electron_phi[:, None]
+        delta_phi[delta_phi > np.pi] -= 2*np.pi
+        delta_phi[delta_phi < -np.pi] += 2*np.pi
+        data.delta_phi = delta_phi
+        data.theta_per_particle = np.array([[np.arccos(p[2]/np.sqrt(p[0]**2+p[1]**2+p[2]**2)) for p in event] for event in cartesian])
+        electron_Empz = np.array(electron_cartesian["E"] - electron_cartesian["pz"])
+        total_Empz = Empz + electron_Empz
+        total_Empz = total_Empz[:, None]
+        data.event = np.concatenate((data.event, total_Empz), axis=1)
 
 
 def cluster_jets(dataloaders):
@@ -301,8 +360,537 @@ def plot_particles(flags, dataloaders, data_weights, version, num_part, nbins=10
         # Save the plot
         fig.savefig(f"../plots/{version}_part_{feature}.pdf")
 
+def plot_particles_radiation(flags, dataloaders, QED_corrections, version, num_part, nbins=10):
+    """
+    Plot particle-level observables for each feature in the dataset with optional systematic uncertainties.
+
+    Args:
+        flags: Object containing configuration flags (e.g., blind, sys, reco).
+        dataloaders: Dictionary containing data for different datasets.
+        data_weights: Dictionary containing weights for systematic uncertainties.
+        version: String to define the output file version.
+        num_part: Number of particles to process per event.
+        nbins: Number of bins for the histogram (default: 10).
+
+    Returns:
+        None. Saves the plots as PDF files.
+    """
+    import numpy as np
+    import utils
+
+    # Determine weight name based on flags
+    weight_name = "closure" if flags.blind else "Rapgap"
+
+    # Loop over all features in the particle data
+    for feature in range(dataloaders["Rapgap"].part.shape[-1]):
+        # Compute nominal histogram and systematic uncertainties if enabled
+        total_unc = None
+        binning = None
+
+        # dataloaders["Rapgap"].weight[QED_corrections["Rapgap"]<10] = 0
+        # Prepare feed_dict and weights for plotting
+        feed_dict = {
+            "Rapgap_QED": dataloaders["Rapgap"].part[:, feature],
+            "Rapgap": dataloaders["Rapgap"].part[:, feature],
+            "Rapgap_no_rad": dataloaders["Rapgap_no_rad"].part[:, feature],
+        }
+
+        weights = {
+            "Rapgap_QED": (
+                dataloaders["Rapgap"].weight * QED_corrections["Rapgap"]
+            )
+            .reshape(-1, 1, 1)
+            .repeat(num_part, axis=1)
+            .reshape(-1)[dataloaders["Rapgap"].mask],
+            "Rapgap": (dataloaders["Rapgap"].weight)
+            .reshape(-1, 1, 1)
+            .repeat(num_part, axis=1)
+            .reshape(-1)[dataloaders["Rapgap"].mask],
+            "Rapgap_no_rad": (dataloaders["Rapgap_no_rad"].weight)
+            .reshape(-1, 1, 1)
+            .repeat(num_part, axis=1)
+            .reshape(-1)[dataloaders["Rapgap_no_rad"].mask],
+        }
+
+        # Plot histogram using utils.HistRoutine
+        fig, ax = utils.HistRoutine(
+            feed_dict,
+            xlabel=utils.particle_names.get(str(feature), f"Feature {feature}"),
+            weights=weights,
+            reference_name="Rapgap_QED",
+            label_loc="upper left",
+            uncertainty=total_unc,
+            binning=binning,
+        )
+
+        plt.suptitle("Rapgap events with QED corrections")
+        # Save the plot
+        fig.savefig(f"../plots/{version}_part_{feature}.png")
+        plt.close(fig)
+
+def plot_event_radiation(flags, dataloaders, QED_corrections, version, nbins=10):
+    apply_Empz_cut = False
+    """
+    Plot event-level observables for each feature in the dataset with optional systematic uncertainties.
+
+    Args:
+        flags: Object containing configuration flags (e.g., blind, sys, reco).
+        dataloaders: Dictionary containing data for different datasets.
+        data_weights: Dictionary containing weights for systematic uncertainties.
+        version: String to define the output file version.
+        nbins: Number of bins for the histogram (default: 10).
+
+    Returns:
+        None. Saves the plots as PDF files.
+    """
+    import numpy as np
+    import utils
+
+    # Determine weight name based on flags
+    weight_name = "closure" if flags.blind else "Rapgap"
+    # Loop over all features in the event data
+    for feature in range(dataloaders["Rapgap"].event.shape[-1]):
+        total_unc = None
+        binning = None
+
+        # Prepare feed_dict and weights for plotting
+        QED_corrections_mask = QED_corrections["Rapgap"]>=0
+        if apply_Empz_cut:
+            Empz_mask = dataloaders["Rapgap"].event[:, 5]>=50
+            Empz_mask_norad = dataloaders["Rapgap_no_rad"].event[:, 5]>=50
+        else:
+            Empz_mask = np.ones(len(dataloaders["Rapgap"].event[:, 4]), dtype=bool)
+            Empz_mask_norad = np.ones(len(dataloaders["Rapgap_no_rad"].event[:, 4]), dtype=bool)
+        feed_dict = {
+            "Rapgap_QED": dataloaders["Rapgap"].event[:, feature][QED_corrections_mask],
+            "Rapgap": dataloaders["Rapgap"].event[:, feature][QED_corrections_mask],
+            "Rapgap_no_rad": dataloaders["Rapgap_no_rad"].event[:, feature][Empz_mask_norad],
+        }
+        weights = {
+            "Rapgap_QED": dataloaders["Rapgap"].weight[QED_corrections_mask] * QED_corrections["Rapgap"][QED_corrections_mask],
+            "Rapgap": dataloaders["Rapgap"].weight[QED_corrections_mask],
+            "Rapgap_no_rad": dataloaders["Rapgap_no_rad"].weight[Empz_mask_norad],
+        }
+
+
+        # Plot histogram using utils.HistRoutine
+        fig, ax = utils.HistRoutine(
+            feed_dict,
+            xlabel=utils.event_names.get(str(feature), f"Feature {feature}"),
+            weights=weights,
+            reference_name="Rapgap_QED",
+            label_loc="upper left",
+            uncertainty=total_unc,
+            binning=binning,
+        )
+        if apply_Empz_cut:
+            plt.suptitle("Rapgap events \n E-$p_z \geq 50 ~GeV$")
+        else:
+            plt.suptitle("Rapgap events, QED corrections>=0")
+        # Save the plot
+        fig.savefig(f"../plots/{version}_event_{feature}.png")
+        plt.close(fig)
+
+        fig = plt.figure()
+        plt.hist(QED_corrections["Rapgap"][Empz_mask], bins=100, density=True)
+        plt.xlabel("QED Corrections")
+        plt.ylabel("Normalized entries")
+        plt.title("Rapgap QED corrections\n E-$p_z > 45 ~GeV$")
+        plt.savefig(f"../plots/{version}_QEDcorrections.png")
+        plt.close(fig)
+
+        fig = plt.figure()
+        plt.hist(QED_corrections["Rapgap"], bins=100, density=True, range=(1,1.5))
+        plt.xlabel("QED Corrections")
+        plt.ylabel("Normalized entries")
+        plt.title("Rapgap QED corrections")
+        plt.savefig(f"../plots/{version}_QEDcorrections_withoutnmask.png")
+        plt.close(fig)
+
+        fig = plt.figure()
+        plt.hist(QED_corrections["Rapgap"], bins=100)
+        plt.xlabel("QED Corrections")
+        plt.ylabel("Entries (log)")
+        plt.yscale('log')
+        plt.title("Rapgap QED corrections")
+        plt.savefig(f"../plots/{version}_QEDcorrections_log.png")
+        plt.close(fig)
+    
+        # fig = plt.figure()
+        # plt.hist2d(np.array(dataloaders["Rapgap"].event[:, 1]), np.array(dataloaders["Rapgap"].gen_Empz[:, 0]), bins=100, norm=colors.LogNorm())
+        # plt.xlabel("y")
+        # plt.ylabel("Empz")
+        # plt.colorbar()
+        # plt.savefig(f"../plots/{version}_y_vs_Empz.png")
+
+        # small_correction_mask = QED_corrections["Rapgap"]<.01
+        # fig = plt.figure()
+        # plt.hist2d(np.array(dataloaders["Rapgap"].event[:, 1][small_correction_mask]), np.array(dataloaders["Rapgap"].gen_Empz[:, 0][small_correction_mask]), bins=100, norm=colors.LogNorm())
+        # plt.xlabel("y")
+        # plt.ylabel("Empz")
+        # plt.colorbar()
+        # plt.savefig(f"../plots/{version}_y_vs_Empz_smallcorrections.png")
+
+        if hvd.rank() == 0:
+            print("Fraction of events with small QED corrections: ", len(QED_corrections["Rapgap"][QED_corrections["Rapgap"]<.01])/len(QED_corrections["Rapgap"]))
+            print("Total number of events with small QED corrections: ", len(QED_corrections["Rapgap"][QED_corrections["Rapgap"]<.01]))
+            print("Total number of events: ", len(QED_corrections["Rapgap"]))
+
+
+def plot_event_radiation_2D(flags, dataloaders, QED_corrections, version, nbins=10):
+    apply_Empz_cut = False
+    import matplotlib.colors as colors
+    """
+    Plot event-level observables for each feature in the dataset with optional systematic uncertainties.
+
+    Args:
+        flags: Object containing configuration flags (e.g., blind, sys, reco).
+        dataloaders: Dictionary containing data for different datasets.
+        data_weights: Dictionary containing weights for systematic uncertainties.
+        version: String to define the output file version.
+        nbins: Number of bins for the histogram (default: 10).
+
+    Returns:
+        None. Saves the plots as PDF files.
+    """
+    import numpy as np
+    import utils
+
+    # Determine weight name based on flags
+
+    QED_correction = QED_corrections["Rapgap"]
+    Empz_mask = dataloaders["Rapgap"].event[:, 4]>=50
+    # Loop over all features in the event data
+    if apply_Empz_cut:
+        QED_correction = QED_correction[Empz_mask]
+    for feature in range(dataloaders["Rapgap"].event.shape[-1]):
+
+        # Prepare feed_dict and weights for plotting
+        event_data = dataloaders["Rapgap"].event[:, feature]
+        if apply_Empz_cut:
+            event_data = event_data[Empz_mask]
+            QED_correction[Empz_mask]
+        min_event_data, max_event_data = min(event_data), max(event_data)
+        fig = plt.figure()
+        plt.hist2d(
+            event_data,
+            QED_correction,
+            bins=50,
+            range = ((min_event_data, max_event_data), (0,1.5)),
+            norm = colors.LogNorm()
+        )
+        plt.xlabel(utils.event_names.get(str(feature), f"Feature {feature}"))
+        plt.ylabel("QED corrections")
+        plt.colorbar()
+
+        if apply_Empz_cut:
+            plt.suptitle("Rapgap events with QED radiation\n E-$p_z \geq 50 ~GeV$")
+        else:
+            plt.suptitle("Rapgap events with QED radiation")
+        # Save the plot
+        fig.savefig(f"../plots/{version}_event_{feature}_2D.png")
+        plt.close(fig)
+    
+    num_particles = dataloaders["Rapgap"].num_valid_particles
+
+    fig = plt.figure()
+    plt.hist2d(
+        num_particles,
+        QED_correction,
+        bins=50,
+        range = ((-0.5, 132.5), (0,1.5)),
+        norm = colors.LogNorm()
+    )
+    plt.xlabel("Number of particles")
+    plt.ylabel("QED corrections")
+    plt.colorbar()
+    plt.title("Rapgap events with QED radiation")
+    # Save the plot
+    fig.savefig(f"../plots/num_particles_2D.png")
+
+    fig = plt.figure()
+    plt.hist2d(
+        dataloaders["Rapgap"].weight,
+        QED_correction,
+        bins=50,
+        range = ((0, 5), (0,1.5)),
+        norm = colors.LogNorm()
+    )
+    plt.xlabel("Event weight")
+    plt.ylabel("QED corrections")
+    plt.colorbar()
+    plt.title("Rapgap events with QED radiation")
+    # Save the plot
+    fig.savefig(f"../plots/event_weight_2D.png")
+
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.colors as colors
+
+def plot_event_radiation_2D_fractions(flags, dataloaders, QED_corrections, version, nbins=50):
+    apply_Empz_cut = False
+    """
+    Produce 2D plots comparing Rapgap and Rapgap_no_rad event distributions.
+
+    - For Rapgap:
+        1. Fraction of events with QED_correction < 0.01
+        2. Fraction of events with QED_correction > 10
+        3. All events (log-scaled density)
+    - For Rapgap_no_rad:
+        1. All events (log-scaled density)
+    Shared binning ensures comparability.
+    """
+    import utils
+
+    datasets_to_plot = ["Rapgap", "Rapgap_no_rad"]
+    titles_dict = {"Rapgap": "Rapgap with QED radiation", "Rapgap_no_rad":"Rapgap without QED radiation"}
+
+    # Make sure both datasets exist
+    for ds in datasets_to_plot:
+        if ds not in dataloaders:
+            raise ValueError(f"Dataset {ds} not found in dataloaders.")
+
+    events_rad = dataloaders["Rapgap"].event
+    Empz = events_rad[:, 4]
+    events_norad = dataloaders["Rapgap_no_rad"].event
+    n_features = events_rad.shape[-1]
+    QED_correction = QED_corrections["Rapgap"]
+
+    if apply_Empz_cut:
+        events_rad = events_rad[Empz>=50]
+        events_norad = events_norad[events_norad[:, 4]>=50]
+        QED_correction = QED_corrections["Rapgap"][Empz>=50]
+    # Loop over feature pairs
+    for feature_i in range(n_features):
+        for feature_j in range(feature_i + 1, n_features):
+            first_rad = events_rad[:, feature_i]
+            second_rad = events_rad[:, feature_j]
+            first_norad = events_norad[:, feature_i]
+            second_norad = events_norad[:, feature_j]
+
+            # Compute shared ±10% extended range
+            def extended_range(values1, values2):
+                combined = np.concatenate([values1, values2])
+                vmin, vmax = np.min(combined), np.max(combined)
+                span = vmax - vmin
+                pad = 0.1 * span
+                return (vmin - pad, vmax + pad)
+
+            x_range = extended_range(first_rad, first_norad)
+            y_range = extended_range(second_rad, second_norad)
+
+            # Compute shared bin edges
+            xedges = np.linspace(x_range[0], x_range[1], nbins + 1)
+            yedges = np.linspace(y_range[0], y_range[1], nbins + 1)
+
+            # --- RAPGAP (with QED) ---
+            hist_total_rad, _, _ = np.histogram2d(first_rad, second_rad, bins=[xedges, yedges])
+
+            # Fraction plots (<0.01 and >10)
+            conditions = {
+                "low": {
+                    "mask": (QED_correction < 0.01),
+                    "title": "Fraction of events with QED correction < 0.01",
+                    "suffix": "lt_0p01",
+                },
+                "high": {
+                    "mask": (QED_correction > 1.07),
+                    "title": "Fraction of events with QED correction > 1.07",
+                    "suffix": "gt_10",
+                },
+            }
+
+            for label, cfg in conditions.items():
+                hist_cond, _, _ = np.histogram2d(
+                    first_rad[cfg["mask"]],
+                    second_rad[cfg["mask"]],
+                    bins=[xedges, yedges]
+                )
+
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    fraction = np.where(hist_total_rad > 0, hist_cond / hist_total_rad, np.nan)
+
+                fig, ax = plt.subplots()
+                mesh = ax.pcolormesh(
+                    xedges, yedges, fraction.T,
+                    cmap='viridis', vmin=0, vmax=1
+                )
+                ax.set_xlabel(utils.event_names.get(str(feature_i), f"Feature {feature_i}"))
+                ax.set_ylabel(utils.event_names.get(str(feature_j), f"Feature {feature_j}"))
+                if apply_Empz_cut:
+                    ax.set_title(f"{titles_dict['Rapgap']}\n{cfg['title']}\n E-$p_z \geq 50 ~GeV$")
+                else:
+                    ax.set_title(f"{titles_dict['Rapgap']}\n E-$p_z > 45 ~GeV$ \n{cfg['title']}")
+                cbar = plt.colorbar(mesh)
+                cbar.set_label("Fraction")
+                fig.tight_layout()
+                fig.savefig(f"../plots_2D/{version}_Rapgap_event_{feature_i}_{feature_j}_2D_fraction_{cfg['suffix']}.png")
+                plt.close(fig)
+
+            # LogNorm plot for Rapgap
+            fig, ax = plt.subplots()
+            mesh = ax.pcolormesh(
+                xedges, yedges, hist_total_rad.T,
+                cmap='viridis',
+                norm=colors.LogNorm(vmin=max(1, np.nanmin(hist_total_rad[hist_total_rad > 0])), vmax=np.nanmax(hist_total_rad))
+            )
+            ax.set_xlabel(utils.event_names.get(str(feature_i), f"Feature {feature_i}"))
+            ax.set_ylabel(utils.event_names.get(str(feature_j), f"Feature {feature_j}"))
+            if apply_Empz_cut:
+                ax.set_title(f"{titles_dict['Rapgap']}\nAll events (log-scaled density)\n E-$p_z \geq 50 ~GeV$")
+            else:
+                ax.set_title(f"{titles_dict['Rapgap']}\n E-$p_z \geq 45 ~GeV$")
+            plt.colorbar(mesh, label="Event count (log scale)")
+            fig.tight_layout()
+            fig.savefig(f"../plots_2D/{version}_Rapgap_event_{feature_i}_{feature_j}_2D_all_lognorm.png")
+            plt.close(fig)
+
+            # --- RAPGAP_NO_RAD ---
+            hist_total_norad, _, _ = np.histogram2d(first_norad, second_norad, bins=[xedges, yedges])
+
+            fig, ax = plt.subplots()
+            mesh = ax.pcolormesh(
+                xedges, yedges, hist_total_norad.T,
+                cmap='viridis',
+                norm=colors.LogNorm(vmin=max(1, np.nanmin(hist_total_norad[hist_total_norad > 0])), vmax=np.nanmax(hist_total_norad))
+            )
+            ax.set_xlabel(utils.event_names.get(str(feature_i), f"Feature {feature_i}"))
+            ax.set_ylabel(utils.event_names.get(str(feature_j), f"Feature {feature_j}"))
+            ax.set_title(f"{titles_dict['Rapgap_no_rad']}\n E-$p_z > 45 ~GeV$")
+            plt.colorbar(mesh, label="Event count (log scale)")
+            fig.tight_layout()
+            fig.savefig(f"../plots_2D/{version}_Rapgap_no_rad_event_{feature_i}_{feature_j}_2D_all_lognorm.png")
+            plt.close(fig)
+
+
+
+    
+def plot_Empz(flags, dataloaders, QED_corrections, version, nbins=10):
+    import numpy as np
+    import utils
+
+    Empz = dataloaders["Rapgap"].event[:, 5]
+    y = dataloaders["Rapgap"].event[:, 1]
+    corrections = QED_corrections["Rapgap"]
+    
+
+    Empz_bins = np.linspace(42, 58, 51)
+    ybins = np.linspace(0.15, 0.75, 51)
+
+    # Sum of z per bin
+    z_sum, _, _ = np.histogram2d(y, Empz, bins=[ybins, Empz_bins], weights=corrections)
+    # Counts per bin
+    counts, _, _ = np.histogram2d(y, Empz, bins=[ybins, Empz_bins])
+
+    # Average (avoid division by zero)
+    z_avg = np.divide(
+        z_sum,
+        counts,
+        out=np.zeros_like(z_sum),
+        where=counts > 0
+    )
+    fig = plt.figure()
+    # Plot
+    plt.pcolormesh(
+        ybins,
+        Empz_bins,
+        np.where(counts == 0, np.nan, z_avg).T,
+        shading="auto",
+    )
+
+    plt.ylabel(r"$\Sigma (E_i - p_{i, z})$ (GeV)")
+    plt.xlabel("y")
+    cbar = plt.colorbar()
+    cbar.set_label("Average QED corrections")
+    plt.title("Rapgap with QED radiation")
+    plt.savefig(f"../plots/plot_Empz_y_{version}.png")
+    plt.close(fig)
+
+    print(dataloaders["Rapgap"].Empz_per_particle)
+
+    
+
+def plot_radiative_event_topologies(flags, dataloaders, QED_corrections, version, nbins=10):
+    for dataloader_name, data in dataloaders.items():
+        Empz_per_particle = data.Empz_per_particle
+        max_empz_particle_index = np.argmax(Empz_per_particle, axis=1)
+        max_empz_particle = np.max(Empz_per_particle, axis=1)
+
+        max_empz_particle_delta_phi = np.array([
+            particle_delta_phi[index]
+            for particle_delta_phi, index in zip(data.delta_phi, max_empz_particle_index)
+        ])
+
+        max_empz_particle_theta = np.array([
+            particle_theta[index]
+            for particle_theta, index in zip(data.theta_per_particle, max_empz_particle_index)
+        ])
+
+        theta_bins = np.linspace(0, np.pi, 101)
+        deltaphi_bins = np.linspace(-1.1, 1.1, 101)
+
+        empz_mask = max_empz_particle > 5
+        max_empz_particle_theta = max_empz_particle_theta[empz_mask]
+        max_empz_particle_delta_phi = max_empz_particle_delta_phi[empz_mask]
+        fig = plt.figure()
+        plt.hist2d(
+            np.array(max_empz_particle_theta),
+            np.array(np.cos(max_empz_particle_delta_phi)),
+            bins=(theta_bins, deltaphi_bins),
+            norm = colors.LogNorm()
+        )
+        plt.xlabel("$\\theta(photon)$")
+        plt.ylabel("$cos(\phi_{photon}-\phi_{e})$")
+        plt.colorbar(label="Counts (Log)")
+        plt.title(f"{options.name_translate[dataloader_name]}\n $E-p_z(photon) > 5 ~GeV$")
+        plt.savefig(f"../plots/{version}_{dataloader_name}_topology_5GeV.png")
+        plt.close(fig)
+
+        # Sum of z per bin
+        if dataloader_name=="Rapgap":
+            z_sum, _, _ = np.histogram2d(
+                max_empz_particle_theta,
+                np.cos(max_empz_particle_delta_phi),
+                bins=(theta_bins, deltaphi_bins),
+                weights=QED_corrections["Rapgap"][empz_mask],
+            )
+            # Counts per bin
+            counts, _, _ = np.histogram2d(
+                max_empz_particle_theta, 
+                np.cos(max_empz_particle_delta_phi),
+                bins=(theta_bins, deltaphi_bins),
+            )
+
+            # Average (avoid division by zero)
+            z_avg = np.divide(
+                z_sum,
+                counts,
+                out=np.zeros_like(z_sum),
+                where=counts > 0
+            )
+            fig = plt.figure()
+            # Plot
+            plt.pcolormesh(
+                theta_bins,
+                deltaphi_bins,
+                np.where(counts == 0, np.nan, z_avg).T,
+                shading="auto",
+            )
+
+            plt.xlabel("$\\theta(photon)$")
+            plt.ylabel("$cos(\phi_{photon}-\phi_{e})$")
+            cbar = plt.colorbar()
+            cbar.set_label("Average QED corrections")
+            plt.title(f"{options.name_translate[dataloader_name]}\n $E-p_z(photon) > 5 ~GeV$")
+            plt.savefig(f"../plots/{version}_{dataloader_name}_topology_QEDcorrections_5GeV.png")
+            plt.close(fig)
+
+
+
+
 
 def plot_qtQ(flags, dataloaders, data_weights, version):
+
     # Jet level observables
 
     # at least 1 jet with pT above minimum cut
@@ -1329,6 +1917,194 @@ def plot_event(flags, dataloaders, data_weights, version, nbins=10):
         fig.savefig(f"../plots/{version}_event_{feature}.pdf")
 
 
+def plot_QEDcorrections(flags, var, dataloaders, version):
+    info = utils.ObservableInfo(var)
+
+    def compute_histogram(dataset_name, weights=None, density=True):
+        if len(dataloaders[dataset_name][var].shape) > 1:
+            multiple_jets_per_event = True
+            valid_indices = dataloaders[dataset_name]["jet_pt"] > 0
+            data = ak.mask(dataloaders[dataset_name][var], valid_indices)
+            data = ak.drop_none(data)
+            num_jets_per_event = ak.count(data, axis=1)
+            data = ak.flatten(data)
+        else:
+            multiple_jets_per_event = False
+            valid_indices = dataloaders[dataset_name]["jet_pt"] > 0
+            data = dataloaders[dataset_name][var][valid_indices]
+        if weights is not None:
+            if multiple_jets_per_event:
+                weights = np.repeat(weights, num_jets_per_event, axis=0)
+            else:
+                weights = weights[valid_indices]
+        counts, bins = np.histogram(
+            data, bins=binning, density=density, weights=weights
+        )
+        return ak.to_numpy(counts), bins
+    
+    def binned_mean(x, y, bins):
+        """
+        Compute mean of y in bins of x.
+        """
+        bin_indices = np.digitize(x, bins) - 1
+        means = np.full(len(bins) - 1, np.nan)
+
+        for i in range(len(means)):
+            mask = bin_indices == i
+            if np.any(mask):
+                means[i] = np.mean(y[mask])
+
+        return means
+
+    # Determine weight name
+    weight_name = "closure_weights" if flags.blind else "weights"
+    if flags.blind:
+        data_name = "Rapgap_closure"
+    elif flags.reco:
+        data_name = "Rapgap_unfolded"
+    else:
+        data_name = "Data_unfolded"
+
+    # Set binning
+    binning = info.binning
+
+    binned_corrections_dict = {}
+    corrections_plot_feed_dict = {}
+    if flags.binned_QED:
+        withRad_hist, _ = compute_histogram(
+            "Rapgap", dataloaders["Rapgap"]["mc_weights"]
+        )
+        NoRad_hist, bin_edges = compute_histogram(
+            "NoRad", dataloaders["NoRad"]["mc_weights"]
+        )
+        binned_QED_corrections = (np.ma.divide(NoRad_hist, withRad_hist).filled(1))
+        binned_corrections_dict["Rapgap_binnedQED"] = binned_QED_corrections
+        bin_centers = (bin_edges[1:]+bin_edges[:-1])/2
+        corrections_plot_feed_dict["RAPGAP Binned QED"] = (bin_centers, binned_QED_corrections)
+    else:
+        binned_QED_corrections = None
+    # Prepare weights and data for plotting
+    weights = {}
+    feed_dict = {}
+
+    if len(dataloaders["Rapgap"][var].shape) > 1:
+        Rapgap_mask = dataloaders["Rapgap"]["jet_pt"] > 0
+        Rapgap_data = ak.drop_none(ak.mask(dataloaders["Rapgap"][var], Rapgap_mask))
+        num_Rapgap_jets_per_event = ak.count(Rapgap_data, axis=1)
+        Rapgap_data = ak.flatten(Rapgap_data)
+
+        if flags.unbinned_QED:
+            weights["Rapgap_unbinnedQED"] = np.repeat(
+                dataloaders["Rapgap"]["mc_weights"] * dataloaders["Rapgap"]["QED_corrections"],
+                num_Rapgap_jets_per_event,
+                axis=0,
+            )
+            feed_dict["Rapgap_unbinnedQED"] = Rapgap_data
+        if flags.binned_QED:
+            weights["Rapgap_binnedQED"] = np.repeat(
+                dataloaders["Rapgap"]["mc_weights"], num_Rapgap_jets_per_event, axis=0
+            )
+            feed_dict["Rapgap_binnedQED"] = Rapgap_data
+        weights["Rapgap"] = np.repeat(
+                dataloaders["Rapgap"]["mc_weights"],
+                num_Rapgap_jets_per_event,
+                axis=0,
+            )
+        feed_dict["Rapgap"] = Rapgap_data
+        
+    else:
+        if flags.unbinned_QED:
+            weights["Rapgap_unbinnedQED"] = (
+                dataloaders["Rapgap"]["mc_weights"] * dataloaders["Rapgap"]["QED_corrections"]
+            )[dataloaders["Rapgap"]["jet_pt"] > 0]
+            feed_dict["Rapgap_unbinnedQED"] = dataloaders["Rapgap"][var][
+                dataloaders["Rapgap"]["jet_pt"] > 0
+            ]
+        if flags.binned_QED:
+            weights["Rapgap_binnedQED"] = dataloaders["Rapgap"]["mc_weights"][
+                dataloaders["Rapgap"]["jet_pt"] > 0
+            ]
+            
+            feed_dict["Rapgap_binnedQED"] = dataloaders["Rapgap"][var][
+                dataloaders["Rapgap"]["jet_pt"] > 0
+            ]
+        weights["Rapgap"] = dataloaders["Rapgap"]["mc_weights"][
+                dataloaders["Rapgap"]["jet_pt"] > 0
+            ]
+            
+        feed_dict["Rapgap"] = dataloaders["Rapgap"][var][
+            dataloaders["Rapgap"]["jet_pt"] > 0
+        ]
+    if flags.unbinned_QED:
+        # Flattened unbinned values already exist here
+        unbinned_QED = np.asarray(
+            dataloaders["Rapgap"]["QED_corrections"]
+        )
+
+        if len(dataloaders["Rapgap"][var].shape) > 1:
+            unbinned_QED = np.repeat(unbinned_QED, num_Rapgap_jets_per_event, axis=0)
+        avg_unbinned_QED = binned_mean(
+            np.asarray(Rapgap_data),
+            np.asarray(unbinned_QED),
+            binning,
+        )
+        bin_centers = (binning[1:] + binning[:-1]) / 2
+        corrections_plot_feed_dict["RAPGAP Avg. Unbinned QED"] = (
+            bin_centers,
+            avg_unbinned_QED,
+        )
+
+    if len(dataloaders["NoRad"][var].shape) > 1:
+        NoRad_mask = dataloaders["NoRad"]["jet_pt"] > 0
+        NoRad_data = ak.drop_none(ak.mask(dataloaders["NoRad"][var], NoRad_mask))
+        num_NoRad_jets_per_event = ak.count(NoRad_data, axis=1)
+        NoRad_data = ak.flatten(NoRad_data)
+
+        weights["Rapgap_no_rad"] = np.repeat(
+            dataloaders["NoRad"]["mc_weights"],
+            num_NoRad_jets_per_event,
+            axis=0,
+        )
+        feed_dict["Rapgap_no_rad"] = NoRad_data
+    else:
+        weights["Rapgap_no_rad"] = (
+            dataloaders["NoRad"]["mc_weights"]
+        )[dataloaders["NoRad"]["jet_pt"] > 0]
+        feed_dict["Rapgap_no_rad"] = dataloaders["NoRad"][var][
+            dataloaders["NoRad"]["jet_pt"] > 0
+        ]
+    binned_corrections_dict["Rapgap_unbinnedQED"] = None
+    binned_corrections_dict["Rapgap_no_rad"] = None
+    binned_corrections_dict["Rapgap"] = None
+
+    if flags.reco:
+        ylabel = r"1/N $\mathrm{dN}/\mathrm{d}$%s" % info.name
+    else:
+        ylabel = r"$1/\sigma$ $\mathrm{d}\sigma/\mathrm{d}$%s" % info.name
+
+    # Generate histogram plot
+    fig, ax = utils.HistRoutine(
+        feed_dict,
+        xlabel=info.name,
+        ylabel=ylabel,
+        weights=weights,
+        logy=info.logy,
+        logx=info.logx,
+        binning=binning,
+        reference_name="Rapgap_no_rad",
+        label_loc="upper left",
+        uncertainty=None,
+        stat_uncertainty=np.zeros(len(binning) - 1),
+        binned_corrections_dict=binned_corrections_dict,
+    )
+
+    # Set plot limits and save
+    ax.set_ylim(info.ylow, info.yhigh)
+    fig.savefig(f"../plots/{version}_{var}_QEDcorrections_comparison.pdf")
+    plt.close(fig)
+    fig,ax = utils.ScatterRoutine(corrections_plot_feed_dict,xlabel=info.name,ylabel='QED correction value')
+    fig.savefig(f"../plots/{version}_{var}_QEDcorrections.pdf")
+
 def plot_observable(flags, var, dataloaders, version):
     info = utils.ObservableInfo(var)
 
@@ -1445,9 +2221,28 @@ def plot_observable(flags, var, dataloaders, version):
         total_unc = np.sqrt(total_unc)
         # print(f"data_stat_unc: {data_stat_unc}")
 
+    binned_corrections_dict = {}
+    use_unbinned_QED_corrections = flags.unbinned_QED
+    if flags.binned_QED:
+        # Only use binned QED corrections if both unbinned and binned are true
+        use_unbinned_QED_corrections = False
+        withRad_hist, _ = compute_histogram(
+            "Rapgap", dataloaders["Rapgap"]["mc_weights"]
+        )
+        NoRad_hist, bin_edges = compute_histogram(
+            "NoRad", dataloaders["NoRad"]["mc_weights"]
+        )
+        binned_QED_corrections = (np.ma.divide(NoRad_hist, withRad_hist).filled(1))
+        binned_corrections_dict[data_name] = binned_QED_corrections
+        
+    else:
+        binned_QED_corrections = None
     # Prepare weights and data for plotting
     weights = {}
     feed_dict = {}
+
+    if use_unbinned_QED_corrections:
+        dataloaders["Rapgap"][weight_name] = dataloaders["Rapgap"][weight_name] * dataloaders["Rapgap"]["QED_corrections"]
 
     if len(dataloaders["Rapgap"][var].shape) > 1:
         Rapgap_mask = dataloaders["Rapgap"]["jet_pt"] > 0
@@ -1465,6 +2260,7 @@ def plot_observable(flags, var, dataloaders, version):
         )
         feed_dict[data_name] = Rapgap_data
         feed_dict["Rapgap"] = Rapgap_data
+        
     else:
         weights[data_name] = (
             dataloaders["Rapgap"]["mc_weights"] * dataloaders["Rapgap"][weight_name]
@@ -1478,6 +2274,7 @@ def plot_observable(flags, var, dataloaders, version):
         feed_dict["Rapgap"] = dataloaders["Rapgap"][var][
             dataloaders["Rapgap"]["jet_pt"] > 0
         ]
+    binned_corrections_dict["Rapgap"] = None
 
     if len(dataloaders["Djangoh"][var].shape) > 1:
         Djangoh_mask = dataloaders["Djangoh"]["jet_pt"] > 0
@@ -1496,6 +2293,7 @@ def plot_observable(flags, var, dataloaders, version):
         feed_dict["Djangoh"] = dataloaders["Djangoh"][var][
             dataloaders["Djangoh"]["jet_pt"] > 0
         ]
+    binned_corrections_dict["Djangoh"] = None
 
     if flags.reco:
         if len(dataloaders["data"][var].shape) > 1:
@@ -1530,12 +2328,17 @@ def plot_observable(flags, var, dataloaders, version):
         reference_name="data" if flags.reco else data_name,
         label_loc="upper left",
         uncertainty=total_unc,
-        stat_uncertainty=data_stat_unc,
+        stat_uncertainty=np.zeros(len(binning) - 1),
+        binned_corrections_dict=binned_corrections_dict,
     )
 
     # Set plot limits and save
     ax.set_ylim(info.ylow, info.yhigh)
     add_string = "reco" if flags.reco else "unfolded"
+    if use_unbinned_QED_corrections:
+        add_string = add_string + "_unbinnedQED"
+    elif flags.binned_QED:
+        add_string = add_string + "_binnedQED"
     fig.savefig(f"../plots/{version}_{var}_{add_string}.pdf")
 
 
@@ -1802,3 +2605,24 @@ def plot_part_observable(flags, var, dataloaders, version):
     # Set plot limits and save
     ax.set_ylim(info.ylow, info.yhigh)
     fig.savefig(flags.plot_folder + f"/{version}_{var}.pdf")
+
+def gather_data(dataloaders):
+    for dataloader in dataloaders:
+        # dataloaders[dataloader].mask = np.reshape(dataloaders[dataloader].mask,(-1))
+        # dataloaders[dataloader].part = hvd.allgather(tf.constant(dataloaders[dataloader].part.reshape(
+        #     (-1,dataloaders[dataloader].part.shape[-1]))[dataloaders[dataloader].mask])).numpy()
+
+        dataloaders[dataloader].event = hvd.allgather(
+            tf.constant(dataloaders[dataloader].event)
+        ).numpy()
+        # dataloaders[dataloader].jet = hvd.allgather(tf.constant(dataloaders[dataloader].jet)).numpy()
+        # dataloaders[dataloader].jet_breit = hvd.allgather(tf.constant(dataloaders[dataloader].jet_breit)).numpy()
+        dataloaders[dataloader].all_jets = hvd.allgather(
+            tf.constant(dataloaders[dataloader].all_jets)
+        ).numpy()
+        dataloaders[dataloader].all_jets_breit = hvd.allgather(
+            tf.constant(dataloaders[dataloader].all_jets_breit)
+        ).numpy()
+        dataloaders[dataloader].weight = hvd.allgather(
+            tf.constant(dataloaders[dataloader].weight)
+        ).numpy()
