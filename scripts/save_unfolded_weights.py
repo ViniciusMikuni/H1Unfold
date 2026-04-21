@@ -242,7 +242,7 @@ def main():
 
     print(f"[rank {hvd.rank()}] total_events={total_events}, num_batches={num_batches}, hvd.size()={hvd.size()}", flush=True)
 
-    replace_string = f"unfolded_{flags.niter}_centauro"
+    replace_string = f"unfolded_{flags.niter}"
     if flags.reco:
         replace_string += "_reco"
     if flags.bootstrap:

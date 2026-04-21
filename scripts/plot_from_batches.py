@@ -26,6 +26,7 @@ import gc
 
 import numpy as np
 import h5py as h5
+import uproot
 
 import utils
 import options
@@ -34,6 +35,7 @@ from utils import ObservableInfo
 utils.SetStyle()
 
 var_names = ['deltaphi', 'jet_pt', 'jet_tau10', 'zjet', 'zjet_breit']#, 'eec', 'theta']
+# var_names = ['deltaphi']#, 'eec', 'theta']
 
 
 # ---------------------------------------------------------------------------
@@ -42,7 +44,7 @@ var_names = ['deltaphi', 'jet_pt', 'jet_tau10', 'zjet', 'zjet_breit']#, 'eec', '
 
 def get_batch_files(data_folder, period, niter, suffix,
                     use_sys, sys_list=None, nominal='Rapgap',
-                    reco=False):
+                    reco=False, data_suffix=None):
     """
     Return a dict mapping dataset label -> sorted list of batch h5 file paths.
 
@@ -50,12 +52,12 @@ def get_batch_files(data_folder, period, niter, suffix,
       Rapgap_Eplus0607_unfolded_4_centauro_boot_batch0000.h5
       Rapgap_Eplus0607_sys0_unfolded_4_centauro_boot_batch0000.h5
       Djangoh_Eplus0607_unfolded_4_centauro_boot_batch0000.h5
-      data_Eplus0607_unfolded_4_centauro_reco_batch0000.h5  (reco mode, data only)
+      data_Eplus0607_unfolded_4_reco_batch0000.h5  (reco mode, data only)
     """
     if sys_list is None:
         sys_list = ['sys0', 'sys1', 'sys5', 'sys7', 'sys11']
 
-    mc_suffix = suffix.replace('_boot', '_reco_boot') if reco else suffix
+    mc_suffix = suffix.replace('boot', 'reco_boot') if reco else suffix
 
     def _glob(base_name):
         pattern = os.path.join(
@@ -71,10 +73,11 @@ def get_batch_files(data_folder, period, niter, suffix,
     }
 
     if reco:
-        reco_data_suffix = suffix.replace('_boot', '') + '_reco'
+        if data_suffix is None:
+            data_suffix = suffix.replace('boot', 'reco')
         data_pattern = os.path.join(
             data_folder,
-            f'data_{period}_unfolded_{niter}_{reco_data_suffix}_batch*.h5'
+            f'data_{period}_unfolded_{niter}_{data_suffix}_batch*.h5'
         )
         batch_files['data'] = sorted(glob.glob(data_pattern))
 
@@ -101,8 +104,11 @@ def parse_arguments():
                         help='Folder to store plots')
     parser.add_argument('--period', default='Eplus0607',
                         help='Data-taking period string in file names')
-    parser.add_argument('--suffix', default='centauro_boot',
-                        help='Middle suffix in batch file names (e.g. centauro_boot)')
+    parser.add_argument('--suffix', default='boot',
+                        help='Middle suffix in batch file names (e.g. boot)')
+    parser.add_argument('--data_suffix', default=None,
+                        help='Suffix for data batch file names in reco mode (e.g. reco). '
+                             'Defaults to <suffix-without-_boot>_reco if not set.')
     parser.add_argument('--reco', action='store_true', default=False,
                         help='Plot reco level results')
     parser.add_argument('--sys', action='store_true', default=False,
@@ -117,6 +123,8 @@ def parse_arguments():
                         help='Number of bootstrap replicas (weights1..weightsN) in the files')
     parser.add_argument('--eec', action='store_true', default=False,
                         help='Use eec mask and E_wgt (EEC mode)')
+    parser.add_argument('--pythia', default=None,
+                        help='Path to Pythia ROOT file with tree "jets" for theory curve')
     parser.add_argument('--verbose', action='store_true', default=False,
                         help='Increase print level')
     flags = parser.parse_args()
@@ -284,6 +292,34 @@ def accumulate_bootstrap_histograms(file_list, var, binning, nboot,
         gc.collect()
 
     return boot_counts
+
+
+# ---------------------------------------------------------------------------
+# Pythia theory prediction loader
+# ---------------------------------------------------------------------------
+
+def load_pythia_histogram(root_file, var, binning):
+    """
+    Load a normalised density histogram for `var` from a Pythia ROOT file.
+
+    The tree "jets" stores observables as flat arrays (e.g. jet_pt) with
+    companion count arrays (e.g. njet_pt) giving the multiplicity per event.
+    Returns (bin_centers, density_weights) suitable for feed_dict / weights_dict,
+    or None if the variable is not present in the file.
+    """
+    with uproot.open(root_file) as f:
+        tree = f['jets']
+        if var not in tree.keys():
+            return None
+        vals = tree[var].array(library='np')  # flat or jagged array
+        if vals.dtype == object:              # jagged: flatten across events
+            vals = np.concatenate(vals)
+
+    bin_widths = np.diff(binning)
+    counts, _ = np.histogram(vals, bins=binning)
+    density = to_density(counts.astype(float), binning)
+    bin_centers = 0.5 * (binning[:-1] + binning[1:])
+    return bin_centers, density * bin_widths
 
 
 # ---------------------------------------------------------------------------
@@ -520,6 +556,14 @@ def plot_observable(flags, var, batch_files, version):
         'Djangoh': djangoh_mc_density * bin_widths,
     }
 
+    if flags.pythia is not None:
+        pythia_result = load_pythia_histogram(flags.pythia, var, binning)
+        if pythia_result is not None:
+            feed_dict['Pythia']    = pythia_result[0]
+            weights_dict['Pythia'] = pythia_result[1]
+        elif flags.verbose:
+            print(f'  Pythia: variable "{var}" not found in {flags.pythia}')
+
     if flags.reco and data_raw_counts is not None:
         data_density = to_density(data_raw_counts, binning)
         feed_dict['data']    = bin_centers
@@ -548,6 +592,16 @@ def plot_observable(flags, var, batch_files, version):
     )
 
     ax.set_ylim(info.ylow, info.yhigh)
+
+    if flags.period.startswith('Eplus'):
+        beam_label = '$e^+$'
+    elif flags.period.startswith('Eminus'):
+        beam_label = '$e^-$'
+    else:
+        beam_label = flags.period
+    ax.text(0.97, 0.97, beam_label, transform=ax.transAxes,
+            ha='right', va='top', fontsize=20)
+
     os.makedirs(flags.plot_folder, exist_ok=True)
     if flags.blind:
         plot_tag = 'closure'
@@ -555,7 +609,7 @@ def plot_observable(flags, var, batch_files, version):
         plot_tag = 'reco'
     else:
         plot_tag = 'unfolded'
-    fig.savefig(os.path.join(flags.plot_folder, f'{version}_{var}_{plot_tag}.pdf'))
+    fig.savefig(os.path.join(flags.plot_folder, f'{version}_{flags.period}_{var}_{plot_tag}.pdf'))
 
 
 # ---------------------------------------------------------------------------
@@ -573,6 +627,7 @@ def main():
         suffix=flags.suffix,
         use_sys=flags.sys,
         reco=flags.reco,
+        data_suffix=flags.data_suffix,
     )
 
     for label, files in batch_files.items():
