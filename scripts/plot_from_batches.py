@@ -137,16 +137,13 @@ def parse_arguments():
 # ---------------------------------------------------------------------------
 # Normalisation helper
 # ---------------------------------------------------------------------------
-
 def to_density(counts, binning):
     """Normalise raw counts to unit-area density histogram."""
     bin_widths = np.diff(binning)
-    total = np.sum(counts * bin_widths)
+    total = np.sum(counts)
     if total <= 0:
         return counts.copy()
-    return counts / total
-
-
+    return counts / (total*bin_widths)
 # ---------------------------------------------------------------------------
 # Per-file histogram accumulation helpers
 # ---------------------------------------------------------------------------
@@ -299,6 +296,7 @@ def accumulate_bootstrap_histograms(file_list, var, binning, nboot,
 # ---------------------------------------------------------------------------
 
 def load_pythia_histogram(root_file, var, binning):
+    import awkward as ak
     """
     Load a normalised density histogram for `var` from a Pythia ROOT file.
 
@@ -307,19 +305,16 @@ def load_pythia_histogram(root_file, var, binning):
     Returns (bin_centers, density_weights) suitable for feed_dict / weights_dict,
     or None if the variable is not present in the file.
     """
-    with uproot.open(root_file) as f:
+   with uproot.open(root_file) as f:
         tree = f['jets']
         if var not in tree.keys():
             return None
-        vals = tree[var].array(library='np')  # flat or jagged array
-        if vals.dtype == object:              # jagged: flatten across events
-            vals = np.concatenate(vals)
-
-    bin_widths = np.diff(binning)
+        vals = tree[var].array()  # flat or jagged array
+        if vals.ndim == 2:
+            vals = ak.flatten(vals)
     counts, _ = np.histogram(vals, bins=binning)
-    density = to_density(counts.astype(float), binning)
     bin_centers = 0.5 * (binning[:-1] + binning[1:])
-    return bin_centers, density * bin_widths
+    return bin_centers, counts
 
 
 # ---------------------------------------------------------------------------
@@ -534,16 +529,6 @@ def plot_observable(flags, var, batch_files, version):
 
         total_unc = np.sqrt(total_unc)
 
-    # ------------------------------------------------------------------
-    # Build feed_dict for utils.HistRoutine / HistRoutinePart
-    #
-    # Bin-centers trick: pass bin_centers as "data" with
-    # weight = density * bin_width, so np.histogram(..., density=True)
-    # inside HistRoutinePart recovers the pre-computed density exactly.
-    # ------------------------------------------------------------------
-    rapgap_mc_density  = to_density(rapgap_plot['mc'],      binning)
-    rapgap_unf_density = to_density(rapgap_plot['unfolded'], binning)
-    djangoh_mc_density = to_density(djangoh_plot['mc'],      binning)
 
     feed_dict = {
         data_name: bin_centers,
@@ -551,9 +536,9 @@ def plot_observable(flags, var, batch_files, version):
         'Djangoh': bin_centers,
     }
     weights_dict = {
-        data_name: rapgap_unf_density * bin_widths,
-        'Rapgap':  rapgap_mc_density  * bin_widths,
-        'Djangoh': djangoh_mc_density * bin_widths,
+        data_name: rapgap_plot['unfolded'],
+        'Rapgap':  rapgap_plot['mc'],
+        'Djangoh': djangoh_plot['mc'],
     }
 
     if flags.pythia is not None:

@@ -20,6 +20,11 @@ def parse_arguments():
         help="Folder containing data and MC files",
     )
     parser.add_argument(
+        "--output_folder",
+        default="/pscratch/sd/t/twamorka/h1/batchfiles/",
+        help="",
+    )
+    parser.add_argument(
         "--weights", default="../weights", help="Folder to store trained weights"
     )
     parser.add_argument(
@@ -36,9 +41,9 @@ def parse_arguments():
     parser.add_argument(
         "--reco", action="store_true", default=False, help="Plot reco level results"
     )
-    parser.add_argument(
-        "--file", default="Rapgap_Eplus0607_prep.h5", help="File to load"
-    )
+    # parser.add_argument(
+    #     "--file", default="Rapgap_Eplus0607_prep.h5", help="File to load"
+    # )
     parser.add_argument(
         "--niter", type=int, default=4, help="Omnifold iteration to load"
     )
@@ -54,8 +59,13 @@ def parse_arguments():
         default=False,
         help="Load models for bootstrapping",
     )
+    # parser.add_argument(
+    #     "--pre_weights_file",
+    #     default=None,
+    #     help="Path to HDF5 file containing pre-evaluated weights",
+    # )
     parser.add_argument(
-        "--pre_weights_file",
+        "--file",
         default=None,
         help="Path to HDF5 file containing pre-evaluated weights",
     )
@@ -115,7 +125,7 @@ def load_weights_slice(flags, global_start, global_end):
 
     if "data" not in flags.file:
         print(f"[rank {hvd.rank()}] load_weights_slice: opening weights file", flush=True)
-        with h5.File(os.path.join(flags.data_folder, flags.pre_weights_file), "r") as fh5:
+        with h5.File(os.path.join(flags.data_folder, flags.file), "r") as fh5:
             total_size = fh5["reco_event_features"].shape[0]
             start = global_start
             end = min(global_end, total_size)
@@ -135,7 +145,7 @@ def load_weights_slice(flags, global_start, global_end):
             else:
                 raise KeyError("File has no dataset 'unfolded_weights'")
 
-            if flags.bootstrap:
+            if flags.bootstrap and "Rapgap" in flags.file:
                 for i in range(1, flags.nboot + 1):
                     key = f"unfolded_weights_boots{i}"
                     if key in fh5:
@@ -192,43 +202,6 @@ def process_batch(flags, batch_start, batch_end, weights_dict, opt):
     return results
 
 
-def gather_results_across_ranks(results):
-    """Gather results from all ranks to rank 0"""
-    gathered = {}
-
-    print(f"[rank {hvd.rank()}] gather: starting allgather", flush=True)
-    # Gather each array separately
-    for key in results.keys():
-        print(f"[rank {hvd.rank()}] gather: allgather key='{key}'", flush=True)
-        if key == 'weights':
-            # Handle nested weights dictionary
-            gathered[key] = {}
-            for weight_key in results[key].keys():
-                gathered[key][weight_key] = hvd.allgather_object(results[key][weight_key])
-        else:
-            gathered[key] = hvd.allgather_object(results[key])
-
-    print(f"[rank {hvd.rank()}] gather: allgather complete", flush=True)
-    # Only rank 0 concatenates the results
-    if hvd.rank() == 0:
-        concatenated = {}
-        for key in gathered.keys():
-            if key == 'weights':
-                concatenated[key] = {}
-                for weight_key in gathered[key].keys():
-                    # Filter out None/empty arrays and concatenate
-                    valid_arrays = [arr for arr in gathered[key][weight_key] if arr is not None and len(arr) > 0]
-                    if valid_arrays:
-                        concatenated[key][weight_key] = np.concatenate(valid_arrays, axis=0)
-            else:
-                # Filter out None/empty arrays and concatenate
-                valid_arrays = [arr for arr in gathered[key] if arr is not None and len(arr) > 0]
-                if valid_arrays:
-                    concatenated[key] = np.concatenate(valid_arrays, axis=0)
-        print(f"[rank 0] gather: concatenation complete", flush=True)
-        return concatenated
-    else:
-        return None
 
 
 def main():
@@ -242,7 +215,7 @@ def main():
 
     print(f"[rank {hvd.rank()}] total_events={total_events}, num_batches={num_batches}, hvd.size()={hvd.size()}", flush=True)
 
-    replace_string = f"unfolded_{flags.niter}"
+    replace_string = f"unfolded_niter_{flags.niter}"
     if flags.reco:
         replace_string += "_reco"
     if flags.bootstrap:
@@ -268,9 +241,10 @@ def main():
     # Load the full batch on this rank (size=1, rank=0 within the batch)
     results = process_batch(flags, batch_start, batch_end, weights_dict, opt)
 
-    base_name = flags.file.replace("prep.h5", "")
+    stem = os.path.splitext(flags.file)[0]
+    base_name = stem.split("_unfolded")[0].removesuffix("_prep") + "_"
     output_file_name = f"{base_name}{replace_string}_batch{batch_idx:04d}.h5"
-    output_path = os.path.join(flags.data_folder, output_file_name)
+    output_path = os.path.join(flags.output_folder, output_file_name)
 
     if os.path.exists(output_path):
         os.remove(output_path)
@@ -279,7 +253,7 @@ def main():
         if "data" not in flags.file and 'weights' in results and len(results['weights']) > 0:
             if flags.file in results['weights']:
                 fh5.create_dataset("weights_nominal", data=results['weights'][flags.file])
-            if flags.bootstrap:
+            if flags.bootstrap and "Rapgap" in flags.file:
                 for i in range(1, flags.nboot):
                     if str(i) in results['weights']:
                         fh5.create_dataset(f"weights{i}", data=results['weights'][str(i)])

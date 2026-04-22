@@ -1,7 +1,8 @@
 import numpy as np
 import utils
 import awkward as ak
-
+import os
+from multiprocessing import Pool
 
 def _cluster_chunk(args):
     """Process a chunk of events for jet clustering (runs in a worker process)."""
@@ -128,85 +129,8 @@ def cluster_jets(dataloaders, n_workers=None):
         q_list = np.stack((q_x, q_y, q_z, q_E), axis=1)
         return q_list
 
-    def _calculate_jet_features(jet, q):
-        """Calculate jet features such as tau variables and ptD."""
-        tau_11, tau_11p5, tau_12, tau_20, sumpt = 0, 0, 0, 0, 0
-        for constituent in jet.constituents():
-            delta_r = jet.delta_R(constituent)
-            pt = constituent.pt()
 
-            tau_11 += pt * delta_r**1
-            tau_11p5 += pt * delta_r**1.5
-            tau_12 += pt * delta_r**2
-            tau_20 += pt**2
-            sumpt += pt
 
-        jet.tau_11 = np.log(tau_11 / jet.pt()) if jet.pt() > 0 else 0.0
-        jet.tau_11p5 = np.log(tau_11p5 / jet.pt()) if jet.pt() > 0 else 0.0
-        jet.tau_12 = np.log(tau_12 / jet.pt()) if jet.pt() > 0 else 0.0
-        jet.tau_20 = tau_20 / (jet.pt() ** 2) if jet.pt() > 0 else 0.0
-        jet.ptD = np.sqrt(tau_20) / sumpt if sumpt > 0 else 0.0
-
-        # Calculating zjet
-        P = np.array(
-            [0, 0, 920, 920], dtype=np.float32
-        )  # 920 GeV is proton beam energy
-        P_dot_q = P[3] * q[3] - P[0] * q[0] - P[1] * q[1] - P[2] * q[2]
-        z_jet_numerator = (
-            P[3] * jet.E() - P[0] * jet.px() - P[1] * jet.py() - P[2] * jet.pz()
-        )
-        jet.zjet = z_jet_numerator / P_dot_q
-
-    def _take_leading_jet(jets):
-        """Extract features of the leading jet."""
-        if not jets:
-            return np.zeros(10)
-
-        leading_jet = jets[0]
-        return np.array(
-            [
-                leading_jet.pt(),
-                leading_jet.eta(),
-                (leading_jet.phi() + np.pi) % (2 * np.pi) - np.pi,
-                leading_jet.E(),
-                leading_jet.tau_11,
-                leading_jet.tau_11p5,
-                leading_jet.tau_12,
-                leading_jet.tau_20,
-                leading_jet.ptD,
-                leading_jet.zjet,
-            ]
-        )
-
-    def _take_all_jets(jets):
-        max_num_jets = 4
-
-        if not jets:
-            return np.zeros((max_num_jets, 10))
-        jet_array = []
-        for i in range(max_num_jets):
-            if i < len(jets):
-                jet = jets[i]
-                jet_info = [
-                    jet.pt(),
-                    jet.eta(),
-                    (jet.phi() + np.pi) % (2 * np.pi) - np.pi,
-                    jet.E(),
-                    jet.tau_11,
-                    jet.tau_11p5,
-                    jet.tau_12,
-                    jet.tau_20,
-                    jet.ptD,
-                    jet.zjet,
-                ]
-            else:
-                jet_info = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-            jet_array.append(jet_info)
-
-        return np.array(jet_array)
-
-    import os
-    from multiprocessing import Pool
 
     if n_workers is None:
         n_workers = os.cpu_count() or 1
@@ -1206,13 +1130,6 @@ def cluster_breit(flags, dataloaders):
         jets["eta"] = np.arcsinh(jets["pz"] / jets["pt"])
         jets = fastjet.sorted_by_pt(jets)
 
-        # def _take_leading_jet(jets):
-        #     jet = np.zeros((data.event.shape[0],4))
-        #     jet[:,0] = -np.array(list(itertools.zip_longest(*jets.pt.to_list(), fillvalue=0))).T[:,0]
-        #     jet[:,1] = np.array(list(itertools.zip_longest(*jets.eta.to_list(), fillvalue=0))).T[:,0]
-        #     jet[:,2] = np.array(list(itertools.zip_longest(*jets.phi.to_list(), fillvalue=0))).T[:,0]
-        #     jet[:,3] = np.array(list(itertools.zip_longest(*jets.E.to_list(), fillvalue=0))).T[:,0]
-        #     return jet
 
         def _take_all_jets(jets, maxjets=5):
             jet = np.zeros((data.event.shape[0], maxjets, 7))
@@ -1239,27 +1156,7 @@ def cluster_breit(flags, dataloaders):
             ).T[:, :maxjets]
             return jet
 
-        # def _take_all_jets(jets, max_num_jets):
-        #     all_jets = []
-        #     for event in jets:
-        #         event_jets = []
-        #         for i in range(max_num_jets):
-        #             if i < len(event):
-        #                 jet_info = [-event[i].pt,
-        #                             event[i].eta,
-        #                             event[i].phi,
-        #                             event[i].E,
-        #                             event[i].px,
-        #                             event[i].py,
-        #                             event[i].pz
-        #                         ]
-        #             else:
-        #                 jet_info = [0, 0, 0, 0, 0, 0, 0]
-        #             event_jets.append(jet_info)
-        #         all_jets.append(event_jets)
-        #     return np.array(all_jets)
 
-        # dataloaders[dataloader_name].jet_breit = _take_leading_jet(jets)
 
         max_num_jets = 4
         dataloaders[dataloader_name].all_jets_breit = _take_all_jets(jets, max_num_jets)

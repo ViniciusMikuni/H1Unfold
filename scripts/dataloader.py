@@ -108,10 +108,10 @@ class Dataset:
                     "reco_event_features"
                 ].shape[0]
 
-            # Sum of weighted events for collisions passing the reco cuts (within batch window)
+            # Sum of weighted events for collisions passing the reco cuts (full dataset up to nmax)
             reco_e_batch = h5.File(os.path.join(self.base_path, f), "r")[
                 "reco_event_features"
-            ][self.global_start : self.nmax]
+            ][: self.nmax]
             self.num_pass_reco += np.sum(
                 reco_e_batch[:, -2][reco_e_batch[:, -1] == 1]
             )
