@@ -320,12 +320,8 @@ if __name__ == "__main__":
         ]
         data, _ = convert_to_np(file_list, flags.data_input, name="Data")
         with h5.File(os.path.join(flags.data_output, "data_Eplus0607.h5"), "w") as fh5:
-            fh5.create_dataset(
-                "reco_particle_features", data=data["particle_features"]
-            )
-            fh5.create_dataset(
-                "reco_event_features", data=data["event_features"]
-            )
+            fh5.create_dataset("reco_particle_features", data=data["particle_features"])
+            fh5.create_dataset("reco_event_features", data=data["event_features"])
 
     elif flags.sample == "dataEm":
         print("Processing Data")
@@ -335,12 +331,8 @@ if __name__ == "__main__":
         ]
         data, _ = convert_to_np(file_list, flags.data_input, name="Data")
         with h5.File(os.path.join(flags.data_output, "data_Eminus06.h5"), "w") as fh5:
-            fh5.create_dataset(
-                "reco_particle_features", data=data["particle_features"]
-            )
-            fh5.create_dataset(
-                "reco_event_features", data=data["event_features"]
-            )
+            fh5.create_dataset("reco_particle_features", data=data["particle_features"])
+            fh5.create_dataset("reco_event_features", data=data["event_features"])
 
     elif flags.sample == "RapgapEp":
         print("Processing Rapgap")
@@ -354,15 +346,9 @@ if __name__ == "__main__":
         with h5.File(
             os.path.join(flags.data_output, "Rapgap_Eplus0607.h5"), "w"
         ) as fh5:
-            fh5.create_dataset(
-                "reco_particle_features", data=reco["particle_features"]
-            )
-            fh5.create_dataset(
-                "reco_event_features", data=reco["event_features"]
-            )
-            fh5.create_dataset(
-                "gen_particle_features", data=gen["particle_features"]
-            )
+            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
+            fh5.create_dataset("reco_event_features", data=reco["event_features"])
+            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
             fh5.create_dataset("gen_event_features", data=gen["event_features"])
     elif flags.sample == "DjangohEp":
         print("Processing Djangoh")
@@ -375,15 +361,9 @@ if __name__ == "__main__":
         with h5.File(
             os.path.join(flags.data_output, "Djangoh_Eplus0607.h5"), "w"
         ) as fh5:
-            fh5.create_dataset(
-                "reco_particle_features", data=reco["particle_features"]
-            )
-            fh5.create_dataset(
-                "reco_event_features", data=reco["event_features"]
-            )
-            fh5.create_dataset(
-                "gen_particle_features", data=gen["particle_features"]
-            )
+            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
+            fh5.create_dataset("reco_event_features", data=reco["event_features"])
+            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
             fh5.create_dataset("gen_event_features", data=gen["event_features"])
 
     elif flags.sample == "DjangohEm":
@@ -397,15 +377,9 @@ if __name__ == "__main__":
         with h5.File(
             os.path.join(flags.data_output, "Djangoh_Eminus06.h5"), "w"
         ) as fh5:
-            fh5.create_dataset(
-                "reco_particle_features", data=reco["particle_features"]
-            )
-            fh5.create_dataset(
-                "reco_event_features", data=reco["event_features"]
-            )
-            fh5.create_dataset(
-                "gen_particle_features", data=gen["particle_features"]
-            )
+            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
+            fh5.create_dataset("reco_event_features", data=reco["event_features"])
+            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
             fh5.create_dataset("gen_event_features", data=gen["event_features"])
 
     elif flags.sample == "RapgapEm":
@@ -419,15 +393,9 @@ if __name__ == "__main__":
         )
         with h5.File(os.path.join(flags.data_output, "Rapgap_Eminus06.h5"), "w") as fh5:
             ###with h5.File(os.path.join(flags.data_output,"test_sim.h5"),'w') as fh5:
-            fh5.create_dataset(
-                "reco_particle_features", data=reco["particle_features"]
-            )
-            fh5.create_dataset(
-                "reco_event_features", data=reco["event_features"]
-            )
-            fh5.create_dataset(
-                "gen_particle_features", data=gen["particle_features"]
-            )
+            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
+            fh5.create_dataset("reco_event_features", data=reco["event_features"])
+            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
             fh5.create_dataset("gen_event_features", data=gen["event_features"])
 
     elif flags.sample == "RapgapEp_sys0":
@@ -441,15 +409,9 @@ if __name__ == "__main__":
         with h5.File(
             os.path.join(flags.data_output, "Rapgap_Eplus0607_sys0.h5"), "w"
         ) as fh5:
-            fh5.create_dataset(
-                "reco_particle_features", data=reco["particle_features"]
-            )
-            fh5.create_dataset(
-                "reco_event_features", data=reco["event_features"]
-            )
-            fh5.create_dataset(
-                "gen_particle_features", data=gen["particle_features"]
-            )
+            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
+            fh5.create_dataset("reco_event_features", data=reco["event_features"])
+            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
             fh5.create_dataset("gen_event_features", data=gen["event_features"])
 
     elif flags.sample == "RapgapEp_sys1":
@@ -463,15 +425,9 @@ if __name__ == "__main__":
         with h5.File(
             os.path.join(flags.data_output, "Rapgap_Eplus0607_sys1.h5"), "w"
         ) as fh5:
-            fh5.create_dataset(
-                "reco_particle_features", data=reco["particle_features"]
-            )
-            fh5.create_dataset(
-                "reco_event_features", data=reco["event_features"]
-            )
-            fh5.create_dataset(
-                "gen_particle_features", data=gen["particle_features"]
-            )
+            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
+            fh5.create_dataset("reco_event_features", data=reco["event_features"])
+            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
             fh5.create_dataset("gen_event_features", data=gen["event_features"])
 
     elif flags.sample == "RapgapEp_sys5":
@@ -485,15 +441,9 @@ if __name__ == "__main__":
         with h5.File(
             os.path.join(flags.data_output, "Rapgap_Eplus0607_sys5.h5"), "w"
         ) as fh5:
-            fh5.create_dataset(
-                "reco_particle_features", data=reco["particle_features"]
-            )
-            fh5.create_dataset(
-                "reco_event_features", data=reco["event_features"]
-            )
-            fh5.create_dataset(
-                "gen_particle_features", data=gen["particle_features"]
-            )
+            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
+            fh5.create_dataset("reco_event_features", data=reco["event_features"])
+            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
             fh5.create_dataset("gen_event_features", data=gen["event_features"])
     elif flags.sample == "RapgapEp_sys7":
         print("Processing Rapgap")
@@ -506,15 +456,9 @@ if __name__ == "__main__":
         with h5.File(
             os.path.join(flags.data_output, "Rapgap_Eplus0607_sys7.h5"), "w"
         ) as fh5:
-            fh5.create_dataset(
-                "reco_particle_features", data=reco["particle_features"]
-            )
-            fh5.create_dataset(
-                "reco_event_features", data=reco["event_features"]
-            )
-            fh5.create_dataset(
-                "gen_particle_features", data=gen["particle_features"]
-            )
+            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
+            fh5.create_dataset("reco_event_features", data=reco["event_features"])
+            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
             fh5.create_dataset("gen_event_features", data=gen["event_features"])
     elif flags.sample == "RapgapEp_sys11":
         print("Processing Rapgap")
@@ -527,15 +471,9 @@ if __name__ == "__main__":
         with h5.File(
             os.path.join(flags.data_output, "Rapgap_Eplus0607_sys11.h5"), "w"
         ) as fh5:
-            fh5.create_dataset(
-                "reco_particle_features", data=reco["particle_features"]
-            )
-            fh5.create_dataset(
-                "reco_event_features", data=reco["event_features"]
-            )
-            fh5.create_dataset(
-                "gen_particle_features", data=gen["particle_features"]
-            )
+            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
+            fh5.create_dataset("reco_event_features", data=reco["event_features"])
+            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
             fh5.create_dataset("gen_event_features", data=gen["event_features"])
 
     elif flags.sample == "DjangohEp_sys0":
@@ -549,15 +487,9 @@ if __name__ == "__main__":
         with h5.File(
             os.path.join(flags.data_output, "Djangoh_Eplus0607_sys0.h5"), "w"
         ) as fh5:
-            fh5.create_dataset(
-                "reco_particle_features", data=reco["particle_features"]
-            )
-            fh5.create_dataset(
-                "reco_event_features", data=reco["event_features"]
-            )
-            fh5.create_dataset(
-                "gen_particle_features", data=gen["particle_features"]
-            )
+            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
+            fh5.create_dataset("reco_event_features", data=reco["event_features"])
+            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
             fh5.create_dataset("gen_event_features", data=gen["event_features"])
 
     elif flags.sample == "DjangohEp_sys1":
@@ -571,15 +503,9 @@ if __name__ == "__main__":
         with h5.File(
             os.path.join(flags.data_output, "Djangoh_Eplus0607_sys1.h5"), "w"
         ) as fh5:
-            fh5.create_dataset(
-                "reco_particle_features", data=reco["particle_features"]
-            )
-            fh5.create_dataset(
-                "reco_event_features", data=reco["event_features"]
-            )
-            fh5.create_dataset(
-                "gen_particle_features", data=gen["particle_features"]
-            )
+            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
+            fh5.create_dataset("reco_event_features", data=reco["event_features"])
+            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
             fh5.create_dataset("gen_event_features", data=gen["event_features"])
 
     elif flags.sample == "DjangohEp_sys5":
@@ -593,15 +519,9 @@ if __name__ == "__main__":
         with h5.File(
             os.path.join(flags.data_output, "Djangoh_Eplus0607_sys5.h5"), "w"
         ) as fh5:
-            fh5.create_dataset(
-                "reco_particle_features", data=reco["particle_features"]
-            )
-            fh5.create_dataset(
-                "reco_event_features", data=reco["event_features"]
-            )
-            fh5.create_dataset(
-                "gen_particle_features", data=gen["particle_features"]
-            )
+            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
+            fh5.create_dataset("reco_event_features", data=reco["event_features"])
+            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
             fh5.create_dataset("gen_event_features", data=gen["event_features"])
     elif flags.sample == "DjangohEp_sys7":
         print("Processing Djangoh")
@@ -614,15 +534,9 @@ if __name__ == "__main__":
         with h5.File(
             os.path.join(flags.data_output, "Djangoh_Eplus0607_sys7.h5"), "w"
         ) as fh5:
-            fh5.create_dataset(
-                "reco_particle_features", data=reco["particle_features"]
-            )
-            fh5.create_dataset(
-                "reco_event_features", data=reco["event_features"]
-            )
-            fh5.create_dataset(
-                "gen_particle_features", data=gen["particle_features"]
-            )
+            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
+            fh5.create_dataset("reco_event_features", data=reco["event_features"])
+            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
             fh5.create_dataset("gen_event_features", data=gen["event_features"])
     elif flags.sample == "DjangohEp_sys11":
         print("Processing Djangoh")
@@ -635,15 +549,9 @@ if __name__ == "__main__":
         with h5.File(
             os.path.join(flags.data_output, "Djangoh_Eplus0607_sys11.h5"), "w"
         ) as fh5:
-            fh5.create_dataset(
-                "reco_particle_features", data=reco["particle_features"]
-            )
-            fh5.create_dataset(
-                "reco_event_features", data=reco["event_features"]
-            )
-            fh5.create_dataset(
-                "gen_particle_features", data=gen["particle_features"]
-            )
+            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
+            fh5.create_dataset("reco_event_features", data=reco["event_features"])
+            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
             fh5.create_dataset("gen_event_features", data=gen["event_features"])
 
     elif flags.sample == "RapgapEm_sys0":
@@ -657,15 +565,9 @@ if __name__ == "__main__":
         with h5.File(
             os.path.join(flags.data_output, "Rapgap_Eminus06_sys0.h5"), "w"
         ) as fh5:
-            fh5.create_dataset(
-                "reco_particle_features", data=reco["particle_features"]
-            )
-            fh5.create_dataset(
-                "reco_event_features", data=reco["event_features"]
-            )
-            fh5.create_dataset(
-                "gen_particle_features", data=gen["particle_features"]
-            )
+            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
+            fh5.create_dataset("reco_event_features", data=reco["event_features"])
+            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
             fh5.create_dataset("gen_event_features", data=gen["event_features"])
 
     elif flags.sample == "RapgapEm_sys1":
@@ -679,15 +581,9 @@ if __name__ == "__main__":
         with h5.File(
             os.path.join(flags.data_output, "Rapgap_Eminus06_sys1.h5"), "w"
         ) as fh5:
-            fh5.create_dataset(
-                "reco_particle_features", data=reco["particle_features"]
-            )
-            fh5.create_dataset(
-                "reco_event_features", data=reco["event_features"]
-            )
-            fh5.create_dataset(
-                "gen_particle_features", data=gen["particle_features"]
-            )
+            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
+            fh5.create_dataset("reco_event_features", data=reco["event_features"])
+            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
             fh5.create_dataset("gen_event_features", data=gen["event_features"])
 
     elif flags.sample == "RapgapEm_sys5":
@@ -701,15 +597,9 @@ if __name__ == "__main__":
         with h5.File(
             os.path.join(flags.data_output, "Rapgap_Eminus06_sys5.h5"), "w"
         ) as fh5:
-            fh5.create_dataset(
-                "reco_particle_features", data=reco["particle_features"]
-            )
-            fh5.create_dataset(
-                "reco_event_features", data=reco["event_features"]
-            )
-            fh5.create_dataset(
-                "gen_particle_features", data=gen["particle_features"]
-            )
+            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
+            fh5.create_dataset("reco_event_features", data=reco["event_features"])
+            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
             fh5.create_dataset("gen_event_features", data=gen["event_features"])
     elif flags.sample == "RapgapEm_sys7":
         print("Processing Rapgap")
@@ -722,15 +612,9 @@ if __name__ == "__main__":
         with h5.File(
             os.path.join(flags.data_output, "Rapgap_Eminus06_sys7.h5"), "w"
         ) as fh5:
-            fh5.create_dataset(
-                "reco_particle_features", data=reco["particle_features"]
-            )
-            fh5.create_dataset(
-                "reco_event_features", data=reco["event_features"]
-            )
-            fh5.create_dataset(
-                "gen_particle_features", data=gen["particle_features"]
-            )
+            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
+            fh5.create_dataset("reco_event_features", data=reco["event_features"])
+            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
             fh5.create_dataset("gen_event_features", data=gen["event_features"])
     elif flags.sample == "RapgapEm_sys11":
         print("Processing Rapgap")
@@ -743,15 +627,9 @@ if __name__ == "__main__":
         with h5.File(
             os.path.join(flags.data_output, "Rapgap_Eminus06_sys11.h5"), "w"
         ) as fh5:
-            fh5.create_dataset(
-                "reco_particle_features", data=reco["particle_features"]
-            )
-            fh5.create_dataset(
-                "reco_event_features", data=reco["event_features"]
-            )
-            fh5.create_dataset(
-                "gen_particle_features", data=gen["particle_features"]
-            )
+            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
+            fh5.create_dataset("reco_event_features", data=reco["event_features"])
+            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
             fh5.create_dataset("gen_event_features", data=gen["event_features"])
 
     elif flags.sample == "DjangohEm_sys0":
@@ -765,15 +643,9 @@ if __name__ == "__main__":
         with h5.File(
             os.path.join(flags.data_output, "Djangoh_Eminus06_sys0.h5"), "w"
         ) as fh5:
-            fh5.create_dataset(
-                "reco_particle_features", data=reco["particle_features"]
-            )
-            fh5.create_dataset(
-                "reco_event_features", data=reco["event_features"]
-            )
-            fh5.create_dataset(
-                "gen_particle_features", data=gen["particle_features"]
-            )
+            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
+            fh5.create_dataset("reco_event_features", data=reco["event_features"])
+            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
             fh5.create_dataset("gen_event_features", data=gen["event_features"])
 
     elif flags.sample == "DjangohEm_sys1":
@@ -787,15 +659,9 @@ if __name__ == "__main__":
         with h5.File(
             os.path.join(flags.data_output, "Djangoh_Eminus06_sys1.h5"), "w"
         ) as fh5:
-            fh5.create_dataset(
-                "reco_particle_features", data=reco["particle_features"]
-            )
-            fh5.create_dataset(
-                "reco_event_features", data=reco["event_features"]
-            )
-            fh5.create_dataset(
-                "gen_particle_features", data=gen["particle_features"]
-            )
+            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
+            fh5.create_dataset("reco_event_features", data=reco["event_features"])
+            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
             fh5.create_dataset("gen_event_features", data=gen["event_features"])
 
     elif flags.sample == "DjangohEm_sys5":
@@ -809,15 +675,9 @@ if __name__ == "__main__":
         with h5.File(
             os.path.join(flags.data_output, "Djangoh_Eminus06_sys5.h5"), "w"
         ) as fh5:
-            fh5.create_dataset(
-                "reco_particle_features", data=reco["particle_features"]
-            )
-            fh5.create_dataset(
-                "reco_event_features", data=reco["event_features"]
-            )
-            fh5.create_dataset(
-                "gen_particle_features", data=gen["particle_features"]
-            )
+            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
+            fh5.create_dataset("reco_event_features", data=reco["event_features"])
+            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
             fh5.create_dataset("gen_event_features", data=gen["event_features"])
     elif flags.sample == "DjangohEm_sys7":
         print("Processing Djangoh")
@@ -830,15 +690,9 @@ if __name__ == "__main__":
         with h5.File(
             os.path.join(flags.data_output, "Djangoh_Eminus06_sys7.h5"), "w"
         ) as fh5:
-            fh5.create_dataset(
-                "reco_particle_features", data=reco["particle_features"]
-            )
-            fh5.create_dataset(
-                "reco_event_features", data=reco["event_features"]
-            )
-            fh5.create_dataset(
-                "gen_particle_features", data=gen["particle_features"]
-            )
+            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
+            fh5.create_dataset("reco_event_features", data=reco["event_features"])
+            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
             fh5.create_dataset("gen_event_features", data=gen["event_features"])
     elif flags.sample == "DjangohEm_sys11":
         print("Processing Djangoh")
@@ -851,15 +705,9 @@ if __name__ == "__main__":
         with h5.File(
             os.path.join(flags.data_output, "Djangoh_Eminus06_sys11.h5"), "w"
         ) as fh5:
-            fh5.create_dataset(
-                "reco_particle_features", data=reco["particle_features"]
-            )
-            fh5.create_dataset(
-                "reco_event_features", data=reco["event_features"]
-            )
-            fh5.create_dataset(
-                "gen_particle_features", data=gen["particle_features"]
-            )
+            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
+            fh5.create_dataset("reco_event_features", data=reco["event_features"])
+            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
             fh5.create_dataset("gen_event_features", data=gen["event_features"])
 
     elif flags.sample == "RapgapEp_NoRad":
@@ -873,15 +721,9 @@ if __name__ == "__main__":
         with h5.File(
             os.path.join(flags.data_output, "Rapgap_Eplus0607_NoRad.h5"), "w"
         ) as fh5:
-            fh5.create_dataset(
-                "reco_particle_features", data=reco["particle_features"]
-            )
-            fh5.create_dataset(
-                "reco_event_features", data=reco["event_features"]
-            )
-            fh5.create_dataset(
-                "gen_particle_features", data=gen["particle_features"]
-            )
+            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
+            fh5.create_dataset("reco_event_features", data=reco["event_features"])
+            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
             fh5.create_dataset("gen_event_features", data=gen["event_features"])
 
     elif flags.sample == "DjangohEp_NoRad":
@@ -895,15 +737,9 @@ if __name__ == "__main__":
         with h5.File(
             os.path.join(flags.data_output, "Djangoh_Eplus0607_NoRad.h5"), "w"
         ) as fh5:
-            fh5.create_dataset(
-                "reco_particle_features", data=reco["particle_features"]
-            )
-            fh5.create_dataset(
-                "reco_event_features", data=reco["event_features"]
-            )
-            fh5.create_dataset(
-                "gen_particle_features", data=gen["particle_features"]
-            )
+            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
+            fh5.create_dataset("reco_event_features", data=reco["event_features"])
+            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
             fh5.create_dataset("gen_event_features", data=gen["event_features"])
 
     else:

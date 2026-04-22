@@ -3,7 +3,7 @@ import gc
 from dataloader import Dataset
 import utils
 import horovod.tensorflow as hvd
-from plot_utils import *
+
 
 hvd.init()
 utils.SetStyle()
@@ -119,7 +119,7 @@ def main():
     utils.setup_gpus(hvd.local_rank())
     flags = parse_arguments()
     opt = utils.LoadJson(flags.config)
-    mc_files = get_sample_names(use_sys=flags.sys)
+    mc_files = utils.get_sample_names(use_sys=flags.sys)
     if flags.verbose and hvd.rank() == 0:
         print(f"Will load the following files : {mc_files.keys()}")
 
@@ -128,9 +128,9 @@ def main():
     for dataset in dataloaders:
         if flags.verbose and hvd.rank() == 0:
             print(f"Evaluating weights for dataset {dataset}")
-        weights[dataset] = evaluate_model(flags, opt, dataset, dataloaders)
+        weights[dataset] = utils.evaluate_model(flags, opt, dataset, dataloaders)
 
-    weights["closure"] = evaluate_model(
+    weights["closure"] = utils.evaluate_model(
         flags,
         opt,
         "Rapgap",
@@ -141,21 +141,21 @@ def main():
     if hvd.rank() == 0:
         print("Done with network evaluation")
     # Important to only undo the preprocessing after the weights are derived!
-    undo_standardizing(flags, dataloaders)
+    utils.undo_standardizing(flags, dataloaders)
     num_part = dataloaders["Rapgap"].part.shape[1]
 
-    cluster_jets(dataloaders)
-    cluster_breit(dataloaders)
-    gather_data(dataloaders)
-    plot_particles(flags, dataloaders, weights, opt["NAME"], num_part=num_part)
-    plot_jet_pt(flags, dataloaders, weights, opt["NAME"], lab_frame=False)
-    plot_jet_pt(flags, dataloaders, weights, opt["NAME"])
+    # cluster_jets(dataloaders)
+    # cluster_breit(dataloaders)
+    # gather_data(dataloaders)
+    # plot_particles(flags, dataloaders, weights, opt["NAME"], num_part=num_part)
+    # plot_jet_pt(flags, dataloaders, weights, opt["NAME"], lab_frame=False)
+    # plot_jet_pt(flags, dataloaders, weights, opt["NAME"])
 
-    plot_deltaphi(flags, dataloaders, weights, opt["NAME"])
-    plot_tau(flags, dataloaders, weights, opt["NAME"])
-    plot_zjet(flags, dataloaders, weights, opt["NAME"], frame="lab")
-    plot_zjet(flags, dataloaders, weights, opt["NAME"], frame="breit")
-    plot_event(flags, dataloaders, weights, opt["NAME"])
+    # plot_deltaphi(flags, dataloaders, weights, opt["NAME"])
+    # plot_tau(flags, dataloaders, weights, opt["NAME"])
+    # plot_zjet(flags, dataloaders, weights, opt["NAME"], frame="lab")
+    # plot_zjet(flags, dataloaders, weights, opt["NAME"], frame="breit")
+    # plot_event(flags, dataloaders, weights, opt["NAME"])
 
 
 if __name__ == "__main__":

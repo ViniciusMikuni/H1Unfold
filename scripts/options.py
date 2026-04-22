@@ -76,98 +76,12 @@ dedicated_binning = {
     "jet_pt": np.logspace(np.log10(10), np.log10(100), 7),
     "jet_eta": np.linspace(-1, 2.5, 8),
     "jet_phi": np.linspace(-3.14, 3.14, 8),
-    "gen_jet_charge": np.array(
-        [
-            -1.00,
-            -0.88,
-            -0.76,
-            -0.62,
-            -0.47,
-            -0.33,
-            -0.21,
-            -0.11,
-            -0.03,
-            0.03,
-            0.11,
-            0.19,
-            0.29,
-            0.41,
-            0.56,
-            0.70,
-            0.84,
-            1.00,
-        ]
-    ),
     "gen_jet_tau10": np.array(
         [-4.00, -3.15, -2.59, -2.18, -1.86, -1.58, -1.29, -1.05, -0.81, -0.61, 0.00]
     ),
-    "gen_jet_tau15": np.array(
-        [-5.00, -3.99, -3.28, -2.78, -2.32, -1.92, -1.57, -1.21, -0.91, 0.00]
-    ),
-    "gen_jet_tau20": np.array(
-        [-6.00, -4.61, -3.76, -3.09, -2.55, -2.06, -1.58, -1.15, 0.00]
-    ),
-    "gen_jet_ptD": np.array(
-        [
-            0.00,
-            0.32,
-            0.39,
-            0.46,
-            0.55,
-            0.64,
-            0.74,
-            0.85,
-            0.94,
-            1.00,
-        ]
-    ),
-    "gen_jet_ncharged": np.linspace(1, 15 - 1e-8, 15),
     "gen_Q2": np.logspace(np.log10(150), np.log10(5000), 5),
-    "jet_ncharged": np.linspace(1, 15 - 1e-8, 15),
-    "jet_charge": np.array(
-        [
-            -1.00,
-            -0.88,
-            -0.76,
-            -0.62,
-            -0.47,
-            -0.33,
-            -0.21,
-            -0.11,
-            -0.03,
-            0.03,
-            0.11,
-            0.19,
-            0.29,
-            0.41,
-            0.56,
-            0.70,
-            0.84,
-            1.00,
-        ]
-    ),
     "jet_tau10": np.array(
         [-4.00, -3.15, -2.59, -2.18, -1.86, -1.58, -1.29, -1.05, -0.81, -0.61, 0.00]
-    ),
-    "jet_tau15": np.array(
-        [-5.00, -3.99, -3.28, -2.78, -2.32, -1.92, -1.57, -1.21, -0.91, 0.00]
-    ),
-    "jet_tau20": np.array(
-        [-6.00, -4.61, -3.76, -3.09, -2.55, -2.06, -1.58, -1.15, 0.00]
-    ),
-    "jet_ptD": np.array(
-        [
-            0.00,
-            0.32,
-            0.39,
-            0.46,
-            0.55,
-            0.64,
-            0.74,
-            0.85,
-            0.94,
-            1.00,
-        ]
     ),
     "gen_eec": np.linspace(-10, 10, 80),
     "eec": np.linspace(-10, 10, 80),
@@ -178,18 +92,8 @@ dedicated_binning = {
 }
 
 fixed_yaxis = {
-    "gen_jet_ncharged": 0.3,
-    "gen_jet_charge": 3.0,
     "gen_jet_tau10": 1.3,
-    "gen_jet_tau15": 0.9,
-    "gen_jet_tau20": 0.7,
-    "gen_jet_ptD": 6.5,
-    "jet_ncharged": 0.3,
-    "jet_charge": 3.5,
     "jet_tau10": 0.9,
-    "jet_tau15": 0.8,
-    "jet_tau20": 0.7,
-    "jet_ptD": 6.5,
     "npart": 0.15,
     "e_pt": 0.15,
     "e_theta": 2.15,
@@ -242,27 +146,11 @@ name_translate = {
 }
 
 reco_vars = {
-    "jet_ncharged": r"Charged hadron multiplicity $(\tilde{\lambda}_0^0)$",
-    "jet_charge": r"Jet Charge $(\tilde{\lambda}_0^1)$",
-    "jet_ptD": r"$p_\mathrm{T}\mathrm{D}$ $(\sqrt{\lambda_0^2})$",
     "jet_tau10": r"$\mathrm{ln}(\lambda_1^1)$",
-    "jet_tau15": r"$\mathrm{ln}(\lambda_{1.5}^1)$",
-    "jet_tau20": r"$\mathrm{ln}(\lambda_2^1)$",
     "eec": r"$EEC$",
-    # 'npart':'Jet particle multiplicity',
-    # 'e_pt':r'electron p$_\mathrm{T}$ [GeV]',
-    # 'e_theta':r'electron $\pi - \theta$',
-    # 'jet_eta':r'Jet $\eta$',
 }
 
 gen_vars = {
-    "gen_jet_ncharged": r"Charged hadron multiplicity N$_c$ $(\tilde{\lambda}_0^0)$",
-    "gen_jet_charge": r"Jet Charge Q$_1$ $(\tilde{\lambda}_0^1)$",
-    "gen_jet_ptD": r"$p_\mathrm{T}\mathrm{D}$ $(\sqrt{\lambda_0^2})$",
     "gen_jet_tau10": r"$\ln(\lambda_1^1)$",
-    "gen_jet_tau15": r"$\ln(\lambda_{1.5}^1)$",
-    "gen_jet_tau20": r"$\ln(\lambda_2^1)$",
     "gen_eec": r"$EEC$",
-    # 'genjet_pt':r'Jet $p_\mathrm{T}$',
-    # 'gen_Q2':r'$Q^2$',
 }

@@ -11,21 +11,6 @@ from dataloader import Dataset
 # np.random.seed(1234)
 
 
-def get_sample_name(base_name, dataset, extension="_prep.h5"):
-    assert dataset in ["ep", "em"], (
-        "ERROR: Datasets can only be positron (ep) or electron (em)"
-    )
-    if "sys" in base_name:
-        sys_name = f"_{base_name.split('_')[-1]}"
-        base_name = base_name.split("_")[0]
-    else:
-        sys_name = ""
-
-    dataset = "Eplus0607" if dataset == "ep" else "Eminus06"
-    sample_name = f"{base_name}_{dataset}{sys_name}{extension}"
-    return sample_name
-
-
 if __name__ == "__main__":
     hvd.init()
     # Horovod: pin GPU to be used to process local rank (one GPU per process)
@@ -105,12 +90,12 @@ if __name__ == "__main__":
     version = "{}_{}".format(opt["NAME"], flags.dataset)
 
     mc_names = opt["MC_NAMES"]
-    mc_file_names = [get_sample_name(name, flags.dataset) for name in mc_names]
-    data_file_names = [get_sample_name("data", flags.dataset)]
+    mc_file_names = [utils.get_sample_name(name, flags.dataset) for name in mc_names]
+    data_file_names = [utils.get_sample_name("data", flags.dataset)]
 
     if flags.closure or flags.pretrain:
         # use djangoh as pseudo data
-        data_file_names = [get_sample_name("Djangoh", flags.dataset)]
+        data_file_names = [utils.get_sample_name("Djangoh", flags.dataset)]
         version += "_closure"
         # Keep closure data with around the same amount as the true data
         nmax = 350000 if flags.closure else None
