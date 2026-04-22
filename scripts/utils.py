@@ -266,38 +266,6 @@ def get_sample_name(base_name, dataset, extension="_prep.h5"):
     print(f"sample name: {sample_name}")
     return sample_name
 
-# Rapgap_Eplus0607_unfolded_niter_4.h5
-
-def get_sample_name_weights(dataset="ep", niter="4"):
-    """
-    Returns MC filenames for Rapgap and Djangoh in a dictionary usable by dataloaders.
-    Example return value:
-        {
-            "Rapgap":  "Rapgap_Eplus0607_prep.h5",
-            "Djangoh": "Djangoh_Eplus0607_prep.h5"
-        }
-    """
-
-    assert dataset in ["ep", "em"], (
-        "ERROR: Datasets must be 'ep' (positron) or 'em' (electron)."
-    )
-
-    # Map ep/em to dataset tag
-    dataset_tag = "Eplus0607" if dataset == "ep" else "Eminus06"
-    extension = "_unfolded_niter_"+str(niter)+".h5"
-    # Construct both filenames
-    rapgap = f"Rapgap_{dataset_tag}{extension}"
-    djangoh = f"Djangoh_{dataset_tag}{extension}"
-
-    print("MC sample names:")
-    print("  Rapgap  →", rapgap)
-    print("  Djangoh →", djangoh)
-
-    return {
-        "Rapgap": rapgap,
-        "Djangoh": djangoh
-    }
-
 
 def LoadJson(file_name, base_path="../JSON"):
     JSONPATH = os.path.join(base_path, file_name)
