@@ -93,8 +93,9 @@ def get_dataloaders_batch(flags, file_names, batch_start, batch_end):
                 is_mc=False,
                 rank=0,
                 size=1,
-                nmax=batch_end,
+                nmax=flags.nmax,
                 global_start=batch_start,
+                global_end = batch_end,
                 pass_reco=True,
             )
         else:
@@ -104,8 +105,9 @@ def get_dataloaders_batch(flags, file_names, batch_start, batch_end):
                 is_mc=True,
                 rank=0,
                 size=1,
-                nmax=batch_end,
+                nmax=flags.nmax,
                 global_start=batch_start,
+                global_end = batch_end,
                 pass_fiducial=not flags.reco,
                 pass_reco=flags.reco,
             )

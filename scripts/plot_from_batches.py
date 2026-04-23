@@ -305,7 +305,7 @@ def load_pythia_histogram(root_file, var, binning):
     Returns (bin_centers, density_weights) suitable for feed_dict / weights_dict,
     or None if the variable is not present in the file.
     """
-   with uproot.open(root_file) as f:
+    with uproot.open(root_file) as f:
         tree = f['jets']
         if var not in tree.keys():
             return None
