@@ -19,6 +19,7 @@ class Dataset:
         pass_reco=False,
         preprocess=True,
         global_start=0,
+        global_end=0,
     ):
         self.rank = rank
         self.size = size
@@ -26,6 +27,7 @@ class Dataset:
         self.is_mc = is_mc
         self.nmax = nmax
         self.global_start = global_start
+        self.global_end = global_end
         self.preprocess = preprocess
 
         # Preprocessing parameters
@@ -53,8 +55,7 @@ class Dataset:
         self.std_event = [0.97656405, 0.1895471, 0.14934653, 0.4191545, 1.734126]
 
         self.prepare_dataset(file_names, pass_fiducial, pass_reco)
-        batch_events = self.nmax - self.global_start
-        self.normalize_weights(batch_events if norm is None else norm)
+        self.normalize_weights(self.nmax if norm is None else norm)
 
     def normalize_weights(self, norm):
         # print("Total number of reco events {}".format(self.num_pass_reco))
@@ -117,10 +118,10 @@ class Dataset:
             )
             del reco_e_batch
 
-            batch_events = self.nmax - self.global_start
+            batch_events = self.global_end - self.global_start
             per_rank = (batch_events + self.size - 1) // self.size  # ceiling division
             start = self.global_start + self.rank * per_rank
-            end = min(start + per_rank, self.nmax)
+            end = min(start + per_rank, self.global_end)
 
             reco_p = h5.File(os.path.join(self.base_path, f), "r")[
                 "reco_particle_features"
