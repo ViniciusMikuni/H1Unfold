@@ -218,7 +218,7 @@ def main():
     replace_string = f"unfolded_niter_{flags.niter}"
     if flags.reco:
         replace_string += "_reco"
-    if flags.bootstrap:
+    if flags.bootstrap and "Rapgap" in flags.file:
         replace_string += "_boot"
 
     # Each rank independently processes the batch assigned to it.
