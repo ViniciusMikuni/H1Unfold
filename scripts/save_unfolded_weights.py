@@ -21,7 +21,7 @@ def parse_arguments():
     )
     parser.add_argument(
         "--output_folder",
-        default="/pscratch/sd/t/twamorka/h1/batchfiles/",
+        default="/global/cfs/cdirs/m3246/rmilton/tanvi_batching/test_data/",
         help="",
     )
     parser.add_argument(
@@ -175,8 +175,8 @@ def process_batch(flags, batch_start, batch_end, weights_dict, opt):
     undo_standardizing(flags, dataloaders)
     print(f"[rank {hvd.rank()}] process_batch: cluster_jets", flush=True)
     cluster_jets(dataloaders, n_workers=int(os.environ.get("SLURM_CPUS_PER_TASK", 1)))
-    print(f"[rank {hvd.rank()}] process_batch: cluster_breit", flush=True)
-    cluster_breit(flags, dataloaders)
+    # print(f"[rank {hvd.rank()}] process_batch: cluster_breit", flush=True)
+    # cluster_breit(flags, dataloaders)
 
     del dataloaders[flags.file].part, dataloaders[flags.file].mask
     gc.collect()
@@ -186,11 +186,11 @@ def process_batch(flags, batch_start, batch_end, weights_dict, opt):
     print(f"[rank {hvd.rank()}] process_batch: extracting results ({dataset.all_jets.shape[0]} events)", flush=True)
     results = {
         'jet_pt': dataset.all_jets[:, :, 0],
-        'jet_breit_pt': dataset.all_jets_breit[:, :, 0],
-        'deltaphi': get_deltaphi(dataset.all_jets, dataset.event),
-        'jet_tau10': dataset.all_jets[:, :, 4],
-        'zjet': dataset.all_jets[:, :, 9],
-        'zjet_breit': dataset.all_jets_breit[:, :, 7],
+        # 'jet_breit_pt': dataset.all_jets_breit[:, :, 0],
+        # 'deltaphi': get_deltaphi(dataset.all_jets, dataset.event),
+        # 'jet_tau10': dataset.all_jets[:, :, 4],
+        # 'zjet': dataset.all_jets[:, :, 9],
+        # 'zjet_breit': dataset.all_jets_breit[:, :, 7],
     }
 
     if "data" not in flags.file:
@@ -225,15 +225,15 @@ def main():
 
     # Each rank independently processes the batch assigned to it.
     # Ranks with index >= num_batches have nothing to do.
-    batch_idx = hvd.rank()
-    if batch_idx >= num_batches:
-        print(f"[rank {hvd.rank()}] no batch to process, exiting", flush=True)
-        return
+    for batch_idx in range(hvd.rank(), num_batches, hvd.size()):
+        batch_start = batch_idx * batch_size
+        batch_end = min(batch_start + batch_size, total_events)
 
-    batch_start = batch_idx * batch_size
-    batch_end = min(batch_start + batch_size, total_events)
-
-    print(f"[rank {hvd.rank()}] processing batch {batch_idx} events [{batch_start}, {batch_end})", flush=True)
+        print(
+            f"[rank {hvd.rank()}] processing batch {batch_idx} "
+            f"events [{batch_start}, {batch_end})",
+            flush=True,
+        )
 
     if "data" not in flags.file:
         weights_dict = load_weights_slice(flags, batch_start, batch_end)
@@ -276,10 +276,17 @@ def main():
         fh5.create_dataset("zjet", data=results['zjet'])
         fh5.create_dataset("zjet_breit", data=results['zjet_breit'])
 
-    n_entries = results['jet_pt'].shape[0]
-    print(f"[rank {hvd.rank()}] saved batch {batch_idx} to {output_file_name} ({n_entries:,} entries)", flush=True)
-    del results, weights_dict
-    gc.collect()
+        n_entries = results["jet_pt"].shape[0]
+        print(
+            f"[rank {hvd.rank()}] saved batch {batch_idx} "
+            f"to {output_file_name} ({n_entries:,} entries)",
+            flush=True,
+        )
+
+        del results, weights_dict
+        gc.collect()
+
+    print(f"[rank {hvd.rank()}] finished all assigned batches", flush=True)
     
 
 if __name__ == "__main__":
