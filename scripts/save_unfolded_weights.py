@@ -223,63 +223,58 @@ def main():
     if flags.bootstrap and "Rapgap" in flags.file:
         replace_string += "_boot"
 
-    # Each rank independently processes the batch assigned to it.
-    # Ranks with index >= num_batches have nothing to do.
-    batch_idx = hvd.rank()
-    if batch_idx >= num_batches:
-        print(f"[rank {hvd.rank()}] no batch to process, exiting", flush=True)
-        return
-
-    batch_start = batch_idx * batch_size
-    batch_end = min(batch_start + batch_size, total_events)
-
-    print(f"[rank {hvd.rank()}] processing batch {batch_idx} events [{batch_start}, {batch_end})", flush=True)
-
-    if "data" not in flags.file:
-        weights_dict = load_weights_slice(flags, batch_start, batch_end)
-    else:
-        weights_dict = {}
-
-    # Load the full batch on this rank (size=1, rank=0 within the batch)
-    results = process_batch(flags, batch_start, batch_end, weights_dict, opt)
-
     stem = os.path.splitext(flags.file)[0]
     base_name = stem.split("_unfolded")[0].removesuffix("_prep") + "_"
-    output_file_name = f"{base_name}{replace_string}_batch{batch_idx:04d}.h5"
-    output_path = os.path.join(flags.output_folder, output_file_name)
 
-    if os.path.exists(output_path):
-        os.remove(output_path)
+    # Strided round-robin: rank r handles batches r, r+size, r+2*size, ...
+    for batch_idx in range(hvd.rank(), num_batches, hvd.size()):
+        batch_start = batch_idx * batch_size
+        batch_end = min(batch_start + batch_size, total_events)
 
-    with h5.File(output_path, 'w') as fh5:
-        if "data" not in flags.file and 'weights' in results and len(results['weights']) > 0:
-            if flags.file in results['weights']:
-                fh5.create_dataset("weights_nominal", data=results['weights'][flags.file])
-            if flags.bootstrap and "Rapgap" in flags.file:
-                for i in range(1, flags.nboot):
-                    if str(i) in results['weights']:
-                        fh5.create_dataset(f"weights{i}", data=results['weights'][str(i)])
-            else:
+        print(f"[rank {hvd.rank()}] processing batch {batch_idx} events [{batch_start}, {batch_end})", flush=True)
+
+        if "data" not in flags.file:
+            weights_dict = load_weights_slice(flags, batch_start, batch_end)
+        else:
+            weights_dict = {}
+
+        results = process_batch(flags, batch_start, batch_end, weights_dict, opt)
+
+        output_file_name = f"{base_name}{replace_string}_batch{batch_idx:04d}.h5"
+        output_path = os.path.join(flags.output_folder, output_file_name)
+
+        if os.path.exists(output_path):
+            os.remove(output_path)
+
+        with h5.File(output_path, 'w') as fh5:
+            if "data" not in flags.file and 'weights' in results and len(results['weights']) > 0:
                 if flags.file in results['weights']:
-                    fh5.create_dataset("weights", data=results['weights'][flags.file])
+                    fh5.create_dataset("weights_nominal", data=results['weights'][flags.file])
+                if flags.bootstrap and "Rapgap" in flags.file:
+                    for i in range(1, flags.nboot):
+                        if str(i) in results['weights']:
+                            fh5.create_dataset(f"weights{i}", data=results['weights'][str(i)])
+                else:
+                    if flags.file in results['weights']:
+                        fh5.create_dataset("weights", data=results['weights'][flags.file])
 
-            if 'mc_weights' in results:
-                fh5.create_dataset("mc_weights", data=results['mc_weights'])
+                if 'mc_weights' in results:
+                    fh5.create_dataset("mc_weights", data=results['mc_weights'])
 
-            if "closure" in results['weights']:
-                fh5.create_dataset("closure_weights", data=results['weights']["closure"])
+                if "closure" in results['weights']:
+                    fh5.create_dataset("closure_weights", data=results['weights']["closure"])
 
-        fh5.create_dataset("jet_pt", data=results['jet_pt'])
-        fh5.create_dataset("jet_breit_pt", data=results['jet_breit_pt'])
-        fh5.create_dataset("deltaphi", data=results['deltaphi'])
-        fh5.create_dataset("jet_tau10", data=results['jet_tau10'])
-        fh5.create_dataset("zjet", data=results['zjet'])
-        fh5.create_dataset("zjet_breit", data=results['zjet_breit'])
+            fh5.create_dataset("jet_pt", data=results['jet_pt'])
+            fh5.create_dataset("jet_breit_pt", data=results['jet_breit_pt'])
+            fh5.create_dataset("deltaphi", data=results['deltaphi'])
+            fh5.create_dataset("jet_tau10", data=results['jet_tau10'])
+            fh5.create_dataset("zjet", data=results['zjet'])
+            fh5.create_dataset("zjet_breit", data=results['zjet_breit'])
 
-    n_entries = results['jet_pt'].shape[0]
-    print(f"[rank {hvd.rank()}] saved batch {batch_idx} to {output_file_name} ({n_entries:,} entries)", flush=True)
-    del results, weights_dict
-    gc.collect()
+        n_entries = results['jet_pt'].shape[0]
+        print(f"[rank {hvd.rank()}] saved batch {batch_idx} to {output_file_name} ({n_entries:,} entries)", flush=True)
+        del results, weights_dict
+        gc.collect()
     
 
 if __name__ == "__main__":
