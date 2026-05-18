@@ -21,7 +21,7 @@ def parse_arguments():
     )
     parser.add_argument(
         "--output_folder",
-        default="/pscratch/sd/t/twamorka/h1/batchfiles/",
+        default="/global/cfs/cdirs/m3246/rmilton/tanvi_batching/test_data/",
         help="",
     )
     parser.add_argument(
@@ -41,9 +41,6 @@ def parse_arguments():
     parser.add_argument(
         "--reco", action="store_true", default=False, help="Plot reco level results"
     )
-    # parser.add_argument(
-    #     "--file", default="Rapgap_Eplus0607_prep.h5", help="File to load"
-    # )
     parser.add_argument(
         "--niter", type=int, default=4, help="Omnifold iteration to load"
     )
@@ -59,11 +56,6 @@ def parse_arguments():
         default=False,
         help="Load models for bootstrapping",
     )
-    # parser.add_argument(
-    #     "--pre_weights_file",
-    #     default=None,
-    #     help="Path to HDF5 file containing pre-evaluated weights",
-    # )
     parser.add_argument(
         "--file",
         default=None,
@@ -175,8 +167,6 @@ def process_batch(flags, batch_start, batch_end, weights_dict, opt):
     undo_standardizing(flags, dataloaders)
     print(f"[rank {hvd.rank()}] process_batch: cluster_jets", flush=True)
     cluster_jets(dataloaders, n_workers=int(os.environ.get("SLURM_CPUS_PER_TASK", 1)))
-    print(f"[rank {hvd.rank()}] process_batch: cluster_breit", flush=True)
-    cluster_breit(flags, dataloaders)
 
     del dataloaders[flags.file].part, dataloaders[flags.file].mask
     gc.collect()
@@ -231,7 +221,7 @@ def main():
         batch_start = batch_idx * batch_size
         batch_end = min(batch_start + batch_size, total_events)
 
-        print(f"[rank {hvd.rank()}] processing batch {batch_idx} events [{batch_start}, {batch_end})", flush=True)
+    print(f"[rank {hvd.rank()}] processing batch {batch_idx} events [{batch_start}, {batch_end})", flush=True)
 
         if "data" not in flags.file:
             weights_dict = load_weights_slice(flags, batch_start, batch_end)
