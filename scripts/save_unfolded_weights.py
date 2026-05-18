@@ -21,7 +21,7 @@ def parse_arguments():
     )
     parser.add_argument(
         "--output_folder",
-        default="/global/cfs/cdirs/m3246/rmilton/tanvi_batching/test_data/",
+        default="/pscratch/sd/t/twamorka/h1/batchfiles/",
         help="",
     )
     parser.add_argument(
