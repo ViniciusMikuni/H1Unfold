@@ -221,7 +221,7 @@ def main():
         batch_start = batch_idx * batch_size
         batch_end = min(batch_start + batch_size, total_events)
 
-    print(f"[rank {hvd.rank()}] processing batch {batch_idx} events [{batch_start}, {batch_end})", flush=True)
+        print(f"[rank {hvd.rank()}] processing batch {batch_idx} events [{batch_start}, {batch_end})", flush=True)
 
         if "data" not in flags.file:
             weights_dict = load_weights_slice(flags, batch_start, batch_end)
