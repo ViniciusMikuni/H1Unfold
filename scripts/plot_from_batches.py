@@ -44,7 +44,7 @@ var_names = ['deltaphi', 'jet_pt', 'jet_tau10', 'zjet', 'zjet_breit']#, 'eec', '
 
 def get_batch_files(data_folder, period, niter, suffix,
                     use_sys, sys_list=None, nominal='Rapgap',
-                    reco=False, data_suffix=None):
+                    reco=False, data_suffix=None, bootstrap=False):
     """
     Return a dict mapping dataset label -> sorted list of batch h5 file paths.
 
@@ -59,16 +59,17 @@ def get_batch_files(data_folder, period, niter, suffix,
 
     mc_suffix = suffix.replace('boot', 'reco_boot') if reco else suffix
 
-    def _glob(base_name):
+    def _glob(base_name, use_bootstrap=False):
+        bootstrap_string = "_boot" if use_bootstrap else ""
         pattern = os.path.join(
             data_folder,
-            f'{base_name}_unfolded_{niter}_{mc_suffix}_batch*.h5'
+            f'{base_name}_unfolded_niter_{niter}{bootstrap_string}_batch*.h5'
         )
         files = sorted(glob.glob(pattern))
         return files
 
     batch_files = {
-        'Rapgap':  _glob(f'Rapgap_{period}'),
+        'Rapgap':  _glob(f'Rapgap_{period}', use_bootstrap=bootstrap),
         'Djangoh': _glob(f'Djangoh_{period}'),
     }
 
@@ -84,7 +85,6 @@ def get_batch_files(data_folder, period, niter, suffix,
     if use_sys:
         for sys in sys_list:
             batch_files[sys] = _glob(f'{nominal}_{period}_{sys}')
-
     return batch_files
 
 
