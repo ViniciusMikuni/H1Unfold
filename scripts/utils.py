@@ -262,6 +262,8 @@ def get_sample_name(base_name, dataset, extension="_prep.h5"):
 
     dataset = "Eplus0607" if dataset == "ep" else "Eminus06"
     sample_name = f"{base_name}_{dataset}{sys_name}{extension}"
+
+    print(f"sample name: {sample_name}")
     return sample_name
 
 
@@ -354,6 +356,7 @@ def HistRoutine(
     weights=None,
     uncertainty=None,
     stat_uncertainty=None,
+    show_stat_points=True,
 ):
     """
     Generate a histogram plot with optional ratio and uncertainties.
@@ -515,7 +518,7 @@ def HistRoutine(
     )
 
     ## draw data points at 1 with stat uncertainties on the bottom panel
-    if "data" in reference_name.lower():
+    if show_stat_points:
         ax1.errorbar(
             xaxis,
             np.ones_like(xaxis),
@@ -608,6 +611,7 @@ def HistRoutinePart(
     weights=None,
     uncertainty=None,
     stat_uncertainty=None,
+    show_stat_points=True,
 ):
     """
     Generate a histogram plot with optional ratio and uncertainties.
@@ -769,7 +773,7 @@ def HistRoutinePart(
     )
 
     ## draw data points at 1 with stat uncertainties on the bottom panel
-    if "data" in reference_name.lower():
+    if show_stat_points:
         ax1.errorbar(
             xaxis,
             np.ones_like(xaxis),
@@ -868,17 +872,54 @@ def undo_standardizing(flags, dataloaders):
 #     return mc_file_names
 
 
+# def get_version(dataset, flags, opt):
+#     version = opt["NAME"]
+#     if "sys" in dataset:
+#         match = re.search(r"sys(\d+)", dataset)
+#         version += f"_sys{match.group(1)}"
+#     if "Djangoh" in dataset:
+#         # Djangoh used for model uncertainty
+#         version += "_sys_model"
+#     version += f"_{dataset}"
+
+#     # version += f"_{flags.dataset}"
+#     if flags.load_pretrain:
+#         version += "_pretrained"
+#     return version
+
 def get_version(dataset, flags, opt):
-    version = opt["NAME"]
+    """Generate version string for model loading"""
+    version = opt["NAME"]  # This should be "H1_May2025"
+    
+    # Extract dataset type (ep/em) from filename
+    if "Eplus" in dataset or "ep" in dataset.lower():
+        dataset_type = "ep"
+    elif "Eminus" in dataset or "em" in dataset.lower():
+        dataset_type = "em" 
+    else:
+        # Fallback - extract from filename
+        if "Eplus0607" in dataset:
+            dataset_type = "ep"
+        elif "Eminus06" in dataset:
+            dataset_type = "em"
+        else:
+            dataset_type = "ep"  # Default fallback
+    
+    # Handle systematic variations
     if "sys" in dataset:
         match = re.search(r"sys(\d+)", dataset)
-        version += f"_sys{match.group(1)}"
+        if match:
+            version += f"_sys{match.group(1)}"
+    
     if "Djangoh" in dataset:
-        # Djangoh used for model uncertainty
         version += "_sys_model"
-    version += f"_{flags.dataset}"
-    if flags.load_pretrain:
-        version += "_pretrained"
+    
+    # Add dataset type (ep/em)
+    version += f"_{dataset_type}"
+    
+    # if flags.load_pretrain:
+    #     version += "_pretrained"
+        
     return version
 
 
@@ -887,7 +928,7 @@ def evaluate_model(
 ):
     if version is None:
         version = get_version(dataset, flags, opt)
-
+    print(f"version: {version}")
     model_name = "{}/OmniFold_{}_iter{}_step2/checkpoint".format(
         flags.weights, version, flags.niter
     )
@@ -895,7 +936,7 @@ def evaluate_model(
         model_name = "{}/OmniFold_{}_iter{}_step2_strap{}/checkpoint".format(
             flags.weights, version, flags.niter, nboot
         )
-
+    print(f"model name: {model_name}")
     if hvd.rank() == 0:
         print("Loading model {}".format(model_name))
 
