@@ -60,6 +60,12 @@ def parse_arguments():
         "--verbose", action="store_true", default=False, help="Increase print level"
     )
     parser.add_argument("--eec", action="store_true", default=False, help="Get EEC")
+    parser.add_argument(
+        "--fastjet_config_path",
+        type=str,
+        default="/global/cfs/cdirs/m3246/rmilton/fastjet-3.4.3-install/bin/fastjet-config",
+        help="Path to your fastjet-config",
+    )
     flags = parser.parse_args()
 
     return flags
@@ -145,7 +151,8 @@ def main():
     undo_standardizing(flags, dataloaders)
 
     cluster_jets(dataloaders)
-    cluster_breit(flags, dataloaders)
+    cluster_breit(flags, dataloaders, fastjet_config=flags.fastjet_config_path)
+    calculate_Delta_zjet(dataloaders)
     del dataloaders[flags.file].part, dataloaders[flags.file].mask
     gc.collect()
     gather_data(dataloaders)
@@ -194,6 +201,21 @@ def main():
             )
             dset = fh5.create_dataset(
                 "zjet_breit", data=dataloaders[flags.file].all_jets_breit[:, :, 7]
+            )
+            dset = fh5.create_dataset(
+                "zjet_centauro",
+                data=dataloaders[flags.file].all_jets_breit_centauro[:, :, 7],
+            )
+            dset = fh5.create_dataset(
+                "Delta_zjet", data=dataloaders[flags.file].Delta_zjet
+            )
+            dset = fh5.create_dataset(
+                "jet_centauro_pt",
+                data=dataloaders[flags.file].all_jets_breit_centauro[:, :, 0],
+            )
+            dset = fh5.create_dataset(
+                "jet_centauro_E",
+                data=dataloaders[flags.file].all_jets_breit_centauro[:, :, 3],
             )
             dset = fh5.create_dataset("eec", data=dataloaders[flags.file].eec[:, :, 0])
             dset = fh5.create_dataset(

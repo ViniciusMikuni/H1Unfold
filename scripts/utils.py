@@ -73,7 +73,10 @@ observable_names = {
     "deltaphi": r"$\Delta\phi^{jet}$ [rad]",
     "jet_tau10": r"$\mathrm{ln}(\lambda_1^1)$",
     "zjet": r"$z^{jet}$",
-    'zjet_breit':r'$z^{jet}$ Breit frame'
+    'zjet_breit':r'$z^{jet}$ Breit frame',
+    "zjet_centauro": r"$z^{jet} Centauro$",
+    "Delta_zjet": r"$\Delta z^{jet}$",
+    "jet_centauro_pt": r"$p_{T}^{jet}$ Centauro [GeV]",
 }
 
 dedicated_binning = {
@@ -85,6 +88,9 @@ dedicated_binning = {
     ),
     "zjet": np.linspace(0.2, 1, 11),
     "zjet_breit": np.linspace(0.2, 1, 11),
+    "zjet_centauro": np.linspace(0.2, 1, 11),
+    "Delta_zjet": np.linspace(-0.5, 0.5, 11),
+    "jet_centauro_pt": np.logspace(np.log10(0.01), np.log10(30), 7),
 }
 
 
@@ -108,6 +114,10 @@ def get_log(var):
 
 
 def get_ylim(var):
+    if var == "jet_centauro_pt":
+        return 1e-3, 8
+    if var == "zjet_centauro":
+        return 0, 4
     if var == "jet_pt":
         # return 1e-5, 1
         return 1e-5, 12
@@ -121,6 +131,8 @@ def get_ylim(var):
         return 0, 10
     if var == "zjet_breit":
         return 0, 3
+    if var == "Delta_zjet":
+        return 0, 9
     if "eec" in var:
         # return 0, 0.35
         return 0, 4.7
@@ -214,7 +226,11 @@ def FormatFig(xlabel, ylabel, ax0, xpos=0.8, ypos=0.95):
         ylabel_strip = ylabel.replace(" Breit frame", "")
         ax0.set_xlabel(xlabel_strip, fontsize=24)
         ax0.set_ylabel(ylabel_strip)
-
+    elif "Centauro" in xlabel:
+        xlabel_strip = xlabel.replace(" Centauro", "")
+        ylabel_strip = ylabel.replace(" Centauro", "")
+        ax0.set_xlabel(xlabel_strip, fontsize=24)
+        ax0.set_ylabel(ylabel_strip)
     else:
         ax0.set_xlabel(xlabel, fontsize=24)
         ax0.set_ylabel(ylabel)
@@ -229,6 +245,17 @@ def FormatFig(xlabel, ylabel, ax0, xpos=0.8, ypos=0.95):
     if "Breit frame" in xlabel.strip():
         frame_text = "Breit Frame"
         phasespace_text += "\n" + r"$p_T^{jet} > 5 GeV\ k_{T}, R = 1.0$"
+    elif "Centauro" in xlabel.strip():
+        frame_text = "Breit Frame"
+        phasespace_text += "\n" + r"$z^{jet} > 0.2\ Centauro, R = 1.0$"
+    elif "Delta z" in xlabel.strip():
+        frame_text = "Lab + Breit Frame"
+        phasespace_text += (
+            "\n"
+            + r"$p_T^{jet} > 10 GeV\ k_{T}, R = 1.0$"
+            + "\n"
+            + r"$z^{jet} > 0.2\ Centauro, R = 1.0$"
+        )
     else:
         frame_text = "Lab Frame"
         phasespace_text += "\n" + r"$p_T^{jet} > 10 GeV\ k_{T}, R = 1.0$"
@@ -555,6 +582,9 @@ def HistRoutine(
         ax1.set_ylim([0.5, 1.5])
         if "Breit" in xlabel:
             xlabel_strip = xlabel.replace(" Breit frame", "")
+            ax1.set_xlabel(xlabel_strip)
+        elif "Centauro" in xlabel:
+            xlabel_strip = xlabel.replace(" Centauro", "")
             ax1.set_xlabel(xlabel_strip)
         else:
             ax1.set_xlabel(xlabel)
