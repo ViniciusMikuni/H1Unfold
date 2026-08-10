@@ -58,6 +58,12 @@ def parse_arguments():
         "--nboot", type=int, default=100, help="Number of bootstrap models to load"
     )
     parser.add_argument(
+        "--QED_corrections",
+        action="store_true",
+        default=False,
+        help="Load model for QED corrections",
+    )
+    parser.add_argument(
         "--verbose", action="store_true", default=False, help="Increase print level"
     )
     flags = parser.parse_args()
@@ -110,6 +116,10 @@ def main():
                 weights[f"unfolded_weights_boots{str(i)}"] = utils.evaluate_model(
                     flags, opt, dataset, dataloaders, bootstrap=True, nboot=i
                 )
+        if flags.QED_corrections:
+            weights["QED_corrections"] = utils.evaluate_model(
+                flags, opt, dataset, dataloaders, QED_corrections=True
+            )
 
         weights["unfolded_weights"] = utils.evaluate_model(
             flags, opt, dataset, dataloaders
