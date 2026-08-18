@@ -298,7 +298,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--data-output",
-        default="/global/cfs/cdirs/m3246/H1/h5",
+        default="/pscratch/sd/r/rmilton/fileorder_checking/",
         help="Output folder containing data and MC files",
     )
 
@@ -306,6 +306,12 @@ if __name__ == "__main__":
         "--sample",
         default="dataEp",
         help="Sample to process. Options are: DjangohEp, DjangohEm,RapgapEp,RapgapEm,data",
+    )
+    parser.add_argument(
+        "--string_ordering",
+        default=False,
+        action="store_true",
+        help="Sort files according to string names"
     )
     flags = parser.parse_args()
 
@@ -337,9 +343,12 @@ if __name__ == "__main__":
     elif flags.sample == "RapgapEp":
         print("Processing Rapgap")
         file_list = find_files_with_string(
-            flags.data_input + "/out_ep0607", "Rapgap_Eplus0607_"
+            flags.data_input + "/out_ep0607", "Rapgap_Eplus0607_*"
         )
         # file_list = ["/global/cfs/cdirs/m3246/vmikuni/H1v2/root/out_ep0607/Rapgap_Eplus0607_4.nominal.root"]
+        if flags.string_ordering:
+            file_list = sorted(file_list)
+        print(file_list)
         reco, gen = convert_to_np(
             file_list, flags.data_input + "/out_ep0607", name="Rapgap"
         )
@@ -353,8 +362,11 @@ if __name__ == "__main__":
     elif flags.sample == "DjangohEp":
         print("Processing Djangoh")
         file_list = find_files_with_string(
-            flags.data_input + "/out_ep0607", "Django_Eplus0607_"
+            flags.data_input + "/out_ep0607", "Django_Eplus0607_*"
         )
+        if flags.string_ordering:
+            file_list = sorted(file_list)
+        print(file_list)
         reco, gen = convert_to_np(
             file_list, flags.data_input + "/out_ep0607", name="Django"
         )
