@@ -1,5 +1,5 @@
 {
-    'NAME': 'H1_August2026_originalorder',
+    'NAME': 'H1_August2026_stringorder',
     'MC_NAMES_test':['test_sim.h5'],    
     'MC_NAMES':['Rapgap'],
     'NBOOTSTRAP':99,
