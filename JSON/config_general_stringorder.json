@@ -3,5 +3,5 @@
     'MC_NAMES_test':['test_sim.h5'],    
     'MC_NAMES':['Rapgap'],
     'NBOOTSTRAP':99,
-    'NITER':6,
+    'NITER':5,
 }

@@ -1,5 +1,5 @@
 {
-    'NITER': 10,
+    'NITER': 5,
     'LR': 3e-5,
     'NEVT':5,
     'NFEAT':7,
