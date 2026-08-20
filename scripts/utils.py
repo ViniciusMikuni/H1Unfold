@@ -14,7 +14,7 @@ import tensorflow as tf
 import re
 import horovod.tensorflow as hvd
 import gc
-from omnifold import Multifold
+# from omnifold import Multifold
 
 # General utilities file
 
@@ -882,30 +882,30 @@ def get_version(dataset, flags, opt):
     return version
 
 
-def evaluate_model(
-    flags, opt, dataset, dataloaders, version=None, bootstrap=False, nboot=0
-):
-    if version is None:
-        version = get_version(dataset, flags, opt)
+# def evaluate_model(
+#     flags, opt, dataset, dataloaders, version=None, bootstrap=False, nboot=0
+# ):
+#     if version is None:
+#         version = get_version(dataset, flags, opt)
 
-    model_name = "{}/OmniFold_{}_iter{}_step2/checkpoint".format(
-        flags.weights, version, flags.niter
-    )
-    if bootstrap:
-        model_name = "{}/OmniFold_{}_iter{}_step2_strap{}/checkpoint".format(
-            flags.weights, version, flags.niter, nboot
-        )
+#     model_name = "{}/OmniFold_{}_iter{}_step2/checkpoint".format(
+#         flags.weights, version, flags.niter
+#     )
+#     if bootstrap:
+#         model_name = "{}/OmniFold_{}_iter{}_step2_strap{}/checkpoint".format(
+#             flags.weights, version, flags.niter, nboot
+#         )
 
-    if hvd.rank() == 0:
-        print("Loading model {}".format(model_name))
+#     if hvd.rank() == 0:
+#         print("Loading model {}".format(model_name))
 
-    mfold = Multifold(version=version, verbose=hvd.rank() == 0)
-    mfold.PrepareModel()
-    mfold.model2.load_weights(
-        model_name
-    ).expect_partial()  # Doesn't matter which model is loaded since both have the same architecture
-    unfolded_weights = mfold.reweight(
-        dataloaders[dataset].gen, mfold.model2_ema, batch_size=1000
-    )
-    # return unfolded_weights
-    return hvd.allgather(tf.constant(unfolded_weights)).numpy()
+#     mfold = Multifold(version=version, verbose=hvd.rank() == 0)
+#     mfold.PrepareModel()
+#     mfold.model2.load_weights(
+#         model_name
+#     ).expect_partial()  # Doesn't matter which model is loaded since both have the same architecture
+#     unfolded_weights = mfold.reweight(
+#         dataloaders[dataset].gen, mfold.model2_ema, batch_size=1000
+#     )
+#     # return unfolded_weights
+#     return hvd.allgather(tf.constant(unfolded_weights)).numpy()
