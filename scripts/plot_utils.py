@@ -1443,6 +1443,9 @@ def plot_observable(flags, var, dataloaders, version):
                 total_unc += stat_unc**2
                 print(f"{sys}: max uncertainty = {np.max(stat_unc)}")
         total_unc = np.sqrt(total_unc)
+    else:
+        data_stat_unc = np.zeros(len(binning)-1)
+
         # print(f"data_stat_unc: {data_stat_unc}")
 
     # Prepare weights and data for plotting
