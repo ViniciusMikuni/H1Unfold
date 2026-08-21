@@ -154,6 +154,8 @@ def main():
         print(f"Will load the following files : {mc_files.keys()}")
 
     dataloaders = get_dataloaders(flags, mc_files)
+    
+    os.makedirs("../plots/", exist_ok=True)
 
     for var in var_names:
         if "weight" in var:
