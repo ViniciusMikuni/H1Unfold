@@ -1329,7 +1329,7 @@ def plot_event(flags, dataloaders, data_weights, version, nbins=10):
         fig.savefig(f"../plots/{version}_event_{feature}.pdf")
 
 
-def plot_observable(flags, var, dataloaders, version):
+def plot_observable(flags, var, dataloaders, version, plot_directory="../plots/"):
     info = utils.ObservableInfo(var)
 
     def compute_histogram(dataset_name, weights=None, density=True):
@@ -1539,7 +1539,8 @@ def plot_observable(flags, var, dataloaders, version):
     # Set plot limits and save
     ax.set_ylim(info.ylow, info.yhigh)
     add_string = "reco" if flags.reco else "unfolded"
-    fig.savefig(f"../plots/{version}_{var}_{add_string}.pdf")
+    import os
+    fig.savefig(os.path.join(plot_directory, f"{version}_{var}_{add_string}.pdf"))
 
 
 def plot_part_observable(flags, var, dataloaders, version):
