@@ -552,7 +552,7 @@ def HistRoutine(
         FormatFig(xlabel=xlabel, ylabel=ylabel, ax0=ax0)
         ax1.set_ylabel("Pred./Ref.")
         ax1.axhline(y=1.0, color="r", linestyle="-", linewidth=1)
-        ax1.set_ylim([0.5, 1.5])
+        ax1.set_ylim([0.8, 1.2])
         if "Breit" in xlabel:
             xlabel_strip = xlabel.replace(" Breit frame", "")
             ax1.set_xlabel(xlabel_strip)
@@ -806,7 +806,7 @@ def HistRoutinePart(
         FormatFigPart(xlabel=xlabel, ylabel=ylabel, ax0=ax0)
         ax1.set_ylabel("Pred./Ref.")
         ax1.axhline(y=1.0, color="r", linestyle="-", linewidth=1)
-        ax1.set_ylim([0.5, 1.5])
+        ax1.set_ylim([0.8, 1.2])
         if "Breit" in xlabel:
             xlabel_strip = xlabel.replace(" Breit frame", "")
             ax1.set_xlabel(xlabel_strip)
