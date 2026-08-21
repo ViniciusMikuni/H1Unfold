@@ -7,7 +7,7 @@ import utils
 import horovod.tensorflow as hvd
 from plot_utils import *
 import h5py as h5
-
+import tensorflow as tf
 hvd.init()
 
 
@@ -59,7 +59,17 @@ def parse_arguments():
     parser.add_argument(
         "--verbose", action="store_true", default=False, help="Increase print level"
     )
-    parser.add_argument("--eec", action="store_true", default=False, help="Get EEC")
+    parser.add_argument(
+        "--dataset",
+        default="ep",
+        help="Choice between ep or em datasets",
+    )
+    parser.add_argument(
+        "--output_directory",
+        default="/pscratch/sd/r/rmilton/unfolded/",
+        type=str,
+        help="Directory to store unfolded files in"
+    )
     flags = parser.parse_args()
 
     return flags
@@ -100,7 +110,44 @@ def get_deltaphi(jet, elec):
     delta_phi = np.abs(np.pi + jet[:, :, 2] - elec[:, None, 4])
     delta_phi[delta_phi > 2 * np.pi] -= 2 * np.pi
     return delta_phi
+def evaluate_model(
+    flags, opt, dataset, dataloaders, version=None, bootstrap=False, nboot=0
+):
+    from omnifold import Multifold
+    if version is None:
+        version = utils.get_version(dataset, flags, opt)
 
+    model_name = "{}/OmniFold_{}_iter{}_step2/checkpoint".format(
+        flags.weights, version, flags.niter
+    )
+    print(model_name)
+    if bootstrap:
+        model_name = "{}/OmniFold_{}_iter{}_step2_strap{}/checkpoint".format(
+            flags.weights, version, flags.niter, nboot
+        )
+
+    if hvd.rank() == 0:
+        print("Loading model {}".format(model_name))
+
+    mfold = Multifold(version=version, verbose=hvd.rank() == 0)
+    mfold.PrepareModel()
+    mfold.model2.load_weights(
+        model_name
+    ).expect_partial()  # Doesn't matter which model is loaded since both have the same architecture
+    unfolded_weights = mfold.reweight(
+        dataloaders[dataset].gen, mfold.model2_ema, batch_size=1000
+    )
+    return hvd.allgather(tf.constant(unfolded_weights)).numpy()
+def gather_data(dataloaders):
+    for dataloader in dataloaders:
+        dataloaders[dataloader].event = hvd.allgather(
+            tf.constant(dataloaders[dataloader].event)
+        ).numpy()
+        dataloaders[dataloader].all_jets = hvd.allgather(tf.constant(dataloaders[dataloader].all_jets)).numpy()
+        dataloaders[dataloader].all_jets_breit = hvd.allgather(tf.constant(dataloaders[dataloader].all_jets_breit)).numpy()
+        dataloaders[dataloader].weight = hvd.allgather(
+            tf.constant(dataloaders[dataloader].weight)
+        ).numpy()
 
 def main():
     utils.setup_gpus(hvd.local_rank())
@@ -125,7 +172,7 @@ def main():
                         flags, opt, dataset, dataloaders, bootstrap=True, nboot=i
                     )
             else:
-                weights[dataset] = evaluate_model(flags, opt, dataset, dataloaders)
+                # weights[dataset] = evaluate_model(flags, opt, dataset, dataloaders)
                 if "Rapgap" in flags.file and "sys" not in flags.file:
                     weights["closure"] = evaluate_model(
                         flags,
@@ -133,7 +180,7 @@ def main():
                         dataset,
                         dataloaders,
                         version=(
-                            opt["NAME"] + "_closure" + "_pretrained"
+                            opt["NAME"] + f"_{flags.dataset}" + "_closure"  + "_pretrained"
                             if flags.load_pretrain
                             else ""
                         ),
@@ -142,7 +189,7 @@ def main():
     if hvd.rank() == 0:
         print("Done with network evaluation")
     # Important to only undo the preprocessing after the weights are derived!
-    undo_standardizing(flags, dataloaders)
+    utils.undo_standardizing(flags, dataloaders)
 
     cluster_jets(dataloaders)
     cluster_breit(flags, dataloaders)
@@ -159,13 +206,10 @@ def main():
     output_file_name = flags.file.replace("prep", replace_string)
 
     if hvd.rank() == 0:
-        with h5.File(os.path.join(flags.data_folder, output_file_name), "w") as fh5:
+        output_dir = flags.output_directory
+        os.makedirs(output_dir, exist_ok=True)
+        with h5.File(os.path.join(output_dir, output_file_name), "w") as fh5:
             if "data" not in flags.file:
-                if flags.bootstrap:
-                    for i in range(1, flags.nboot):
-                        dset = fh5.create_dataset(f"weights{i}", data=weights[str(i)])
-                else:
-                    dset = fh5.create_dataset("weights", data=weights[flags.file])
                 dset = fh5.create_dataset(
                     "mc_weights", data=dataloaders[flags.file].weight
                 )
@@ -194,13 +238,6 @@ def main():
             )
             dset = fh5.create_dataset(
                 "zjet_breit", data=dataloaders[flags.file].all_jets_breit[:, :, 7]
-            )
-            dset = fh5.create_dataset("eec", data=dataloaders[flags.file].eec[:, :, 0])
-            dset = fh5.create_dataset(
-                "E_wgt", data=dataloaders[flags.file].eec[:, :, 1]
-            )  # per particle energy weighting
-            dset = fh5.create_dataset(
-                "theta", data=dataloaders[flags.file].eec[:, :, 2]
             )
 
 
