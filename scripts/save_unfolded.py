@@ -59,6 +59,7 @@ def parse_arguments():
     parser.add_argument(
         "--verbose", action="store_true", default=False, help="Increase print level"
     )
+    parser.add_argument("--eec", action="store_true", default=False, help="Get EEC")
     parser.add_argument(
         "--dataset",
         default="ep",
