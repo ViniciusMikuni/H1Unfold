@@ -13,6 +13,14 @@ colors = {
     "Djangoh": "#8c564b",
     "Rapgap": "darkorange",
     "Rapgap_unfolded": "darkolivegreen",
+    "Rapgap original": "darkorange",
+    "Rapgap string": "darkolivegreen",
+    "Djangoh original": "darkorange",
+    "Djangoh string": "darkolivegreen",
+    "Rapgap 1": "darkorange",
+    "Rapgap 133": "darkolivegreen",
+    "Djangoh 1": "darkorange",
+    "Djangoh 133": "darkolivegreen",
     # 'Data_unfolded':'darkolivegreen',
     "Data_unfolded": "black",
     "Rapgap_closure": "darkolivegreen",
@@ -48,6 +56,14 @@ markers = {
     "Sherpa3NLO": "o",
     "Rapgap reco": "X",
     "Rapgap gen": "o",
+    "Rapgap original": "darkorange",
+    "Rapgap string": "darkolivegreen",
+    "Djangoh original": "darkorange",
+    "Djangoh string": "darkolivegreen",
+    "Rapgap 1": "darkorange",
+    "Rapgap 133": "darkolivegreen",
+    "Djangoh 1": "darkorange",
+    "Djangoh 133": "darkolivegreen",
 }
 
 # Shift in x-axis for visualization
@@ -143,6 +159,14 @@ name_translate = {
     "Djangoh": "DJANGOH",
     "data": "Data (inc. stat uncertainty)",
     "Data_unfolded": "Data Unfolded (inc. stat uncertainty)",
+    "Rapgap original": "RAPGAP original order",
+    "Rapgap string": "RAPGAP string order",
+    "Djangoh original": "DJANGOH original order",
+    "Djangoh string": "DJANGOH string order",
+    "Rapgap 1": "RAPGAP #1",
+    "Rapgap 133": "RAPGAP #133",
+    "Djangoh 1": "DJANGOH #1",
+    "Djangoh 133": "DJANGOH #133",
 }
 
 reco_vars = {
