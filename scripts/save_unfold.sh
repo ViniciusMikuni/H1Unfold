@@ -1,5 +1,10 @@
+
+# Calculating and plotting observables with original ordering
 srun --mpi=pmi2 shifter python save_unfolded.py --niter 4 --load_pretrain --file Rapgap_Eplus0607_prep.h5 --nmax 5_000_000 --data_folder /pscratch/sd/r/rmilton/H1_filechecking_originalordering/ --weights ../weights/ --config config_general.json --output_directory /pscratch/sd/r/rmilton/H1_filechecking_originalordering_unfolded/
 srun --mpi=pmi2 shifter python save_unfolded.py --niter 4 --load_pretrain --file Djangoh_Eplus0607_prep.h5 --nmax 5_000_000 --data_folder /pscratch/sd/r/rmilton/H1_filechecking_originalordering/ --weights ../weights/ --config config_general.json --output_directory /pscratch/sd/r/rmilton/H1_filechecking_originalordering_unfolded/
+srun --mpi=pmi2 shifter python plot_from_file.py --data_folder /pscratch/sd/r/rmilton/H1_filechecking_originalordering_unfolded/ --plot_folder ../plots_originalorder/ --blind --config config_general.json
 
+# Calculating and plotting observables with string ordering
 srun --mpi=pmi2 shifter python save_unfolded.py --niter 4 --load_pretrain --file Rapgap_Eplus0607_prep.h5 --nmax 5_000_000 --data_folder /pscratch/sd/r/rmilton/H1_filechecking_stringordering/ --weights ../weights/ --config config_general_stringorder.json --output_directory /pscratch/sd/r/rmilton/H1_filechecking_stringordering_unfolded/
 srun --mpi=pmi2 shifter python save_unfolded.py --niter 4 --load_pretrain --file Djangoh_Eplus0607_prep.h5 --nmax 5_000_000 --data_folder /pscratch/sd/r/rmilton/H1_filechecking_stringordering/ --weights ../weights/ --config config_general_stringorder.json --output_directory /pscratch/sd/r/rmilton/H1_filechecking_stringordering_unfolded/
+srun --mpi=pmi2 shifter python plot_from_file.py --data_folder /pscratch/sd/r/rmilton/H1_filechecking_stringordering_unfolded/ --plot_folder ../plots_stringorder/ --blind --config config_general_stringorder.json
