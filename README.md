@@ -12,4 +12,4 @@ Now we train two different models with the two datasets. You can train with the 
 
 Note: Make sure you exit the tensorflow environment you used when processing the data. This applies to training the model and calculating the observables (below).
 ## Calculating and plotting the observables
-Once the models are trained, you can then calculate and plot some jet observables. See `scripts/save_unfold.sh` for an example. I use a GPU node for this (1-2 hours should be enough).
+Once the models are trained, you can then calculate and plot some jet observables. See `scripts/save_unfold.sh` for an example. I use a GPU node for this (80 minutes should be enough).
