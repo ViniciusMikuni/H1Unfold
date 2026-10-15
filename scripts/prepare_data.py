@@ -380,7 +380,7 @@ if __name__ == "__main__":
     elif flags.sample == "RapgapEp":
         print("Processing Rapgap")
         file_list = find_files_with_string(
-            flags.data_input + "/out_ep0607", "Rapgap_Eplus0607_"
+            flags.data_input + "/out_ep0607", "Rapgap_Eplus0607_*.root"
         )
         # file_list = ["/global/cfs/cdirs/m3246/vmikuni/H1v2/root/out_ep0607/Rapgap_Eplus0607_4.nominal.root"]
         reco, gen = convert_to_np(
@@ -396,7 +396,7 @@ if __name__ == "__main__":
     elif flags.sample == "DjangohEp":
         print("Processing Djangoh")
         file_list = find_files_with_string(
-            flags.data_input + "/out_ep0607", "Django_Eplus0607_"
+            flags.data_input + "/out_ep0607", "Django_Eplus0607_*.root"
         )
         reco, gen = convert_to_np(
             file_list, flags.data_input + "/out_ep0607", name="Django"
@@ -412,7 +412,7 @@ if __name__ == "__main__":
     elif flags.sample == "DjangohEm":
         print("Processing Djangoh")
         file_list = find_files_with_string(
-            flags.data_input + "/out_em06", "Django_Eminus06_"
+            flags.data_input + "/out_em06", "Django_Eminus06_*.root"
         )
         reco, gen = convert_to_np(
             file_list, flags.data_input + "/out_em06", name="Django"
@@ -428,7 +428,7 @@ if __name__ == "__main__":
     elif flags.sample == "RapgapEm":
         print("Processing Rapgap")
         file_list = find_files_with_string(
-            flags.data_input + "/out_em06", "Rapgap_Eminus06_"
+            flags.data_input + "/out_em06", "Rapgap_Eminus06_*.root"
         )
         ###file_list = ['Rapgap_Eminus06_122.nominal.root'] #quick testing
         reco, gen = convert_to_np(
