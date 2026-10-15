@@ -3,6 +3,36 @@ import numpy as np
 import os
 import h5py as h5
 import fnmatch
+import re
+
+# File numbers to always skip. Applies to the nominal files and to every sys variation.
+EXCLUDED_FILES = {
+    "RapgapEp": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    "DjangohEp": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+    ],
+    "RapgapEm": [1, 2, 3, 4, 5, 6, 7],
+    "DjangohEm": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+}
 
 
 def convert_to_np(
@@ -213,11 +243,20 @@ def convert_to_np(
     return reco_dict, gen_dict
 
 
-def find_files_with_string(directory, string):
+def find_files_with_string(directory, string, exclude=()):
+    exclude = set(exclude)
     matching_files = []
     for filename in os.listdir(directory):
-        if fnmatch.fnmatch(filename, string):
-            matching_files.append(filename)
+        if not fnmatch.fnmatch(filename, string):
+            continue
+        m = re.search(r"_(\d+)\.(?:nominal|sys_\d+)\.root$", filename)
+        if m and int(m.group(1)) in exclude:
+            continue
+        matching_files.append(filename)
+    if exclude:
+        print(
+            f"Excluding file numbers {sorted(exclude)}; {len(matching_files)} files kept"
+        )
     return matching_files
 
 
@@ -308,6 +347,7 @@ if __name__ == "__main__":
         help="Sample to process. Options are: DjangohEp, DjangohEm,RapgapEp,RapgapEm,data",
     )
     flags = parser.parse_args()
+    excluded = EXCLUDED_FILES.get(flags.sample.split("_sys")[0], [])
 
     # create_toy(flags.data_output)
 
@@ -337,7 +377,9 @@ if __name__ == "__main__":
     elif flags.sample == "RapgapEp":
         print("Processing Rapgap")
         file_list = find_files_with_string(
-            flags.data_input + "/out_ep0607", "Rapgap_Eplus0607_"
+            flags.data_input + "/out_ep0607",
+            "Rapgap_Eplus0607_*.root",
+            exclude=excluded,
         )
         # file_list = ["/global/cfs/cdirs/m3246/vmikuni/H1v2/root/out_ep0607/Rapgap_Eplus0607_4.nominal.root"]
         reco, gen = convert_to_np(
@@ -353,7 +395,9 @@ if __name__ == "__main__":
     elif flags.sample == "DjangohEp":
         print("Processing Djangoh")
         file_list = find_files_with_string(
-            flags.data_input + "/out_ep0607", "Django_Eplus0607_"
+            flags.data_input + "/out_ep0607",
+            "Django_Eplus0607_*.root",
+            exclude=excluded,
         )
         reco, gen = convert_to_np(
             file_list, flags.data_input + "/out_ep0607", name="Django"
@@ -369,7 +413,7 @@ if __name__ == "__main__":
     elif flags.sample == "DjangohEm":
         print("Processing Djangoh")
         file_list = find_files_with_string(
-            flags.data_input + "/out_em06", "Django_Eminus06_"
+            flags.data_input + "/out_em06", "Django_Eminus06_*.root", exclude=excluded
         )
         reco, gen = convert_to_np(
             file_list, flags.data_input + "/out_em06", name="Django"
@@ -385,7 +429,7 @@ if __name__ == "__main__":
     elif flags.sample == "RapgapEm":
         print("Processing Rapgap")
         file_list = find_files_with_string(
-            flags.data_input + "/out_em06", "Rapgap_Eminus06_"
+            flags.data_input + "/out_em06", "Rapgap_Eminus06_*.root", exclude=excluded
         )
         ###file_list = ['Rapgap_Eminus06_122.nominal.root'] #quick testing
         reco, gen = convert_to_np(
@@ -401,7 +445,9 @@ if __name__ == "__main__":
     elif flags.sample == "RapgapEp_sys0":
         print("Processing Rapgap")
         file_list = find_files_with_string(
-            flags.data_input + "/sys/out_ep0607", "Rapgap_Eplus0607_*sys_0.root"
+            flags.data_input + "/sys/out_ep0607",
+            "Rapgap_Eplus0607_*sys_0.root",
+            exclude=excluded,
         )
         reco, gen = convert_to_np(
             file_list, flags.data_input + "/sys/out_ep0607", name="Rapgap"
@@ -417,7 +463,9 @@ if __name__ == "__main__":
     elif flags.sample == "RapgapEp_sys1":
         print("Processing Rapgap")
         file_list = find_files_with_string(
-            flags.data_input + "/sys/out_ep0607", "Rapgap_Eplus0607_*sys_1.root"
+            flags.data_input + "/sys/out_ep0607",
+            "Rapgap_Eplus0607_*sys_1.root",
+            exclude=excluded,
         )
         reco, gen = convert_to_np(
             file_list, flags.data_input + "/sys/out_ep0607", name="Rapgap"
@@ -433,7 +481,9 @@ if __name__ == "__main__":
     elif flags.sample == "RapgapEp_sys5":
         print("Processing Rapgap")
         file_list = find_files_with_string(
-            flags.data_input + "/sys/out_ep0607", "Rapgap_Eplus0607_*sys_5.root"
+            flags.data_input + "/sys/out_ep0607",
+            "Rapgap_Eplus0607_*sys_5.root",
+            exclude=excluded,
         )
         reco, gen = convert_to_np(
             file_list, flags.data_input + "/sys/out_ep0607", name="Rapgap"
@@ -448,7 +498,9 @@ if __name__ == "__main__":
     elif flags.sample == "RapgapEp_sys7":
         print("Processing Rapgap")
         file_list = find_files_with_string(
-            flags.data_input + "/sys/out_ep0607", "Rapgap_Eplus0607_*sys_7.root"
+            flags.data_input + "/sys/out_ep0607",
+            "Rapgap_Eplus0607_*sys_7.root",
+            exclude=excluded,
         )
         reco, gen = convert_to_np(
             file_list, flags.data_input + "/sys/out_ep0607", name="Rapgap"
@@ -463,7 +515,9 @@ if __name__ == "__main__":
     elif flags.sample == "RapgapEp_sys11":
         print("Processing Rapgap")
         file_list = find_files_with_string(
-            flags.data_input + "/sys/out_ep0607", "Rapgap_Eplus0607_*sys_11.root"
+            flags.data_input + "/sys/out_ep0607",
+            "Rapgap_Eplus0607_*sys_11.root",
+            exclude=excluded,
         )
         reco, gen = convert_to_np(
             file_list, flags.data_input + "/sys/out_ep0607", name="Rapgap"
@@ -479,7 +533,9 @@ if __name__ == "__main__":
     elif flags.sample == "DjangohEp_sys0":
         print("Processing Djangoh")
         file_list = find_files_with_string(
-            flags.data_input + "/sys/out_ep0607", "Django_Eplus0607_*sys_0.root"
+            flags.data_input + "/sys/out_ep0607",
+            "Django_Eplus0607_*sys_0.root",
+            exclude=excluded,
         )
         reco, gen = convert_to_np(
             file_list, flags.data_input + "/sys/out_ep0607", name="Django"
@@ -495,7 +551,9 @@ if __name__ == "__main__":
     elif flags.sample == "DjangohEp_sys1":
         print("Processing Djangoh")
         file_list = find_files_with_string(
-            flags.data_input + "/sys/out_ep0607", "Django_Eplus0607_*sys_1.root"
+            flags.data_input + "/sys/out_ep0607",
+            "Django_Eplus0607_*sys_1.root",
+            exclude=excluded,
         )
         reco, gen = convert_to_np(
             file_list, flags.data_input + "/sys/out_ep0607", name="Django"
@@ -511,7 +569,9 @@ if __name__ == "__main__":
     elif flags.sample == "DjangohEp_sys5":
         print("Processing Djangoh")
         file_list = find_files_with_string(
-            flags.data_input + "/sys/out_ep0607", "Django_Eplus0607_*sys_5.root"
+            flags.data_input + "/sys/out_ep0607",
+            "Django_Eplus0607_*sys_5.root",
+            exclude=excluded,
         )
         reco, gen = convert_to_np(
             file_list, flags.data_input + "/sys/out_ep0607", name="Django"
@@ -526,7 +586,9 @@ if __name__ == "__main__":
     elif flags.sample == "DjangohEp_sys7":
         print("Processing Djangoh")
         file_list = find_files_with_string(
-            flags.data_input + "/sys/out_ep0607", "Django_Eplus0607_*sys_7.root"
+            flags.data_input + "/sys/out_ep0607",
+            "Django_Eplus0607_*sys_7.root",
+            exclude=excluded,
         )
         reco, gen = convert_to_np(
             file_list, flags.data_input + "/sys/out_ep0607", name="Django"
@@ -541,7 +603,9 @@ if __name__ == "__main__":
     elif flags.sample == "DjangohEp_sys11":
         print("Processing Djangoh")
         file_list = find_files_with_string(
-            flags.data_input + "/sys/out_ep0607", "Django_Eplus0607_*sys_11.root"
+            flags.data_input + "/sys/out_ep0607",
+            "Django_Eplus0607_*sys_11.root",
+            exclude=excluded,
         )
         reco, gen = convert_to_np(
             file_list, flags.data_input + "/sys/out_ep0607", name="Django"
@@ -557,7 +621,9 @@ if __name__ == "__main__":
     elif flags.sample == "RapgapEm_sys0":
         print("Processing Rapgap")
         file_list = find_files_with_string(
-            flags.data_input + "/sys/out_em06", "Rapgap_Eminus06_*sys_0.root"
+            flags.data_input + "/sys/out_em06",
+            "Rapgap_Eminus06_*sys_0.root",
+            exclude=excluded,
         )
         reco, gen = convert_to_np(
             file_list, flags.data_input + "/sys/out_em06", name="Rapgap"
@@ -573,7 +639,9 @@ if __name__ == "__main__":
     elif flags.sample == "RapgapEm_sys1":
         print("Processing Rapgap")
         file_list = find_files_with_string(
-            flags.data_input + "/sys/out_em06", "Rapgap_Eminus06_*sys_1.root"
+            flags.data_input + "/sys/out_em06",
+            "Rapgap_Eminus06_*sys_1.root",
+            exclude=excluded,
         )
         reco, gen = convert_to_np(
             file_list, flags.data_input + "/sys/out_em06", name="Rapgap"
@@ -589,7 +657,9 @@ if __name__ == "__main__":
     elif flags.sample == "RapgapEm_sys5":
         print("Processing Rapgap")
         file_list = find_files_with_string(
-            flags.data_input + "/sys/out_em06", "Rapgap_Eminus06_*sys_5.root"
+            flags.data_input + "/sys/out_em06",
+            "Rapgap_Eminus06_*sys_5.root",
+            exclude=excluded,
         )
         reco, gen = convert_to_np(
             file_list, flags.data_input + "/sys/out_em06", name="Rapgap"
@@ -604,7 +674,9 @@ if __name__ == "__main__":
     elif flags.sample == "RapgapEm_sys7":
         print("Processing Rapgap")
         file_list = find_files_with_string(
-            flags.data_input + "/sys/out_em06", "Rapgap_Eminus06_*sys_7.root"
+            flags.data_input + "/sys/out_em06",
+            "Rapgap_Eminus06_*sys_7.root",
+            exclude=excluded,
         )
         reco, gen = convert_to_np(
             file_list, flags.data_input + "/sys/out_em06", name="Rapgap"
@@ -619,7 +691,9 @@ if __name__ == "__main__":
     elif flags.sample == "RapgapEm_sys11":
         print("Processing Rapgap")
         file_list = find_files_with_string(
-            flags.data_input + "/sys/out_em06", "Rapgap_Eminus06_*sys_11.root"
+            flags.data_input + "/sys/out_em06",
+            "Rapgap_Eminus06_*sys_11.root",
+            exclude=excluded,
         )
         reco, gen = convert_to_np(
             file_list, flags.data_input + "/sys/out_em06", name="Rapgap"
@@ -635,7 +709,9 @@ if __name__ == "__main__":
     elif flags.sample == "DjangohEm_sys0":
         print("Processing Djangoh")
         file_list = find_files_with_string(
-            flags.data_input + "/sys/out_em06", "Django_Eminus06_*sys_0.root"
+            flags.data_input + "/sys/out_em06",
+            "Django_Eminus06_*sys_0.root",
+            exclude=excluded,
         )
         reco, gen = convert_to_np(
             file_list, flags.data_input + "/sys/out_em06", name="Django"
@@ -651,7 +727,9 @@ if __name__ == "__main__":
     elif flags.sample == "DjangohEm_sys1":
         print("Processing Djangoh")
         file_list = find_files_with_string(
-            flags.data_input + "/sys/out_em06", "Django_Eminus06_*sys_1.root"
+            flags.data_input + "/sys/out_em06",
+            "Django_Eminus06_*sys_1.root",
+            exclude=excluded,
         )
         reco, gen = convert_to_np(
             file_list, flags.data_input + "/sys/out_em06", name="Django"
@@ -667,7 +745,9 @@ if __name__ == "__main__":
     elif flags.sample == "DjangohEm_sys5":
         print("Processing Djangoh")
         file_list = find_files_with_string(
-            flags.data_input + "/sys/out_em06", "Django_Eminus06_*sys_5.root"
+            flags.data_input + "/sys/out_em06",
+            "Django_Eminus06_*sys_5.root",
+            exclude=excluded,
         )
         reco, gen = convert_to_np(
             file_list, flags.data_input + "/sys/out_em06", name="Django"
@@ -682,7 +762,9 @@ if __name__ == "__main__":
     elif flags.sample == "DjangohEm_sys7":
         print("Processing Djangoh")
         file_list = find_files_with_string(
-            flags.data_input + "/sys/out_em06", "Django_Eminus06_*sys_7.root"
+            flags.data_input + "/sys/out_em06",
+            "Django_Eminus06_*sys_7.root",
+            exclude=excluded,
         )
         reco, gen = convert_to_np(
             file_list, flags.data_input + "/sys/out_em06", name="Django"
@@ -697,7 +779,9 @@ if __name__ == "__main__":
     elif flags.sample == "DjangohEm_sys11":
         print("Processing Djangoh")
         file_list = find_files_with_string(
-            flags.data_input + "/sys/out_em06", "Django_Eminus06_*sys_11.root"
+            flags.data_input + "/sys/out_em06",
+            "Django_Eminus06_*sys_11.root",
+            exclude=excluded,
         )
         reco, gen = convert_to_np(
             file_list, flags.data_input + "/sys/out_em06", name="Django"
@@ -713,7 +797,9 @@ if __name__ == "__main__":
     elif flags.sample == "RapgapEp_NoRad":
         print("Processing Rapgap")
         file_list = find_files_with_string(
-            flags.data_input + "/out_ep_norad", "RaNorad_Eplus0607*.root"
+            flags.data_input + "/out_ep_norad",
+            "RaNorad_Eplus0607*.root",
+            exclude=excluded,
         )
         reco, gen = convert_to_np(
             file_list, flags.data_input + "/out_ep_norad", name="RaNorad", gen_only=True
@@ -729,7 +815,9 @@ if __name__ == "__main__":
     elif flags.sample == "DjangohEp_NoRad":
         print("Processing Djangoh")
         file_list = find_files_with_string(
-            flags.data_input + "/out_ep_norad", "DjNorad_Eplus0607*.root"
+            flags.data_input + "/out_ep_norad",
+            "DjNorad_Eplus0607*.root",
+            exclude=excluded,
         )
         reco, gen = convert_to_np(
             file_list, flags.data_input + "/out_ep_norad", name="DjNorad", gen_only=True
