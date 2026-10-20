@@ -40,7 +40,9 @@ def preprocess(data):
         [
             log_Q2,
             e[:, 1],
-            np.sqrt(e[:, 2] ** 2 + e[:, 3] ** 2) / np.sqrt(e[:, 0]),
+            np.ma.divide(np.sqrt(e[:, 2] ** 2 + e[:, 3] ** 2), np.sqrt(e[:, 0])).filled(
+                0
+            ),
             np.ma.arctanh(
                 e[:, 4] / np.sqrt(e[:, 2] ** 2 + e[:, 3] ** 2 + e[:, 4] ** 2)
             ).filled(0),
