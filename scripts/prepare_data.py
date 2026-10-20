@@ -107,6 +107,12 @@ def convert_to_np(
             mask_reco = mask_reco[mask_evt]
             mask_gen = mask_gen[mask_evt]
 
+            print(
+                "Rejecting {} from gen Q2>100 cut".format(
+                    1.0 - 1.0 * np.sum(mask_evt) / mask_evt.shape[0]
+                )
+            )
+
         print("Number of events: {}".format(mask_reco.shape[0]))
         # 0.08 < y < 0.7, ptmiss < 10, 45 < empz < 65 and Q2 > 150
         pass_reco = (
@@ -117,10 +123,7 @@ def convert_to_np(
             & (mask_reco[:, 2] < 65)
             & (reco_dict["event_features"][ifile][:, 0] > 150)
         )
-        reco_dict["event_features"][ifile] = np.concatenate(
-            (reco_dict["event_features"][ifile], pass_reco[:, None]), -1
-        )
-        del mask_reco, pass_reco
+
         # Particle dataset
 
         # part pT > 0.1 GeV, -1.5 < part eta < 2.75
@@ -132,12 +135,22 @@ def convert_to_np(
         reco_dict["particle_features"][ifile] = (
             reco_dict["particle_features"][ifile] * mask_part[:, :, None]
         )
-        if gen_only:
-            mask_evt = np.ones(
-                reco_dict["particle_features"][ifile].shape[0], dtype=bool
+        if not gen_only:
+            nonempty_event_mask = (
+                np.sum(reco_dict["particle_features"][ifile][:, :, 0], 1) > 0
             )
-        else:
-            mask_evt = np.sum(reco_dict["particle_features"][ifile][:, :, 0], 1) > 0
+            print(
+                "Fraction of reco events that are empty: {}".format(
+                    np.sum(~nonempty_event_mask) / nonempty_event_mask.shape[0]
+                )
+            )
+            pass_reco = (pass_reco) & (nonempty_event_mask)
+            del nonempty_event_mask
+
+        reco_dict["event_features"][ifile] = np.concatenate(
+            (reco_dict["event_features"][ifile], pass_reco[:, None]), -1
+        )
+        del mask_reco, pass_reco
 
         del mask_part
         if "Data" not in name:
@@ -149,9 +162,7 @@ def convert_to_np(
                 & (mask_gen < 0.7)
                 & (gen_dict["event_features"][ifile][:, 0] > 150)
             )
-            gen_dict["event_features"][ifile] = np.concatenate(
-                (gen_dict["event_features"][ifile], pass_gen[:, None]), -1
-            )
+
             # part pT > 0.1 GeV, -1.5 < part eta < 2.75
 
             mask_part = (
@@ -164,25 +175,57 @@ def convert_to_np(
             )
 
             # Reject events in case there's no particle left
-            mask_evt_gen = np.sum(gen_dict["particle_features"][ifile][:, :, 0], 1) > 0
+            nonempty_event_mask_gen = (
+                np.sum(gen_dict["particle_features"][ifile][:, :, 0], 1) > 0
+            )
+            pass_gen = (pass_gen) & (nonempty_event_mask_gen)
+            gen_dict["event_features"][ifile] = np.concatenate(
+                (gen_dict["event_features"][ifile], pass_gen[:, None]), -1
+            )
 
-            mask_evt *= mask_evt_gen
-            gen_dict["particle_features"][ifile] = gen_dict["particle_features"][ifile][
-                mask_evt
-            ]
-            gen_dict["event_features"][ifile] = gen_dict["event_features"][ifile][
-                mask_evt
-            ]
+            del mask_gen, pass_gen, nonempty_event_mask_gen
 
-            del mask_gen, pass_gen
-
-        print("Rejecting {}".format(1.0 - 1.0 * np.sum(mask_evt) / mask_evt.shape[0]))
-        reco_dict["particle_features"][ifile] = reco_dict["particle_features"][ifile][
-            mask_evt
-        ]
-        reco_dict["event_features"][ifile] = reco_dict["event_features"][ifile][
-            mask_evt
-        ]
+        # Quantifying our reco and gen cuts
+        pass_reco = reco_dict["event_features"][ifile][:, -1] == 1
+        print(
+            "Fraction passing pass_reco: {}".format(
+                np.sum(pass_reco) / pass_reco.shape[0]
+            )
+        )
+        if "Data" not in name:
+            pass_gen = gen_dict["event_features"][ifile][:, -1] == 1
+            print(
+                "Fraction passing pass_gen: {}".format(
+                    np.sum(pass_gen) / pass_gen.shape[0]
+                )
+            )
+            print(
+                "Fraction passing reco and passing gen: {}".format(
+                    np.sum((pass_reco) & (pass_gen)) / pass_reco.shape[0]
+                )
+            )
+            print(
+                "Fraction failing reco but passing gen: {}".format(
+                    np.sum((~pass_reco) & (pass_gen)) / pass_reco.shape[0]
+                )
+            )
+            print(
+                "Fraction within fiducial region that fail reco: {}".format(
+                    np.sum((~pass_reco) & (pass_gen)) / np.sum(pass_gen)
+                )
+            )
+            print(
+                "Fraction failing gen but passing reco: {}".format(
+                    np.sum((pass_reco) & (~pass_gen)) / pass_reco.shape[0]
+                )
+            )
+            print(
+                "Fraction failing both pass_reco and pass_gen: {}".format(
+                    np.sum((~pass_reco) & (~pass_gen)) / pass_reco.shape[0]
+                )
+            )
+            del pass_gen
+        del pass_reco
 
     reco_dict["event_features"] = np.concatenate(reco_dict["event_features"])
     reco_dict["particle_features"] = np.concatenate(reco_dict["particle_features"])
