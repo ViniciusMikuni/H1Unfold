@@ -1,0 +1,65 @@
+# Simulation runs that make up each MC sample, keyed by the file numbers of the
+# <Generator>_<period>_<N>.nominal.root files. Runs marked excluded are the
+# H1oo 4.0.6 files that prepare_data.py skips (EXCLUDED_FILES).
+root_dir: /global/cfs/cdirs/m3246/H1/root
+
+# Generator-level preselection applied to MC, as in prepare_data.convert_to_np
+mc_gen_q2_min: 100
+
+samples:
+  RapgapEp:
+    subdir: out_ep0607
+    tree: Rapgap/minitree
+    pattern: "Rapgap_Eplus0607_*.nominal.root"
+    generator: Rapgap
+    lepton: Ep
+    runs:
+      7094: {files: [1, 12], excluded: true}
+      8948: {files: [101, 120]}
+      8949: {files: [121, 140]}
+      8950: {files: [141, 150]}
+
+  DjangohEp:
+    subdir: out_ep0607
+    tree: Django/minitree
+    pattern: "Django_Eplus0607_*.nominal.root"
+    generator: Djangoh
+    lepton: Ep
+    runs:
+      7091: {files: [1, 20], excluded: true}
+      8958: {files: [101, 120]}
+      8959: {files: [121, 140]}
+      8960: {files: [141, 154]}
+
+  RapgapEm:
+    subdir: out_em06
+    tree: Rapgap/minitree
+    pattern: "Rapgap_Eminus06_*.nominal.root"
+    generator: Rapgap
+    lepton: Em
+    runs:
+      7071: {files: [1, 7], excluded: true}
+      8953: {files: [101, 120]}
+      8954: {files: [121, 122]}
+
+  DjangohEm:
+    subdir: out_em06
+    tree: Django/minitree
+    pattern: "Django_Eminus06_*.nominal.root"
+    generator: Djangoh
+    lepton: Em
+    runs:
+      7072: {files: [1, 9], excluded: true}
+      8961: {files: [101, 120]}
+      8962: {files: [121, 126]}
+
+# Same data files as prepare_data.py (dataEp, dataEm)
+data:
+  Ep:
+    subdir: out_ep0607
+    tree: Data/minitree
+    files: [Data_Eplus0607.root]
+  Em:
+    subdir: out_em06
+    tree: Data/minitree
+    files: [Data_Eminus06_0.nominal.root, Data_Eminus06_1.nominal.root]
