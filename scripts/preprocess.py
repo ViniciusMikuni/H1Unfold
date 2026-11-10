@@ -4,6 +4,7 @@ import h5py as h5
 import os
 import re
 import glob
+from concurrent.futures import ProcessPoolExecutor
 from merge_h5 import merge_h5_files
 
 
@@ -113,6 +114,12 @@ if __name__ == "__main__":
         action="store_true",
         help="Keep the per-file <file_name>_prep_<N>.h5 outputs. Without this they are deleted as they are merged",
     )
+    parser.add_argument(
+        "--num_processes",
+        type=int,
+        default=1,
+        help="Number of files to process in parallel",
+    )
     flags = parser.parse_args()
     if not flags.combine and not flags.keep_intermediate:
         raise Exception(
@@ -146,13 +153,18 @@ if __name__ == "__main__":
             )
     else:
         print(f"Found {len(file_list)} files")
-        output_files = []
-        for f in file_list:
-            output_files.append(
-                preprocess_one_file(
-                    f, f"{prefix_path}_{file_numbers[f]}_prep.h5", is_mc
+        # Preprocess num_processes files at a time. The results come back in the same order as file_list
+        with ProcessPoolExecutor(max_workers=flags.num_processes) as executor:
+            futures = [
+                executor.submit(
+                    preprocess_one_file,
+                    f,
+                    f"{prefix_path}_{file_numbers[f]}_prep.h5",
+                    is_mc,
                 )
-            )
+                for f in file_list
+            ]
+            output_files = [future.result() for future in futures]
 
         if flags.combine:
             merge_h5_files(

@@ -4,7 +4,9 @@ import os
 import h5py as h5
 import fnmatch
 import re
+from concurrent.futures import ProcessPoolExecutor
 from merge_h5 import merge_h5_files
+import uproot3 as uproot
 
 
 def convert_to_np(
@@ -272,6 +274,7 @@ def find_files_with_string(directory, string):
 
 FILE_NUMBER_RE = re.compile(r"_(\d+)\.(?:nominal|sys_\d+)\.root$")
 
+
 def convert_and_write_one_file(
     i, file, base_path, name, data_output, output_prefix, gen_only=False
 ):
@@ -306,18 +309,30 @@ def process_files(
     combine,
     keep_intermediate,
     gen_only=False,
+    num_processes=1,
 ):
     # Convert each root file to its own h5 file, then optionally merge them into <output_prefix>.h5
     if len(file_list) == 0:
         raise Exception("ERROR: No files found")
 
-    output_files = []
-    for i, file in enumerate(file_list):
-        output_file = convert_and_write_one_file(
-            i, file, base_path, name, data_output, output_prefix, gen_only=gen_only
-        )
-        if output_file is not None:
-            output_files.append(output_file)
+    # Convert num_processes files at a time. The results come back in the same order as file_list
+    with ProcessPoolExecutor(max_workers=num_processes) as executor:
+        futures = [
+            executor.submit(
+                convert_and_write_one_file,
+                i,
+                file,
+                base_path,
+                name,
+                data_output,
+                output_prefix,
+                gen_only=gen_only,
+            )
+            for i, file in enumerate(file_list)
+        ]
+        output_files = [f.result() for f in futures]
+    # Files that could not be loaded return None
+    output_files = [f for f in output_files if f is not None]
 
     if combine:
         merge_h5_files(
@@ -392,9 +407,6 @@ def create_toy(data_output):
 if __name__ == "__main__":
     import argparse
 
-    # import uproot
-    import uproot3 as uproot
-
     # Convert root files to h5 inputs that are easier to load when training OmniFold
 
     parser = argparse.ArgumentParser()
@@ -425,6 +437,12 @@ if __name__ == "__main__":
         action="store_true",
         help="Keep the per-file h5 outputs. Without this they are deleted as they are merged",
     )
+    parser.add_argument(
+        "--num_processes",
+        type=int,
+        default=1,
+        help="Number of files to process in parallel",
+    )
     flags = parser.parse_args()
     if not flags.combine and not flags.keep_intermediate:
         raise Exception(
@@ -450,6 +468,7 @@ if __name__ == "__main__":
             output_prefix="data_Eplus0607",
             combine=flags.combine,
             keep_intermediate=flags.keep_intermediate,
+            num_processes=flags.num_processes,
         )
 
     elif flags.sample == "dataEm":
@@ -466,6 +485,7 @@ if __name__ == "__main__":
             output_prefix="data_Eminus06",
             combine=flags.combine,
             keep_intermediate=flags.keep_intermediate,
+            num_processes=flags.num_processes,
         )
 
     elif flags.sample == "RapgapEp":
@@ -482,6 +502,7 @@ if __name__ == "__main__":
             output_prefix="Rapgap_Eplus0607",
             combine=flags.combine,
             keep_intermediate=flags.keep_intermediate,
+            num_processes=flags.num_processes,
         )
     elif flags.sample == "DjangohEp":
         print("Processing Djangoh")
@@ -496,6 +517,7 @@ if __name__ == "__main__":
             output_prefix="Djangoh_Eplus0607",
             combine=flags.combine,
             keep_intermediate=flags.keep_intermediate,
+            num_processes=flags.num_processes,
         )
 
     elif flags.sample == "DjangohEm":
@@ -511,6 +533,7 @@ if __name__ == "__main__":
             output_prefix="Djangoh_Eminus06",
             combine=flags.combine,
             keep_intermediate=flags.keep_intermediate,
+            num_processes=flags.num_processes,
         )
 
     elif flags.sample == "RapgapEm":
@@ -527,6 +550,7 @@ if __name__ == "__main__":
             output_prefix="Rapgap_Eminus06",
             combine=flags.combine,
             keep_intermediate=flags.keep_intermediate,
+            num_processes=flags.num_processes,
         )
 
     elif flags.sample == "RapgapEp_sys0":
@@ -542,6 +566,7 @@ if __name__ == "__main__":
             output_prefix="Rapgap_Eplus0607_sys0",
             combine=flags.combine,
             keep_intermediate=flags.keep_intermediate,
+            num_processes=flags.num_processes,
         )
 
     elif flags.sample == "RapgapEp_sys1":
@@ -557,6 +582,7 @@ if __name__ == "__main__":
             output_prefix="Rapgap_Eplus0607_sys1",
             combine=flags.combine,
             keep_intermediate=flags.keep_intermediate,
+            num_processes=flags.num_processes,
         )
 
     elif flags.sample == "RapgapEp_sys5":
@@ -572,6 +598,7 @@ if __name__ == "__main__":
             output_prefix="Rapgap_Eplus0607_sys5",
             combine=flags.combine,
             keep_intermediate=flags.keep_intermediate,
+            num_processes=flags.num_processes,
         )
     elif flags.sample == "RapgapEp_sys7":
         print("Processing Rapgap")
@@ -586,6 +613,7 @@ if __name__ == "__main__":
             output_prefix="Rapgap_Eplus0607_sys7",
             combine=flags.combine,
             keep_intermediate=flags.keep_intermediate,
+            num_processes=flags.num_processes,
         )
     elif flags.sample == "RapgapEp_sys11":
         print("Processing Rapgap")
@@ -600,6 +628,7 @@ if __name__ == "__main__":
             output_prefix="Rapgap_Eplus0607_sys11",
             combine=flags.combine,
             keep_intermediate=flags.keep_intermediate,
+            num_processes=flags.num_processes,
         )
 
     elif flags.sample == "DjangohEp_sys0":
@@ -615,6 +644,7 @@ if __name__ == "__main__":
             output_prefix="Djangoh_Eplus0607_sys0",
             combine=flags.combine,
             keep_intermediate=flags.keep_intermediate,
+            num_processes=flags.num_processes,
         )
 
     elif flags.sample == "DjangohEp_sys1":
@@ -630,6 +660,7 @@ if __name__ == "__main__":
             output_prefix="Djangoh_Eplus0607_sys1",
             combine=flags.combine,
             keep_intermediate=flags.keep_intermediate,
+            num_processes=flags.num_processes,
         )
 
     elif flags.sample == "DjangohEp_sys5":
@@ -645,6 +676,7 @@ if __name__ == "__main__":
             output_prefix="Djangoh_Eplus0607_sys5",
             combine=flags.combine,
             keep_intermediate=flags.keep_intermediate,
+            num_processes=flags.num_processes,
         )
     elif flags.sample == "DjangohEp_sys7":
         print("Processing Djangoh")
@@ -659,6 +691,7 @@ if __name__ == "__main__":
             output_prefix="Djangoh_Eplus0607_sys7",
             combine=flags.combine,
             keep_intermediate=flags.keep_intermediate,
+            num_processes=flags.num_processes,
         )
     elif flags.sample == "DjangohEp_sys11":
         print("Processing Djangoh")
@@ -673,6 +706,7 @@ if __name__ == "__main__":
             output_prefix="Djangoh_Eplus0607_sys11",
             combine=flags.combine,
             keep_intermediate=flags.keep_intermediate,
+            num_processes=flags.num_processes,
         )
 
     elif flags.sample == "RapgapEm_sys0":
@@ -688,6 +722,7 @@ if __name__ == "__main__":
             output_prefix="Rapgap_Eminus06_sys0",
             combine=flags.combine,
             keep_intermediate=flags.keep_intermediate,
+            num_processes=flags.num_processes,
         )
 
     elif flags.sample == "RapgapEm_sys1":
@@ -703,6 +738,7 @@ if __name__ == "__main__":
             output_prefix="Rapgap_Eminus06_sys1",
             combine=flags.combine,
             keep_intermediate=flags.keep_intermediate,
+            num_processes=flags.num_processes,
         )
 
     elif flags.sample == "RapgapEm_sys5":
@@ -718,6 +754,7 @@ if __name__ == "__main__":
             output_prefix="Rapgap_Eminus06_sys5",
             combine=flags.combine,
             keep_intermediate=flags.keep_intermediate,
+            num_processes=flags.num_processes,
         )
     elif flags.sample == "RapgapEm_sys7":
         print("Processing Rapgap")
@@ -732,6 +769,7 @@ if __name__ == "__main__":
             output_prefix="Rapgap_Eminus06_sys7",
             combine=flags.combine,
             keep_intermediate=flags.keep_intermediate,
+            num_processes=flags.num_processes,
         )
     elif flags.sample == "RapgapEm_sys11":
         print("Processing Rapgap")
@@ -746,6 +784,7 @@ if __name__ == "__main__":
             output_prefix="Rapgap_Eminus06_sys11",
             combine=flags.combine,
             keep_intermediate=flags.keep_intermediate,
+            num_processes=flags.num_processes,
         )
 
     elif flags.sample == "DjangohEm_sys0":
@@ -761,6 +800,7 @@ if __name__ == "__main__":
             output_prefix="Djangoh_Eminus06_sys0",
             combine=flags.combine,
             keep_intermediate=flags.keep_intermediate,
+            num_processes=flags.num_processes,
         )
 
     elif flags.sample == "DjangohEm_sys1":
@@ -776,6 +816,7 @@ if __name__ == "__main__":
             output_prefix="Djangoh_Eminus06_sys1",
             combine=flags.combine,
             keep_intermediate=flags.keep_intermediate,
+            num_processes=flags.num_processes,
         )
 
     elif flags.sample == "DjangohEm_sys5":
@@ -791,6 +832,7 @@ if __name__ == "__main__":
             output_prefix="Djangoh_Eminus06_sys5",
             combine=flags.combine,
             keep_intermediate=flags.keep_intermediate,
+            num_processes=flags.num_processes,
         )
     elif flags.sample == "DjangohEm_sys7":
         print("Processing Djangoh")
@@ -805,6 +847,7 @@ if __name__ == "__main__":
             output_prefix="Djangoh_Eminus06_sys7",
             combine=flags.combine,
             keep_intermediate=flags.keep_intermediate,
+            num_processes=flags.num_processes,
         )
     elif flags.sample == "DjangohEm_sys11":
         print("Processing Djangoh")
@@ -819,6 +862,7 @@ if __name__ == "__main__":
             output_prefix="Djangoh_Eminus06_sys11",
             combine=flags.combine,
             keep_intermediate=flags.keep_intermediate,
+            num_processes=flags.num_processes,
         )
 
     elif flags.sample == "RapgapEp_NoRad":
@@ -834,6 +878,7 @@ if __name__ == "__main__":
             output_prefix="Rapgap_Eplus0607_NoRad",
             combine=flags.combine,
             keep_intermediate=flags.keep_intermediate,
+            num_processes=flags.num_processes,
             gen_only=True,
         )
 
@@ -850,6 +895,7 @@ if __name__ == "__main__":
             output_prefix="Djangoh_Eplus0607_NoRad",
             combine=flags.combine,
             keep_intermediate=flags.keep_intermediate,
+            num_processes=flags.num_processes,
             gen_only=True,
         )
 
