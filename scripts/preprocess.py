@@ -2,6 +2,9 @@ import numpy as np
 import argparse
 import h5py as h5
 import os
+import re
+import glob
+from merge_h5 import merge_h5_files
 
 
 def preprocess(data):
@@ -54,48 +57,107 @@ def preprocess(data):
     return new_e, new_p * mask[:, :, None]
 
 
-parser = argparse.ArgumentParser()
-parser.add_argument(
-    "--data_folder",
-    default="/global/cfs/cdirs/m3246/H1/h5",
-    help="Folder containing data and MC files",
-)
-parser.add_argument("--file_name", default="data_Eplus0607.h5", help="File to load")
+def preprocess_one_file(input_file, output_file, is_mc):
+    print("Preprocessing", input_file)
+    with h5.File(input_file, "r") as fh5:
+        reco_p = fh5["reco_particle_features"][:].astype(np.float32)
+        reco_e = fh5["reco_event_features"][:].astype(np.float32)
+        if is_mc:
+            gen_p = fh5["gen_particle_features"][:].astype(np.float32)
+            gen_e = fh5["gen_event_features"][:].astype(np.float32)
 
-flags = parser.parse_args()
+    weight = reco_e[:, -2]
+    pass_reco = reco_e[:, -1]
+    print(f"Running {weight.shape[0]} Reco events from {input_file}")
+    reco_e, reco_p = preprocess((reco_p, reco_e[:, :-2]))
+    reco_e = np.concatenate([reco_e, weight[:, None], pass_reco[:, None]], -1)
 
-is_mc = False if "data" in flags.file_name else True
-
-reco_p = h5.File(os.path.join(flags.data_folder, flags.file_name), "r")[
-    "reco_particle_features"
-][:].astype(np.float32)
-reco_e = h5.File(os.path.join(flags.data_folder, flags.file_name), "r")[
-    "reco_event_features"
-][:].astype(np.float32)
-weight = reco_e[:, -2].astype(np.float32)
-pass_reco = reco_e[:, -1]
-print(f"Running {weight.shape[0]} Reco events")
-reco_e, reco_p = preprocess((reco_p, reco_e[:, :-2]))
-reco_e = np.concatenate([reco_e, weight[:, None], pass_reco[:, None]], -1)
-
-if is_mc:
-    print("Running Gen events")
-    gen_p = h5.File(os.path.join(flags.data_folder, flags.file_name), "r")[
-        "gen_particle_features"
-    ][:].astype(np.float32)
-    gen_e = h5.File(os.path.join(flags.data_folder, flags.file_name), "r")[
-        "gen_event_features"
-    ][:].astype(np.float32)
-    pass_gen = gen_e[:, -1]
-    gen_e, gen_p = preprocess((gen_p, gen_e[:, :-1]))
-    gen_e = np.concatenate([gen_e, pass_gen[:, None]], -1)
-
-
-with h5.File(
-    os.path.join(flags.data_folder, flags.file_name.replace(".h5", "_prep.h5")), "w"
-) as fh5:
-    dset = fh5.create_dataset("reco_particle_features", data=reco_p)
-    dset = fh5.create_dataset("reco_event_features", data=reco_e)
     if is_mc:
-        dset = fh5.create_dataset("gen_particle_features", data=gen_p)
-        dset = fh5.create_dataset("gen_event_features", data=gen_e)
+        print(f"Running Gen events from {input_file}")
+        pass_gen = gen_e[:, -1]
+        gen_e, gen_p = preprocess((gen_p, gen_e[:, :-1]))
+        gen_e = np.concatenate([gen_e, pass_gen[:, None]], -1)
+
+    with h5.File(output_file, "w") as fh5:
+        fh5.create_dataset("reco_particle_features", data=reco_p)
+        fh5.create_dataset("reco_event_features", data=reco_e)
+        if is_mc:
+            fh5.create_dataset("gen_particle_features", data=gen_p)
+            fh5.create_dataset("gen_event_features", data=gen_e)
+
+    print(f"Finished {input_file} -> {output_file}")
+    return output_file
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--data_folder",
+        default="/global/cfs/cdirs/m3246/H1/h5",
+        help="Folder containing data and MC files",
+    )
+    parser.add_argument(
+        "--file_name",
+        default="data_Eplus0607",
+        help="Prefix of the prepare_data.py outputs, e.g. Rapgap_Eplus0607. "
+        "Processes every <file_name>_<N>.h5 in data_folder",
+    )
+    parser.add_argument(
+        "--no-combine",
+        dest="combine",
+        action="store_false",
+        help="Do not merge the per-file outputs into a single <file_name>_prep.h5 at the end",
+    )
+    parser.add_argument(
+        "--keep-intermediate",
+        action="store_true",
+        help="Keep the per-file <file_name>_prep_<N>.h5 outputs. Without this they are deleted as they are merged",
+    )
+    flags = parser.parse_args()
+    if not flags.combine and not flags.keep_intermediate:
+        raise Exception(
+            "ERROR: --no-combine without --keep-intermediate would not save any output"
+        )
+
+    is_mc = False if "data" in flags.file_name else True
+    prefix_path = os.path.join(flags.data_folder, flags.file_name)
+
+    # Only take <file_name>_<N>.h5, so merged, already preprocessed, or other samples
+    # sharing the prefix (e.g. _sys0, _prep_<N>) are not picked up
+    # If only the merged file exists in the directory, it will be picked up in the next if statement
+    pattern = re.compile(rf"^{re.escape(flags.file_name)}_(\d+)\.h5$")
+    file_numbers = {}
+    for f in glob.glob(prefix_path + "_*.h5"):
+        m = pattern.match(os.path.basename(f))
+        if m:
+            file_numbers[f] = m.group(1)
+    file_list = sorted(file_numbers, key=lambda f: int(file_numbers[f]))
+    if len(file_list) == 0:
+        # prepare_data.py deletes its per-file outputs after merging unless run with
+        # --keep-intermediate, so fall back to the merged <file_name>.h5
+        if os.path.exists(prefix_path + ".h5"):
+            print(
+                f"No {prefix_path}_<N>.h5 files found, processing the merged {prefix_path}.h5"
+            )
+            preprocess_one_file(prefix_path + ".h5", prefix_path + "_prep.h5", is_mc)
+        else:
+            raise RuntimeError(
+                f"No files found matching {prefix_path}_<N>.h5 or {prefix_path}.h5"
+            )
+    else:
+        print(f"Found {len(file_list)} files")
+        output_files = []
+        for f in file_list:
+            output_files.append(
+                preprocess_one_file(
+                    f, f"{prefix_path}_{file_numbers[f]}_prep.h5", is_mc
+                )
+            )
+
+        if flags.combine:
+            merge_h5_files(
+                input_files=output_files,
+                output_file=prefix_path + "_prep.h5",
+                is_mc=is_mc,
+                delete_inputs=not flags.keep_intermediate,
+            )
