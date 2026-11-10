@@ -275,6 +275,12 @@ def find_files_with_string(directory, string):
 FILE_NUMBER_RE = re.compile(r"_(\d+)\.(?:nominal|sys_\d+)\.root$")
 
 
+def get_file_number(file):
+    # Used to sort the files. Files without a number (e.g. Data_Eplus0607.root) go first
+    m = FILE_NUMBER_RE.search(file)
+    return int(m.group(1)) if m else -1
+
+
 def convert_and_write_one_file(
     i, file, base_path, name, data_output, output_prefix, gen_only=False
 ):
@@ -315,6 +321,8 @@ def process_files(
     if len(file_list) == 0:
         raise Exception("ERROR: No files found")
 
+    # Sort by file number, the same order preprocess.py uses
+    file_list = sorted(file_list, key=get_file_number)
     # Convert num_processes files at a time. The results come back in the same order as file_list
     with ProcessPoolExecutor(max_workers=num_processes) as executor:
         futures = [

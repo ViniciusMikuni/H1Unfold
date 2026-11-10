@@ -4,6 +4,7 @@ import h5py as h5
 import os
 import re
 import glob
+import random
 from concurrent.futures import ProcessPoolExecutor
 from merge_h5 import merge_h5_files
 
@@ -120,6 +121,11 @@ if __name__ == "__main__":
         default=1,
         help="Number of files to process in parallel",
     )
+    parser.add_argument(
+        "--random_order",
+        action="store_true",
+        help="Merge the per-file outputs in a random order instead of sorted by file number",
+    )
     flags = parser.parse_args()
     if not flags.combine and not flags.keep_intermediate:
         raise Exception(
@@ -167,6 +173,8 @@ if __name__ == "__main__":
             output_files = [future.result() for future in futures]
 
         if flags.combine:
+            if flags.random_order:
+                random.shuffle(output_files)
             merge_h5_files(
                 input_files=output_files,
                 output_file=prefix_path + "_prep.h5",
