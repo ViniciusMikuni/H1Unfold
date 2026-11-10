@@ -3,6 +3,8 @@ import numpy as np
 import os
 import h5py as h5
 import fnmatch
+import re
+from merge_h5 import merge_h5_files
 
 
 def convert_to_np(
@@ -227,6 +229,10 @@ def convert_to_np(
             del pass_gen
         del pass_reco
 
+    if len(reco_dict["event_features"]) == 0:
+        # None of the files could be loaded
+        return None, None
+
     reco_dict["event_features"] = np.concatenate(reco_dict["event_features"])
     reco_dict["particle_features"] = np.concatenate(reco_dict["particle_features"])
 
@@ -262,6 +268,64 @@ def find_files_with_string(directory, string):
         if fnmatch.fnmatch(filename, string):
             matching_files.append(filename)
     return matching_files
+
+
+FILE_NUMBER_RE = re.compile(r"_(\d+)\.(?:nominal|sys_\d+)\.root$")
+
+def convert_and_write_one_file(
+    i, file, base_path, name, data_output, output_prefix, gen_only=False
+):
+    print(f"Loading file {file}")
+    reco, gen = convert_to_np([file], base_path, name=name, gen_only=gen_only)
+    if reco is None:
+        print(f"Skipped {file}: could not be loaded")
+        return None
+
+    # Grabbing the number from the input root file so we can use that in the output file name
+    m = FILE_NUMBER_RE.search(file)
+    file_number = m.group(1) if m else i
+    output_file = os.path.join(data_output, f"{output_prefix}_{file_number}.h5")
+    print(f"input: {file}, output: {output_file}")
+    with h5.File(output_file, "w") as fh5:
+        fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
+        fh5.create_dataset("reco_event_features", data=reco["event_features"])
+        if "Data" not in name:
+            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
+            fh5.create_dataset("gen_event_features", data=gen["event_features"])
+
+    print(f"Finished {file}: {len(reco['event_features'])} events -> {output_file}")
+    return output_file
+
+
+def process_files(
+    file_list,
+    base_path,
+    name,
+    data_output,
+    output_prefix,
+    combine,
+    keep_intermediate,
+    gen_only=False,
+):
+    # Convert each root file to its own h5 file, then optionally merge them into <output_prefix>.h5
+    if len(file_list) == 0:
+        raise Exception("ERROR: No files found")
+
+    output_files = []
+    for i, file in enumerate(file_list):
+        output_file = convert_and_write_one_file(
+            i, file, base_path, name, data_output, output_prefix, gen_only=gen_only
+        )
+        if output_file is not None:
+            output_files.append(output_file)
+
+    if combine:
+        merge_h5_files(
+            input_files=output_files,
+            output_file=os.path.join(data_output, f"{output_prefix}.h5"),
+            is_mc="Data" not in name,
+            delete_inputs=not keep_intermediate,
+        )
 
 
 def create_toy(data_output):
@@ -350,32 +414,59 @@ if __name__ == "__main__":
         default="dataEp",
         help="Sample to process. Options are: DjangohEp, DjangohEm,RapgapEp,RapgapEm,data",
     )
+    parser.add_argument(
+        "--no-combine",
+        dest="combine",
+        action="store_false",
+        help="Do not merge the per-file h5 outputs into a single h5 file at the end",
+    )
+    parser.add_argument(
+        "--keep-intermediate",
+        action="store_true",
+        help="Keep the per-file h5 outputs. Without this they are deleted as they are merged",
+    )
     flags = parser.parse_args()
+    if not flags.combine and not flags.keep_intermediate:
+        raise Exception(
+            "ERROR: --no-combine without --keep-intermediate would not save any output"
+        )
+    os.makedirs(flags.data_output, exist_ok=True)
 
     # create_toy(flags.data_output)
 
     if flags.sample == "dataEp":
         print("Processing Data")
         file_list = [
-            "out_ep0607/Data_Eplus0607.root",
-            #'out_em06/Data_Eminus06_0.nominal.root',
-            #'out_em06/Data_Eminus06_1.nominal.root'
+            "out_ep0607/Data_Eplus0607_0.nominal.root",
+            "out_ep0607/Data_Eplus0607_1.nominal.root",
+            "out_ep0607/Data_Eplus0607_2.nominal.root",
+            "out_ep0607/Data_Eplus0607_3.nominal.root",
         ]
-        data, _ = convert_to_np(file_list, flags.data_input, name="Data")
-        with h5.File(os.path.join(flags.data_output, "data_Eplus0607.h5"), "w") as fh5:
-            fh5.create_dataset("reco_particle_features", data=data["particle_features"])
-            fh5.create_dataset("reco_event_features", data=data["event_features"])
+        process_files(
+            file_list,
+            flags.data_input,
+            name="Data",
+            data_output=flags.data_output,
+            output_prefix="data_Eplus0607",
+            combine=flags.combine,
+            keep_intermediate=flags.keep_intermediate,
+        )
 
     elif flags.sample == "dataEm":
         print("Processing Data")
-        file_list = [  #'out_ep0607/Data_Eplus0607.root',
+        file_list = [
             "out_em06/Data_Eminus06_0.nominal.root",
             "out_em06/Data_Eminus06_1.nominal.root",
         ]
-        data, _ = convert_to_np(file_list, flags.data_input, name="Data")
-        with h5.File(os.path.join(flags.data_output, "data_Eminus06.h5"), "w") as fh5:
-            fh5.create_dataset("reco_particle_features", data=data["particle_features"])
-            fh5.create_dataset("reco_event_features", data=data["event_features"])
+        process_files(
+            file_list,
+            flags.data_input,
+            name="Data",
+            data_output=flags.data_output,
+            output_prefix="data_Eminus06",
+            combine=flags.combine,
+            keep_intermediate=flags.keep_intermediate,
+        )
 
     elif flags.sample == "RapgapEp":
         print("Processing Rapgap")
@@ -383,47 +474,44 @@ if __name__ == "__main__":
             flags.data_input + "/out_ep0607", "Rapgap_Eplus0607_*.root"
         )
         # file_list = ["/global/cfs/cdirs/m3246/vmikuni/H1v2/root/out_ep0607/Rapgap_Eplus0607_4.nominal.root"]
-        reco, gen = convert_to_np(
-            file_list, flags.data_input + "/out_ep0607", name="Rapgap"
+        process_files(
+            file_list,
+            flags.data_input + "/out_ep0607",
+            name="Rapgap",
+            data_output=flags.data_output,
+            output_prefix="Rapgap_Eplus0607",
+            combine=flags.combine,
+            keep_intermediate=flags.keep_intermediate,
         )
-        with h5.File(
-            os.path.join(flags.data_output, "Rapgap_Eplus0607.h5"), "w"
-        ) as fh5:
-            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
-            fh5.create_dataset("reco_event_features", data=reco["event_features"])
-            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
-            fh5.create_dataset("gen_event_features", data=gen["event_features"])
     elif flags.sample == "DjangohEp":
         print("Processing Djangoh")
         file_list = find_files_with_string(
             flags.data_input + "/out_ep0607", "Django_Eplus0607_*.root"
         )
-        reco, gen = convert_to_np(
-            file_list, flags.data_input + "/out_ep0607", name="Django"
+        process_files(
+            file_list,
+            flags.data_input + "/out_ep0607",
+            name="Django",
+            data_output=flags.data_output,
+            output_prefix="Djangoh_Eplus0607",
+            combine=flags.combine,
+            keep_intermediate=flags.keep_intermediate,
         )
-        with h5.File(
-            os.path.join(flags.data_output, "Djangoh_Eplus0607.h5"), "w"
-        ) as fh5:
-            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
-            fh5.create_dataset("reco_event_features", data=reco["event_features"])
-            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
-            fh5.create_dataset("gen_event_features", data=gen["event_features"])
 
     elif flags.sample == "DjangohEm":
         print("Processing Djangoh")
         file_list = find_files_with_string(
             flags.data_input + "/out_em06", "Django_Eminus06_*.root"
         )
-        reco, gen = convert_to_np(
-            file_list, flags.data_input + "/out_em06", name="Django"
+        process_files(
+            file_list,
+            flags.data_input + "/out_em06",
+            name="Django",
+            data_output=flags.data_output,
+            output_prefix="Djangoh_Eminus06",
+            combine=flags.combine,
+            keep_intermediate=flags.keep_intermediate,
         )
-        with h5.File(
-            os.path.join(flags.data_output, "Djangoh_Eminus06.h5"), "w"
-        ) as fh5:
-            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
-            fh5.create_dataset("reco_event_features", data=reco["event_features"])
-            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
-            fh5.create_dataset("gen_event_features", data=gen["event_features"])
 
     elif flags.sample == "RapgapEm":
         print("Processing Rapgap")
@@ -431,359 +519,339 @@ if __name__ == "__main__":
             flags.data_input + "/out_em06", "Rapgap_Eminus06_*.root"
         )
         ###file_list = ['Rapgap_Eminus06_122.nominal.root'] #quick testing
-        reco, gen = convert_to_np(
-            file_list, flags.data_input + "/out_em06", name="Rapgap"
+        process_files(
+            file_list,
+            flags.data_input + "/out_em06",
+            name="Rapgap",
+            data_output=flags.data_output,
+            output_prefix="Rapgap_Eminus06",
+            combine=flags.combine,
+            keep_intermediate=flags.keep_intermediate,
         )
-        with h5.File(os.path.join(flags.data_output, "Rapgap_Eminus06.h5"), "w") as fh5:
-            ###with h5.File(os.path.join(flags.data_output,"test_sim.h5"),'w') as fh5:
-            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
-            fh5.create_dataset("reco_event_features", data=reco["event_features"])
-            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
-            fh5.create_dataset("gen_event_features", data=gen["event_features"])
 
     elif flags.sample == "RapgapEp_sys0":
         print("Processing Rapgap")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_ep0607", "Rapgap_Eplus0607_*sys_0.root"
         )
-        reco, gen = convert_to_np(
-            file_list, flags.data_input + "/sys/out_ep0607", name="Rapgap"
+        process_files(
+            file_list,
+            flags.data_input + "/sys/out_ep0607",
+            name="Rapgap",
+            data_output=flags.data_output,
+            output_prefix="Rapgap_Eplus0607_sys0",
+            combine=flags.combine,
+            keep_intermediate=flags.keep_intermediate,
         )
-        with h5.File(
-            os.path.join(flags.data_output, "Rapgap_Eplus0607_sys0.h5"), "w"
-        ) as fh5:
-            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
-            fh5.create_dataset("reco_event_features", data=reco["event_features"])
-            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
-            fh5.create_dataset("gen_event_features", data=gen["event_features"])
 
     elif flags.sample == "RapgapEp_sys1":
         print("Processing Rapgap")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_ep0607", "Rapgap_Eplus0607_*sys_1.root"
         )
-        reco, gen = convert_to_np(
-            file_list, flags.data_input + "/sys/out_ep0607", name="Rapgap"
+        process_files(
+            file_list,
+            flags.data_input + "/sys/out_ep0607",
+            name="Rapgap",
+            data_output=flags.data_output,
+            output_prefix="Rapgap_Eplus0607_sys1",
+            combine=flags.combine,
+            keep_intermediate=flags.keep_intermediate,
         )
-        with h5.File(
-            os.path.join(flags.data_output, "Rapgap_Eplus0607_sys1.h5"), "w"
-        ) as fh5:
-            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
-            fh5.create_dataset("reco_event_features", data=reco["event_features"])
-            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
-            fh5.create_dataset("gen_event_features", data=gen["event_features"])
 
     elif flags.sample == "RapgapEp_sys5":
         print("Processing Rapgap")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_ep0607", "Rapgap_Eplus0607_*sys_5.root"
         )
-        reco, gen = convert_to_np(
-            file_list, flags.data_input + "/sys/out_ep0607", name="Rapgap"
+        process_files(
+            file_list,
+            flags.data_input + "/sys/out_ep0607",
+            name="Rapgap",
+            data_output=flags.data_output,
+            output_prefix="Rapgap_Eplus0607_sys5",
+            combine=flags.combine,
+            keep_intermediate=flags.keep_intermediate,
         )
-        with h5.File(
-            os.path.join(flags.data_output, "Rapgap_Eplus0607_sys5.h5"), "w"
-        ) as fh5:
-            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
-            fh5.create_dataset("reco_event_features", data=reco["event_features"])
-            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
-            fh5.create_dataset("gen_event_features", data=gen["event_features"])
     elif flags.sample == "RapgapEp_sys7":
         print("Processing Rapgap")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_ep0607", "Rapgap_Eplus0607_*sys_7.root"
         )
-        reco, gen = convert_to_np(
-            file_list, flags.data_input + "/sys/out_ep0607", name="Rapgap"
+        process_files(
+            file_list,
+            flags.data_input + "/sys/out_ep0607",
+            name="Rapgap",
+            data_output=flags.data_output,
+            output_prefix="Rapgap_Eplus0607_sys7",
+            combine=flags.combine,
+            keep_intermediate=flags.keep_intermediate,
         )
-        with h5.File(
-            os.path.join(flags.data_output, "Rapgap_Eplus0607_sys7.h5"), "w"
-        ) as fh5:
-            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
-            fh5.create_dataset("reco_event_features", data=reco["event_features"])
-            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
-            fh5.create_dataset("gen_event_features", data=gen["event_features"])
     elif flags.sample == "RapgapEp_sys11":
         print("Processing Rapgap")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_ep0607", "Rapgap_Eplus0607_*sys_11.root"
         )
-        reco, gen = convert_to_np(
-            file_list, flags.data_input + "/sys/out_ep0607", name="Rapgap"
+        process_files(
+            file_list,
+            flags.data_input + "/sys/out_ep0607",
+            name="Rapgap",
+            data_output=flags.data_output,
+            output_prefix="Rapgap_Eplus0607_sys11",
+            combine=flags.combine,
+            keep_intermediate=flags.keep_intermediate,
         )
-        with h5.File(
-            os.path.join(flags.data_output, "Rapgap_Eplus0607_sys11.h5"), "w"
-        ) as fh5:
-            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
-            fh5.create_dataset("reco_event_features", data=reco["event_features"])
-            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
-            fh5.create_dataset("gen_event_features", data=gen["event_features"])
 
     elif flags.sample == "DjangohEp_sys0":
         print("Processing Djangoh")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_ep0607", "Django_Eplus0607_*sys_0.root"
         )
-        reco, gen = convert_to_np(
-            file_list, flags.data_input + "/sys/out_ep0607", name="Django"
+        process_files(
+            file_list,
+            flags.data_input + "/sys/out_ep0607",
+            name="Django",
+            data_output=flags.data_output,
+            output_prefix="Djangoh_Eplus0607_sys0",
+            combine=flags.combine,
+            keep_intermediate=flags.keep_intermediate,
         )
-        with h5.File(
-            os.path.join(flags.data_output, "Djangoh_Eplus0607_sys0.h5"), "w"
-        ) as fh5:
-            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
-            fh5.create_dataset("reco_event_features", data=reco["event_features"])
-            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
-            fh5.create_dataset("gen_event_features", data=gen["event_features"])
 
     elif flags.sample == "DjangohEp_sys1":
         print("Processing Djangoh")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_ep0607", "Django_Eplus0607_*sys_1.root"
         )
-        reco, gen = convert_to_np(
-            file_list, flags.data_input + "/sys/out_ep0607", name="Django"
+        process_files(
+            file_list,
+            flags.data_input + "/sys/out_ep0607",
+            name="Django",
+            data_output=flags.data_output,
+            output_prefix="Djangoh_Eplus0607_sys1",
+            combine=flags.combine,
+            keep_intermediate=flags.keep_intermediate,
         )
-        with h5.File(
-            os.path.join(flags.data_output, "Djangoh_Eplus0607_sys1.h5"), "w"
-        ) as fh5:
-            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
-            fh5.create_dataset("reco_event_features", data=reco["event_features"])
-            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
-            fh5.create_dataset("gen_event_features", data=gen["event_features"])
 
     elif flags.sample == "DjangohEp_sys5":
         print("Processing Djangoh")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_ep0607", "Django_Eplus0607_*sys_5.root"
         )
-        reco, gen = convert_to_np(
-            file_list, flags.data_input + "/sys/out_ep0607", name="Django"
+        process_files(
+            file_list,
+            flags.data_input + "/sys/out_ep0607",
+            name="Django",
+            data_output=flags.data_output,
+            output_prefix="Djangoh_Eplus0607_sys5",
+            combine=flags.combine,
+            keep_intermediate=flags.keep_intermediate,
         )
-        with h5.File(
-            os.path.join(flags.data_output, "Djangoh_Eplus0607_sys5.h5"), "w"
-        ) as fh5:
-            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
-            fh5.create_dataset("reco_event_features", data=reco["event_features"])
-            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
-            fh5.create_dataset("gen_event_features", data=gen["event_features"])
     elif flags.sample == "DjangohEp_sys7":
         print("Processing Djangoh")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_ep0607", "Django_Eplus0607_*sys_7.root"
         )
-        reco, gen = convert_to_np(
-            file_list, flags.data_input + "/sys/out_ep0607", name="Django"
+        process_files(
+            file_list,
+            flags.data_input + "/sys/out_ep0607",
+            name="Django",
+            data_output=flags.data_output,
+            output_prefix="Djangoh_Eplus0607_sys7",
+            combine=flags.combine,
+            keep_intermediate=flags.keep_intermediate,
         )
-        with h5.File(
-            os.path.join(flags.data_output, "Djangoh_Eplus0607_sys7.h5"), "w"
-        ) as fh5:
-            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
-            fh5.create_dataset("reco_event_features", data=reco["event_features"])
-            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
-            fh5.create_dataset("gen_event_features", data=gen["event_features"])
     elif flags.sample == "DjangohEp_sys11":
         print("Processing Djangoh")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_ep0607", "Django_Eplus0607_*sys_11.root"
         )
-        reco, gen = convert_to_np(
-            file_list, flags.data_input + "/sys/out_ep0607", name="Django"
+        process_files(
+            file_list,
+            flags.data_input + "/sys/out_ep0607",
+            name="Django",
+            data_output=flags.data_output,
+            output_prefix="Djangoh_Eplus0607_sys11",
+            combine=flags.combine,
+            keep_intermediate=flags.keep_intermediate,
         )
-        with h5.File(
-            os.path.join(flags.data_output, "Djangoh_Eplus0607_sys11.h5"), "w"
-        ) as fh5:
-            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
-            fh5.create_dataset("reco_event_features", data=reco["event_features"])
-            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
-            fh5.create_dataset("gen_event_features", data=gen["event_features"])
 
     elif flags.sample == "RapgapEm_sys0":
         print("Processing Rapgap")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_em06", "Rapgap_Eminus06_*sys_0.root"
         )
-        reco, gen = convert_to_np(
-            file_list, flags.data_input + "/sys/out_em06", name="Rapgap"
+        process_files(
+            file_list,
+            flags.data_input + "/sys/out_em06",
+            name="Rapgap",
+            data_output=flags.data_output,
+            output_prefix="Rapgap_Eminus06_sys0",
+            combine=flags.combine,
+            keep_intermediate=flags.keep_intermediate,
         )
-        with h5.File(
-            os.path.join(flags.data_output, "Rapgap_Eminus06_sys0.h5"), "w"
-        ) as fh5:
-            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
-            fh5.create_dataset("reco_event_features", data=reco["event_features"])
-            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
-            fh5.create_dataset("gen_event_features", data=gen["event_features"])
 
     elif flags.sample == "RapgapEm_sys1":
         print("Processing Rapgap")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_em06", "Rapgap_Eminus06_*sys_1.root"
         )
-        reco, gen = convert_to_np(
-            file_list, flags.data_input + "/sys/out_em06", name="Rapgap"
+        process_files(
+            file_list,
+            flags.data_input + "/sys/out_em06",
+            name="Rapgap",
+            data_output=flags.data_output,
+            output_prefix="Rapgap_Eminus06_sys1",
+            combine=flags.combine,
+            keep_intermediate=flags.keep_intermediate,
         )
-        with h5.File(
-            os.path.join(flags.data_output, "Rapgap_Eminus06_sys1.h5"), "w"
-        ) as fh5:
-            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
-            fh5.create_dataset("reco_event_features", data=reco["event_features"])
-            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
-            fh5.create_dataset("gen_event_features", data=gen["event_features"])
 
     elif flags.sample == "RapgapEm_sys5":
         print("Processing Rapgap")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_em06", "Rapgap_Eminus06_*sys_5.root"
         )
-        reco, gen = convert_to_np(
-            file_list, flags.data_input + "/sys/out_em06", name="Rapgap"
+        process_files(
+            file_list,
+            flags.data_input + "/sys/out_em06",
+            name="Rapgap",
+            data_output=flags.data_output,
+            output_prefix="Rapgap_Eminus06_sys5",
+            combine=flags.combine,
+            keep_intermediate=flags.keep_intermediate,
         )
-        with h5.File(
-            os.path.join(flags.data_output, "Rapgap_Eminus06_sys5.h5"), "w"
-        ) as fh5:
-            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
-            fh5.create_dataset("reco_event_features", data=reco["event_features"])
-            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
-            fh5.create_dataset("gen_event_features", data=gen["event_features"])
     elif flags.sample == "RapgapEm_sys7":
         print("Processing Rapgap")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_em06", "Rapgap_Eminus06_*sys_7.root"
         )
-        reco, gen = convert_to_np(
-            file_list, flags.data_input + "/sys/out_em06", name="Rapgap"
+        process_files(
+            file_list,
+            flags.data_input + "/sys/out_em06",
+            name="Rapgap",
+            data_output=flags.data_output,
+            output_prefix="Rapgap_Eminus06_sys7",
+            combine=flags.combine,
+            keep_intermediate=flags.keep_intermediate,
         )
-        with h5.File(
-            os.path.join(flags.data_output, "Rapgap_Eminus06_sys7.h5"), "w"
-        ) as fh5:
-            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
-            fh5.create_dataset("reco_event_features", data=reco["event_features"])
-            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
-            fh5.create_dataset("gen_event_features", data=gen["event_features"])
     elif flags.sample == "RapgapEm_sys11":
         print("Processing Rapgap")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_em06", "Rapgap_Eminus06_*sys_11.root"
         )
-        reco, gen = convert_to_np(
-            file_list, flags.data_input + "/sys/out_em06", name="Rapgap"
+        process_files(
+            file_list,
+            flags.data_input + "/sys/out_em06",
+            name="Rapgap",
+            data_output=flags.data_output,
+            output_prefix="Rapgap_Eminus06_sys11",
+            combine=flags.combine,
+            keep_intermediate=flags.keep_intermediate,
         )
-        with h5.File(
-            os.path.join(flags.data_output, "Rapgap_Eminus06_sys11.h5"), "w"
-        ) as fh5:
-            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
-            fh5.create_dataset("reco_event_features", data=reco["event_features"])
-            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
-            fh5.create_dataset("gen_event_features", data=gen["event_features"])
 
     elif flags.sample == "DjangohEm_sys0":
         print("Processing Djangoh")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_em06", "Django_Eminus06_*sys_0.root"
         )
-        reco, gen = convert_to_np(
-            file_list, flags.data_input + "/sys/out_em06", name="Django"
+        process_files(
+            file_list,
+            flags.data_input + "/sys/out_em06",
+            name="Django",
+            data_output=flags.data_output,
+            output_prefix="Djangoh_Eminus06_sys0",
+            combine=flags.combine,
+            keep_intermediate=flags.keep_intermediate,
         )
-        with h5.File(
-            os.path.join(flags.data_output, "Djangoh_Eminus06_sys0.h5"), "w"
-        ) as fh5:
-            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
-            fh5.create_dataset("reco_event_features", data=reco["event_features"])
-            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
-            fh5.create_dataset("gen_event_features", data=gen["event_features"])
 
     elif flags.sample == "DjangohEm_sys1":
         print("Processing Djangoh")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_em06", "Django_Eminus06_*sys_1.root"
         )
-        reco, gen = convert_to_np(
-            file_list, flags.data_input + "/sys/out_em06", name="Django"
+        process_files(
+            file_list,
+            flags.data_input + "/sys/out_em06",
+            name="Django",
+            data_output=flags.data_output,
+            output_prefix="Djangoh_Eminus06_sys1",
+            combine=flags.combine,
+            keep_intermediate=flags.keep_intermediate,
         )
-        with h5.File(
-            os.path.join(flags.data_output, "Djangoh_Eminus06_sys1.h5"), "w"
-        ) as fh5:
-            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
-            fh5.create_dataset("reco_event_features", data=reco["event_features"])
-            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
-            fh5.create_dataset("gen_event_features", data=gen["event_features"])
 
     elif flags.sample == "DjangohEm_sys5":
         print("Processing Djangoh")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_em06", "Django_Eminus06_*sys_5.root"
         )
-        reco, gen = convert_to_np(
-            file_list, flags.data_input + "/sys/out_em06", name="Django"
+        process_files(
+            file_list,
+            flags.data_input + "/sys/out_em06",
+            name="Django",
+            data_output=flags.data_output,
+            output_prefix="Djangoh_Eminus06_sys5",
+            combine=flags.combine,
+            keep_intermediate=flags.keep_intermediate,
         )
-        with h5.File(
-            os.path.join(flags.data_output, "Djangoh_Eminus06_sys5.h5"), "w"
-        ) as fh5:
-            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
-            fh5.create_dataset("reco_event_features", data=reco["event_features"])
-            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
-            fh5.create_dataset("gen_event_features", data=gen["event_features"])
     elif flags.sample == "DjangohEm_sys7":
         print("Processing Djangoh")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_em06", "Django_Eminus06_*sys_7.root"
         )
-        reco, gen = convert_to_np(
-            file_list, flags.data_input + "/sys/out_em06", name="Django"
+        process_files(
+            file_list,
+            flags.data_input + "/sys/out_em06",
+            name="Django",
+            data_output=flags.data_output,
+            output_prefix="Djangoh_Eminus06_sys7",
+            combine=flags.combine,
+            keep_intermediate=flags.keep_intermediate,
         )
-        with h5.File(
-            os.path.join(flags.data_output, "Djangoh_Eminus06_sys7.h5"), "w"
-        ) as fh5:
-            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
-            fh5.create_dataset("reco_event_features", data=reco["event_features"])
-            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
-            fh5.create_dataset("gen_event_features", data=gen["event_features"])
     elif flags.sample == "DjangohEm_sys11":
         print("Processing Djangoh")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_em06", "Django_Eminus06_*sys_11.root"
         )
-        reco, gen = convert_to_np(
-            file_list, flags.data_input + "/sys/out_em06", name="Django"
+        process_files(
+            file_list,
+            flags.data_input + "/sys/out_em06",
+            name="Django",
+            data_output=flags.data_output,
+            output_prefix="Djangoh_Eminus06_sys11",
+            combine=flags.combine,
+            keep_intermediate=flags.keep_intermediate,
         )
-        with h5.File(
-            os.path.join(flags.data_output, "Djangoh_Eminus06_sys11.h5"), "w"
-        ) as fh5:
-            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
-            fh5.create_dataset("reco_event_features", data=reco["event_features"])
-            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
-            fh5.create_dataset("gen_event_features", data=gen["event_features"])
 
     elif flags.sample == "RapgapEp_NoRad":
         print("Processing Rapgap")
         file_list = find_files_with_string(
             flags.data_input + "/out_ep_norad", "RaNorad_Eplus0607*.root"
         )
-        reco, gen = convert_to_np(
-            file_list, flags.data_input + "/out_ep_norad", name="RaNorad", gen_only=True
+        process_files(
+            file_list,
+            flags.data_input + "/out_ep_norad",
+            name="RaNorad",
+            data_output=flags.data_output,
+            output_prefix="Rapgap_Eplus0607_NoRad",
+            combine=flags.combine,
+            keep_intermediate=flags.keep_intermediate,
+            gen_only=True,
         )
-        with h5.File(
-            os.path.join(flags.data_output, "Rapgap_Eplus0607_NoRad.h5"), "w"
-        ) as fh5:
-            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
-            fh5.create_dataset("reco_event_features", data=reco["event_features"])
-            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
-            fh5.create_dataset("gen_event_features", data=gen["event_features"])
 
     elif flags.sample == "DjangohEp_NoRad":
         print("Processing Djangoh")
         file_list = find_files_with_string(
             flags.data_input + "/out_ep_norad", "DjNorad_Eplus0607*.root"
         )
-        reco, gen = convert_to_np(
-            file_list, flags.data_input + "/out_ep_norad", name="DjNorad", gen_only=True
+        process_files(
+            file_list,
+            flags.data_input + "/out_ep_norad",
+            name="DjNorad",
+            data_output=flags.data_output,
+            output_prefix="Djangoh_Eplus0607_NoRad",
+            combine=flags.combine,
+            keep_intermediate=flags.keep_intermediate,
+            gen_only=True,
         )
-        with h5.File(
-            os.path.join(flags.data_output, "Djangoh_Eplus0607_NoRad.h5"), "w"
-        ) as fh5:
-            fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
-            fh5.create_dataset("reco_event_features", data=reco["event_features"])
-            fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
-            fh5.create_dataset("gen_event_features", data=gen["event_features"])
 
     else:
         raise Exception("ERROR: Sample not recognized")
