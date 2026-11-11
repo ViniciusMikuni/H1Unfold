@@ -27,7 +27,7 @@ pip install uproot awkward fastjet
 Convert the root files from the H1 analysis code to HDF5, then preprocess them. For multiprocessing, get a CPU node:
 
 ```bash
-salloc -C cpu -q interactive -t 20 -N 1 -A m3246 --cpus-per-task=64
+salloc -C cpu -q interactive -t 60 -N 1 -A m3246 --cpus-per-task=N
 module load tensorflow
 cd scripts
 python prepare_data.py --sample DjangohEp --data-input INPUT/LOCATION --data-output OUTPUT/LOCATION [--num_processes N]
