@@ -60,7 +60,6 @@ def preprocess(data):
 
 
 def preprocess_one_file(input_file, output_file, is_mc):
-    print("Preprocessing", input_file)
     with h5.File(input_file, "r") as fh5:
         reco_p = fh5["reco_particle_features"][:].astype(np.float32)
         reco_e = fh5["reco_event_features"][:].astype(np.float32)
@@ -113,7 +112,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--keep-intermediate",
         action="store_true",
-        help="Keep the per-file <file_name>_prep_<N>.h5 outputs. Without this they are deleted as they are merged",
+        help="Keep the per-file <file_name>_<N>_prep.h5 outputs. Without this they are deleted as they are merged",
     )
     parser.add_argument(
         "--num_processes",
@@ -136,7 +135,7 @@ if __name__ == "__main__":
     prefix_path = os.path.join(flags.data_folder, flags.file_name)
 
     # Only take <file_name>_<N>.h5, so merged, already preprocessed, or other samples
-    # sharing the prefix (e.g. _sys0, _prep_<N>) are not picked up
+    # sharing the prefix (e.g. _sys0, _<N>_prep) are not picked up
     # If only the merged file exists in the directory, it will be picked up in the next if statement
     pattern = re.compile(rf"^{re.escape(flags.file_name)}_(\d+)\.h5$")
     file_numbers = {}

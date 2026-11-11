@@ -294,7 +294,6 @@ def convert_and_write_one_file(
     m = FILE_NUMBER_RE.search(file)
     file_number = m.group(1) if m else i
     output_file = os.path.join(data_output, f"{output_prefix}_{file_number}.h5")
-    print(f"input: {file}, output: {output_file}")
     with h5.File(output_file, "w") as fh5:
         fh5.create_dataset("reco_particle_features", data=reco["particle_features"])
         fh5.create_dataset("reco_event_features", data=reco["event_features"])
@@ -432,7 +431,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--sample",
         default="dataEp",
-        help="Sample to process. Options are: DjangohEp, DjangohEm,RapgapEp,RapgapEm,data",
+        help="Sample to process. Options are: dataEp, dataEm, RapgapEp, RapgapEm, DjangohEp, DjangohEm, "
+        "the systematic variations of the MC samples with _sys0, _sys1, _sys5, _sys7 or _sys11 "
+        "(e.g. RapgapEp_sys0), RapgapEp_NoRad and DjangohEp_NoRad",
     )
     parser.add_argument(
         "--no-combine",
