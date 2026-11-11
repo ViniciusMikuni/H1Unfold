@@ -24,18 +24,17 @@ pip install uproot awkward fastjet
 ```
 
 ### Preparing new datasets
-Assuming you have root files coming from the outputs of the H1 analysis code, you need to:
-- convert the files to HDF5.
+Convert the root files from the H1 analysis code to HDF5, then preprocess them. For multiprocessing, get a CPU node:
 
 ```bash
+salloc -C cpu -q interactive -t 20 -N 1 -A m3246 --cpus-per-task=64
+module load tensorflow
 cd scripts
-python prepare_data.py --sample DjangohEp --data-input INPUT/LOCATION --data-output OUTPUT/LOCATION
+python prepare_data.py --sample DjangohEp --data-input INPUT/LOCATION --data-output OUTPUT/LOCATION [--num_processes N]
+python preprocess.py --file_name Djangoh_Eplus0607 --data_folder OUTPUT/LOCATION [--num_processes N]
 ```
-- preprocess the inputs to convert them into the format expected by the model.
 
-```bash
-python preprocess.py --file_name DjangohEplus0607.h5
-```
+`prepare_and_preprocess.sh` runs both steps.
 
 
 ### Using shifter on Perlmutter
