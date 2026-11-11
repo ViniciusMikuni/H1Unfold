@@ -100,18 +100,26 @@ if __name__ == "__main__":
     parser.add_argument(
         "--sample",
         default="Rapgap_Eplus0607_prep",
-        help="Prefix of the per-file outputs to merge, e.g. Rapgap_Eplus0607 or Rapgap_Eplus0607_prep",
+        help="Name of the merged output without .h5. Rapgap_Eplus0607 merges the prepare_data.py "
+        "outputs Rapgap_Eplus0607_<N>.h5, Rapgap_Eplus0607_prep merges the preprocess.py outputs "
+        "Rapgap_Eplus0607_<N>_prep.h5",
     )
     flags = parser.parse_args()
 
     output_file = os.path.join(flags.data_output, flags.sample + ".h5")
 
-    # Only take <sample>_<N>.h5, so other samples sharing the prefix (e.g. _prep, _sys0) are not merged in
-    pattern = re.compile(rf"^{re.escape(flags.sample)}_(\d+)\.h5$")
+    # Only take <prefix>_<N>.h5 or <prefix>_<N>_prep.h5, so other samples sharing the prefix
+    # (e.g. _sys0) are not merged in
+    if flags.sample.endswith("_prep"):
+        prefix = flags.sample[: -len("_prep")]
+        pattern = re.compile(rf"^{re.escape(prefix)}_(\d+)_prep\.h5$")
+    else:
+        prefix = flags.sample
+        pattern = re.compile(rf"^{re.escape(prefix)}_(\d+)\.h5$")
     file_list = sorted(
         [
             f
-            for f in glob.glob(os.path.join(flags.data_input, flags.sample) + "_*.h5")
+            for f in glob.glob(os.path.join(flags.data_input, prefix) + "_*.h5")
             if pattern.match(os.path.basename(f))
             and os.path.abspath(f) != os.path.abspath(output_file)
         ],
