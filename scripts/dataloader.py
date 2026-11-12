@@ -18,12 +18,16 @@ class Dataset:
         pass_fiducial=False,
         pass_reco=False,
         preprocess=True,
+        global_start=0,
+        global_end=None,
     ):
         self.rank = rank
         self.size = size
         self.base_path = base_path
         self.is_mc = is_mc
         self.nmax = nmax
+        self.global_start = global_start
+        self.global_end = global_end
         self.preprocess = preprocess
 
         # Preprocessing parameters
@@ -105,21 +109,21 @@ class Dataset:
                     "reco_event_features"
                 ].shape[0]
 
-            # Sum of weighted events for collisions passing the reco cuts
+            # Sum of weighted events for collisions passing the reco cuts (full dataset up to nmax)
+            reco_e_batch = h5.File(os.path.join(self.base_path, f), "r")[
+                "reco_event_features"
+            ][: self.nmax]
             self.num_pass_reco += np.sum(
-                h5.File(os.path.join(self.base_path, f), "r")["reco_event_features"][
-                    : self.nmax, -2
-                ][
-                    h5.File(os.path.join(self.base_path, f), "r")[
-                        "reco_event_features"
-                    ][: self.nmax, -1]
-                    == 1
-                ]
+                reco_e_batch[:, -2][reco_e_batch[:, -1] == 1]
             )
+            del reco_e_batch
 
-            per_rank = (self.nmax + self.size - 1) // self.size  # ceiling division
-            start = self.rank * per_rank
-            end = min(start + per_rank, self.nmax)
+            # If no explicit batch range is given, process the full file (up to nmax)
+            global_end = self.nmax if self.global_end is None else self.global_end
+            batch_events = global_end - self.global_start
+            per_rank = (batch_events + self.size - 1) // self.size  # ceiling division
+            start = self.global_start + self.rank * per_rank
+            end = min(start + per_rank, global_end)
 
             reco_p = h5.File(os.path.join(self.base_path, f), "r")[
                 "reco_particle_features"
