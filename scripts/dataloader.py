@@ -19,7 +19,7 @@ class Dataset:
         pass_reco=False,
         preprocess=True,
         global_start=0,
-        global_end=0,
+        global_end=None,
     ):
         self.rank = rank
         self.size = size
@@ -118,10 +118,12 @@ class Dataset:
             )
             del reco_e_batch
 
-            batch_events = self.global_end - self.global_start
+            # If no explicit batch range is given, process the full file (up to nmax)
+            global_end = self.nmax if self.global_end is None else self.global_end
+            batch_events = global_end - self.global_start
             per_rank = (batch_events + self.size - 1) // self.size  # ceiling division
             start = self.global_start + self.rank * per_rank
-            end = min(start + per_rank, self.global_end)
+            end = min(start + per_rank, global_end)
 
             reco_p = h5.File(os.path.join(self.base_path, f), "r")[
                 "reco_particle_features"
