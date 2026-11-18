@@ -5,6 +5,10 @@ import h5py as h5
 import fnmatch
 import re
 
+from concurrent.futures import ProcessPoolExecutor
+from merge_h5 import merge_h5_files
+import uproot3 as uproot
+
 # File numbers to always skip. Applies to the nominal files and to every sys variation.
 EXCLUDED_FILES = {
     "RapgapEp": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
@@ -33,9 +37,6 @@ EXCLUDED_FILES = {
     "RapgapEm": [1, 2, 3, 4, 5, 6, 7],
     "DjangohEm": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
 }
-from concurrent.futures import ProcessPoolExecutor
-from merge_h5 import merge_h5_files
-import uproot3 as uproot
 
 
 def convert_to_np(
@@ -293,13 +294,16 @@ def convert_to_np(
     return reco_dict, gen_dict
 
 
+FILE_NUMBER_RE = re.compile(r"_(\d+)\.(?:nominal|sys_\d+)\.root$")
+
+
 def find_files_with_string(directory, string, exclude=()):
     exclude = set(exclude)
     matching_files = []
     for filename in os.listdir(directory):
         if not fnmatch.fnmatch(filename, string):
             continue
-        m = re.search(r"_(\d+)\.(?:nominal|sys_\d+)\.root$", filename)
+        m = FILE_NUMBER_RE.search(filename)
         if m and int(m.group(1)) in exclude:
             continue
         matching_files.append(filename)
@@ -308,9 +312,6 @@ def find_files_with_string(directory, string, exclude=()):
             f"Excluding file numbers {sorted(exclude)}; {len(matching_files)} files kept"
         )
     return matching_files
-
-
-FILE_NUMBER_RE = re.compile(r"_(\d+)\.(?:nominal|sys_\d+)\.root$")
 
 
 def get_file_number(file):
@@ -936,7 +937,7 @@ if __name__ == "__main__":
             data_output=flags.data_output,
             output_prefix="Djangoh_Eminus06_sys7",
             combine=flags.combine,
-I can either just merge things as I finish them to speed things up, or I can request reviews.             keep_intermediate=flags.keep_intermediate,
+            keep_intermediate=flags.keep_intermediate,
             num_processes=flags.num_processes,
         )
     elif flags.sample == "DjangohEm_sys11":
