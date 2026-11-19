@@ -9,6 +9,14 @@ from concurrent.futures import ProcessPoolExecutor
 from merge_h5 import merge_h5_files
 
 
+def log(*args, data_file=None, **kwargs):
+    """Flushed print, prefixed with the data file's name when given, so lines from parallel workers can be told apart."""
+    kwargs.setdefault("flush", True)
+    if data_file is not None:
+        args = (f"{os.path.basename(data_file)}:", *args)
+    print(*args, **kwargs)
+
+
 def preprocess(data):
     p, e = data
     # return (p,e)
@@ -69,12 +77,12 @@ def preprocess_one_file(input_file, output_file, is_mc):
 
     weight = reco_e[:, -2]
     pass_reco = reco_e[:, -1]
-    print(f"Running {weight.shape[0]} Reco events from {input_file}")
+    log(f"Running {weight.shape[0]} Reco events", data_file=input_file)
     reco_e, reco_p = preprocess((reco_p, reco_e[:, :-2]))
     reco_e = np.concatenate([reco_e, weight[:, None], pass_reco[:, None]], -1)
 
     if is_mc:
-        print(f"Running Gen events from {input_file}")
+        log("Running Gen events", data_file=input_file)
         pass_gen = gen_e[:, -1]
         gen_e, gen_p = preprocess((gen_p, gen_e[:, :-1]))
         gen_e = np.concatenate([gen_e, pass_gen[:, None]], -1)
@@ -86,7 +94,7 @@ def preprocess_one_file(input_file, output_file, is_mc):
             fh5.create_dataset("gen_particle_features", data=gen_p)
             fh5.create_dataset("gen_event_features", data=gen_e)
 
-    print(f"Finished {input_file} -> {output_file}")
+    log(f"Finished -> {output_file}", data_file=input_file)
     return output_file
 
 
@@ -148,7 +156,7 @@ if __name__ == "__main__":
         # prepare_data.py deletes its per-file outputs after merging unless run with
         # --keep-intermediate, so fall back to the merged <file_name>.h5
         if os.path.exists(prefix_path + ".h5"):
-            print(
+            log(
                 f"No {prefix_path}_<N>.h5 files found, processing the merged {prefix_path}.h5"
             )
             preprocess_one_file(prefix_path + ".h5", prefix_path + "_prep.h5", is_mc)
@@ -157,7 +165,7 @@ if __name__ == "__main__":
                 f"No files found matching {prefix_path}_<N>.h5 or {prefix_path}.h5"
             )
     else:
-        print(f"Found {len(file_list)} files")
+        log(f"Found {len(file_list)} files")
         # Preprocess num_processes files at a time. The results come back in the same order as file_list
         with ProcessPoolExecutor(max_workers=flags.num_processes) as executor:
             futures = [

@@ -9,6 +9,15 @@ from concurrent.futures import ProcessPoolExecutor
 from merge_h5 import merge_h5_files
 import uproot3 as uproot
 
+
+def log(*args, data_file=None, **kwargs):
+    """Flushed print, prefixed with the data file's name when given, so lines from parallel workers can be told apart."""
+    kwargs.setdefault("flush", True)
+    if data_file is not None:
+        args = (f"{os.path.basename(data_file)}:", *args)
+    print(*args, **kwargs)
+
+
 # File numbers to always skip. Applies to the nominal files and to every sys variation.
 EXCLUDED_FILES = {
     "RapgapEp": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
@@ -73,7 +82,7 @@ def convert_to_np(
             ]
             # print("loaded file")
         except Exception as e:
-            print(f"Error loading file {f}: {e}")
+            log(f"Error loading file: {e}", data_file=f)
             continue
 
         reco_dict["event_features"].append(
@@ -141,13 +150,14 @@ def convert_to_np(
             mask_reco = mask_reco[mask_evt]
             mask_gen = mask_gen[mask_evt]
 
-            print(
+            log(
                 "Rejecting {} from gen Q2>100 cut".format(
                     1.0 - 1.0 * np.sum(mask_evt) / mask_evt.shape[0]
-                )
+                ),
+                data_file=f,
             )
 
-        print("Number of events: {}".format(mask_reco.shape[0]))
+        log("Number of events: {}".format(mask_reco.shape[0]), data_file=f)
         # 0.08 < y < 0.7, ptmiss < 10, 45 < empz < 65 and Q2 > 150
         pass_reco = (
             (mask_reco[:, 0] > 0.08)
@@ -173,10 +183,11 @@ def convert_to_np(
             nonempty_event_mask = (
                 np.sum(reco_dict["particle_features"][ifile][:, :, 0], 1) > 0
             )
-            print(
+            log(
                 "Fraction of reco events that are empty: {}".format(
                     np.sum(~nonempty_event_mask) / nonempty_event_mask.shape[0]
-                )
+                ),
+                data_file=f,
             )
             pass_reco = (pass_reco) & (nonempty_event_mask)
             del nonempty_event_mask
@@ -188,7 +199,7 @@ def convert_to_np(
 
         del mask_part
         if "Data" not in name:
-            print("Adding Gen info")
+            log("Adding Gen info", data_file=f)
 
             # 0.2 < y < 0.7 and Q2 > 150
             pass_gen = (
@@ -221,45 +232,55 @@ def convert_to_np(
 
         # Quantifying our reco and gen cuts
         pass_reco = reco_dict["event_features"][ifile][:, -1] == 1
-        print(
+        log(
             "Fraction passing pass_reco: {}".format(
                 np.sum(pass_reco) / pass_reco.shape[0]
-            )
+            ),
+            data_file=f,
         )
         if "Data" not in name:
             pass_gen = gen_dict["event_features"][ifile][:, -1] == 1
-            print(
+            log(
                 "Fraction passing pass_gen: {}".format(
                     np.sum(pass_gen) / pass_gen.shape[0]
-                )
+                ),
+                data_file=f,
             )
-            print(
+            log(
                 "Fraction passing reco and passing gen: {}".format(
                     np.sum((pass_reco) & (pass_gen)) / pass_reco.shape[0]
-                )
+                ),
+                data_file=f,
             )
-            print(
+            log(
                 "Fraction failing reco but passing gen: {}".format(
                     np.sum((~pass_reco) & (pass_gen)) / pass_reco.shape[0]
-                )
+                ),
+                data_file=f,
             )
-            print(
+            log(
                 "Fraction within fiducial region that fail reco: {}".format(
                     np.sum((~pass_reco) & (pass_gen)) / np.sum(pass_gen)
-                )
+                ),
+                data_file=f,
             )
-            print(
+            log(
                 "Fraction failing gen but passing reco: {}".format(
                     np.sum((pass_reco) & (~pass_gen)) / pass_reco.shape[0]
-                )
+                ),
+                data_file=f,
             )
-            print(
+            log(
                 "Fraction failing both pass_reco and pass_gen: {}".format(
                     np.sum((~pass_reco) & (~pass_gen)) / pass_reco.shape[0]
-                )
+                ),
+                data_file=f,
             )
             del pass_gen
         del pass_reco
+
+    # Name for messages after the loop. convert_to_np is called with one file at a time
+    data_file = file_list[0] if len(file_list) == 1 else None
 
     if len(reco_dict["event_features"]) == 0:
         # None of the files could be loaded
@@ -277,7 +298,7 @@ def convert_to_np(
     max_nonzero_reco = np.max(np.sum(reco_dict["particle_features"][:, :, 0] > 0, 1))
     reco_dict["particle_features"] = reco_dict["particle_features"][:, :max_nonzero]
 
-    print("Maximum reco particle multiplicity", max_nonzero_reco)
+    log("Maximum reco particle multiplicity", max_nonzero_reco, data_file=data_file)
     if "Data" not in name:
         gen_dict["event_features"] = np.concatenate(gen_dict["event_features"])
         gen_dict["particle_features"] = np.concatenate(gen_dict["particle_features"])
@@ -289,7 +310,7 @@ def convert_to_np(
         max_nonzero_gen = np.max(np.sum(gen_dict["particle_features"][:, :, 0] > 0, 1))
         gen_dict["particle_features"] = gen_dict["particle_features"][:, :max_nonzero]
 
-        print("Maximum gen particle multiplicity", max_nonzero_gen)
+        log("Maximum gen particle multiplicity", max_nonzero_gen, data_file=data_file)
     del tmp_file
     return reco_dict, gen_dict
 
@@ -308,7 +329,7 @@ def find_files_with_string(directory, string, exclude=()):
             continue
         matching_files.append(filename)
     if exclude:
-        print(
+        log(
             f"Excluding file numbers {sorted(exclude)}; {len(matching_files)} files kept"
         )
     return matching_files
@@ -323,10 +344,10 @@ def get_file_number(file):
 def convert_and_write_one_file(
     i, file, base_path, name, data_output, output_prefix, gen_only=False
 ):
-    print(f"Loading file {file}")
+    log("Loading file", data_file=file)
     reco, gen = convert_to_np([file], base_path, name=name, gen_only=gen_only)
     if reco is None:
-        print(f"Skipped {file}: could not be loaded")
+        log("Skipped: could not be loaded", data_file=file)
         return None
 
     # Grabbing the number from the input root file so we can use that in the output file name
@@ -340,7 +361,10 @@ def convert_and_write_one_file(
             fh5.create_dataset("gen_particle_features", data=gen["particle_features"])
             fh5.create_dataset("gen_event_features", data=gen["event_features"])
 
-    print(f"Finished {file}: {len(reco['event_features'])} events -> {output_file}")
+    log(
+        f"Finished: {len(reco['event_features'])} events -> {output_file}",
+        data_file=file,
+    )
     return output_file
 
 
@@ -502,7 +526,7 @@ if __name__ == "__main__":
     # create_toy(flags.data_output)
 
     if flags.sample == "dataEp":
-        print("Processing Data")
+        log("Processing Data")
         file_list = [
             "out_ep0607/Data_Eplus0607_0.nominal.root",
             "out_ep0607/Data_Eplus0607_1.nominal.root",
@@ -521,7 +545,7 @@ if __name__ == "__main__":
         )
 
     elif flags.sample == "dataEm":
-        print("Processing Data")
+        log("Processing Data")
         file_list = [
             "out_em06/Data_Eminus06_0.nominal.root",
             "out_em06/Data_Eminus06_1.nominal.root",
@@ -538,7 +562,7 @@ if __name__ == "__main__":
         )
 
     elif flags.sample == "RapgapEp":
-        print("Processing Rapgap")
+        log("Processing Rapgap")
         file_list = find_files_with_string(
             flags.data_input + "/out_ep0607",
             "Rapgap_Eplus0607_*.root",
@@ -556,7 +580,7 @@ if __name__ == "__main__":
             num_processes=flags.num_processes,
         )
     elif flags.sample == "DjangohEp":
-        print("Processing Djangoh")
+        log("Processing Djangoh")
         file_list = find_files_with_string(
             flags.data_input + "/out_ep0607",
             "Django_Eplus0607_*.root",
@@ -574,7 +598,7 @@ if __name__ == "__main__":
         )
 
     elif flags.sample == "DjangohEm":
-        print("Processing Djangoh")
+        log("Processing Djangoh")
         file_list = find_files_with_string(
             flags.data_input + "/out_em06", "Django_Eminus06_*.root", exclude=excluded
         )
@@ -590,7 +614,7 @@ if __name__ == "__main__":
         )
 
     elif flags.sample == "RapgapEm":
-        print("Processing Rapgap")
+        log("Processing Rapgap")
         file_list = find_files_with_string(
             flags.data_input + "/out_em06", "Rapgap_Eminus06_*.root", exclude=excluded
         )
@@ -607,7 +631,7 @@ if __name__ == "__main__":
         )
 
     elif flags.sample == "RapgapEp_sys0":
-        print("Processing Rapgap")
+        log("Processing Rapgap")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_ep0607",
             "Rapgap_Eplus0607_*sys_0.root",
@@ -625,7 +649,7 @@ if __name__ == "__main__":
         )
 
     elif flags.sample == "RapgapEp_sys1":
-        print("Processing Rapgap")
+        log("Processing Rapgap")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_ep0607",
             "Rapgap_Eplus0607_*sys_1.root",
@@ -643,7 +667,7 @@ if __name__ == "__main__":
         )
 
     elif flags.sample == "RapgapEp_sys5":
-        print("Processing Rapgap")
+        log("Processing Rapgap")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_ep0607",
             "Rapgap_Eplus0607_*sys_5.root",
@@ -660,7 +684,7 @@ if __name__ == "__main__":
             num_processes=flags.num_processes,
         )
     elif flags.sample == "RapgapEp_sys7":
-        print("Processing Rapgap")
+        log("Processing Rapgap")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_ep0607",
             "Rapgap_Eplus0607_*sys_7.root",
@@ -677,7 +701,7 @@ if __name__ == "__main__":
             num_processes=flags.num_processes,
         )
     elif flags.sample == "RapgapEp_sys11":
-        print("Processing Rapgap")
+        log("Processing Rapgap")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_ep0607",
             "Rapgap_Eplus0607_*sys_11.root",
@@ -695,7 +719,7 @@ if __name__ == "__main__":
         )
 
     elif flags.sample == "DjangohEp_sys0":
-        print("Processing Djangoh")
+        log("Processing Djangoh")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_ep0607",
             "Django_Eplus0607_*sys_0.root",
@@ -713,7 +737,7 @@ if __name__ == "__main__":
         )
 
     elif flags.sample == "DjangohEp_sys1":
-        print("Processing Djangoh")
+        log("Processing Djangoh")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_ep0607",
             "Django_Eplus0607_*sys_1.root",
@@ -731,7 +755,7 @@ if __name__ == "__main__":
         )
 
     elif flags.sample == "DjangohEp_sys5":
-        print("Processing Djangoh")
+        log("Processing Djangoh")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_ep0607",
             "Django_Eplus0607_*sys_5.root",
@@ -748,7 +772,7 @@ if __name__ == "__main__":
             num_processes=flags.num_processes,
         )
     elif flags.sample == "DjangohEp_sys7":
-        print("Processing Djangoh")
+        log("Processing Djangoh")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_ep0607",
             "Django_Eplus0607_*sys_7.root",
@@ -765,7 +789,7 @@ if __name__ == "__main__":
             num_processes=flags.num_processes,
         )
     elif flags.sample == "DjangohEp_sys11":
-        print("Processing Djangoh")
+        log("Processing Djangoh")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_ep0607",
             "Django_Eplus0607_*sys_11.root",
@@ -783,7 +807,7 @@ if __name__ == "__main__":
         )
 
     elif flags.sample == "RapgapEm_sys0":
-        print("Processing Rapgap")
+        log("Processing Rapgap")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_em06",
             "Rapgap_Eminus06_*sys_0.root",
@@ -801,7 +825,7 @@ if __name__ == "__main__":
         )
 
     elif flags.sample == "RapgapEm_sys1":
-        print("Processing Rapgap")
+        log("Processing Rapgap")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_em06",
             "Rapgap_Eminus06_*sys_1.root",
@@ -819,7 +843,7 @@ if __name__ == "__main__":
         )
 
     elif flags.sample == "RapgapEm_sys5":
-        print("Processing Rapgap")
+        log("Processing Rapgap")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_em06",
             "Rapgap_Eminus06_*sys_5.root",
@@ -836,7 +860,7 @@ if __name__ == "__main__":
             num_processes=flags.num_processes,
         )
     elif flags.sample == "RapgapEm_sys7":
-        print("Processing Rapgap")
+        log("Processing Rapgap")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_em06",
             "Rapgap_Eminus06_*sys_7.root",
@@ -853,7 +877,7 @@ if __name__ == "__main__":
             num_processes=flags.num_processes,
         )
     elif flags.sample == "RapgapEm_sys11":
-        print("Processing Rapgap")
+        log("Processing Rapgap")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_em06",
             "Rapgap_Eminus06_*sys_11.root",
@@ -871,7 +895,7 @@ if __name__ == "__main__":
         )
 
     elif flags.sample == "DjangohEm_sys0":
-        print("Processing Djangoh")
+        log("Processing Djangoh")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_em06",
             "Django_Eminus06_*sys_0.root",
@@ -889,7 +913,7 @@ if __name__ == "__main__":
         )
 
     elif flags.sample == "DjangohEm_sys1":
-        print("Processing Djangoh")
+        log("Processing Djangoh")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_em06",
             "Django_Eminus06_*sys_1.root",
@@ -907,7 +931,7 @@ if __name__ == "__main__":
         )
 
     elif flags.sample == "DjangohEm_sys5":
-        print("Processing Djangoh")
+        log("Processing Djangoh")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_em06",
             "Django_Eminus06_*sys_5.root",
@@ -924,7 +948,7 @@ if __name__ == "__main__":
             num_processes=flags.num_processes,
         )
     elif flags.sample == "DjangohEm_sys7":
-        print("Processing Djangoh")
+        log("Processing Djangoh")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_em06",
             "Django_Eminus06_*sys_7.root",
@@ -941,7 +965,7 @@ if __name__ == "__main__":
             num_processes=flags.num_processes,
         )
     elif flags.sample == "DjangohEm_sys11":
-        print("Processing Djangoh")
+        log("Processing Djangoh")
         file_list = find_files_with_string(
             flags.data_input + "/sys/out_em06",
             "Django_Eminus06_*sys_11.root",
@@ -959,7 +983,7 @@ if __name__ == "__main__":
         )
 
     elif flags.sample == "RapgapEp_NoRad":
-        print("Processing Rapgap")
+        log("Processing Rapgap")
         file_list = find_files_with_string(
             flags.data_input + "/out_ep_norad",
             "RaNorad_Eplus0607*.root",
@@ -978,7 +1002,7 @@ if __name__ == "__main__":
         )
 
     elif flags.sample == "DjangohEp_NoRad":
-        print("Processing Djangoh")
+        log("Processing Djangoh")
         file_list = find_files_with_string(
             flags.data_input + "/out_ep_norad",
             "DjNorad_Eplus0607*.root",
