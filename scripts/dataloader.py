@@ -99,6 +99,8 @@ class Dataset:
         self.pass_gen = []
         reco = []
         gen = []
+        self.unweighted_num_pass_reco = 0
+        self.num_events_kept = 0
         for ifile, f in enumerate(file_names):
             if self.rank == 0:
                 print("Loading file {}".format(f))
@@ -109,21 +111,34 @@ class Dataset:
                     "reco_event_features"
                 ].shape[0]
 
-            # Sum of weighted events for collisions passing the reco cuts (full dataset up to nmax)
-            reco_e_batch = h5.File(os.path.join(self.base_path, f), "r")[
-                "reco_event_features"
-            ][: self.nmax]
-            self.num_pass_reco += np.sum(
-                reco_e_batch[:, -2][reco_e_batch[:, -1] == 1]
+            # Sum of weighted events for collisions passing the reco cuts
+            pass_reco_ifile = (
+                h5.File(os.path.join(self.base_path, f), "r")["reco_event_features"][
+                    : self.nmax, -1
+                ]
+                == 1
             )
-            del reco_e_batch
+            self.num_pass_reco += np.sum(
+                h5.File(os.path.join(self.base_path, f), "r")["reco_event_features"][
+                    : self.nmax, -2
+                ][pass_reco_ifile]
+            )
+            self.unweighted_num_pass_reco += np.sum(pass_reco_ifile)
 
-            # If no explicit batch range is given, process the full file (up to nmax)
-            global_end = self.nmax if self.global_end is None else self.global_end
-            batch_events = global_end - self.global_start
-            per_rank = (batch_events + self.size - 1) // self.size  # ceiling division
-            start = self.global_start + self.rank * per_rank
-            end = min(start + per_rank, global_end)
+            # Total (all-rank) number of events kept after the pass_reco/pass_fiducial filters
+            keep_ifile = pass_reco_ifile if pass_reco else np.ones_like(pass_reco_ifile)
+            if self.is_mc and pass_fiducial:
+                keep_ifile = keep_ifile & (
+                    h5.File(os.path.join(self.base_path, f), "r")["gen_event_features"][
+                        : self.nmax, -1
+                    ]
+                    == 1
+                )
+            self.num_events_kept += np.sum(keep_ifile)
+
+            per_rank = (self.nmax + self.size - 1) // self.size  # ceiling division
+            start = self.rank * per_rank
+            end = min(start + per_rank, self.nmax)
 
             reco_p = h5.File(os.path.join(self.base_path, f), "r")[
                 "reco_particle_features"

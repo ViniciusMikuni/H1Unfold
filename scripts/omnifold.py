@@ -344,11 +344,22 @@ class Multifold:
     def CompileModel(self, lr, fixed=False):
         if self.num_steps_reco is None:
             self.num_steps_reco = (
-                int(0.7 * (self.mc.nmax + self.data.nmax))
+                int(
+                    0.7
+                    * (
+                        self.mc.unweighted_num_pass_reco
+                        + self.data.unweighted_num_pass_reco
+                    )
+                )
                 // hvd.size()
                 // self.BATCH_SIZE
             )
-            self.num_steps_gen = 2 * self.mc.nmax // hvd.size() // self.BATCH_SIZE
+            # Use the global count of MC events actually loaded (fewer than nmax when
+            # the MC Dataset is filtered with pass_reco), so every rank runs the same
+            # number of steps and the validation split is not empty
+            self.num_steps_gen = (
+                2 * self.mc.num_events_kept // hvd.size() // self.BATCH_SIZE
+            )
             if hvd.rank() == 0:
                 print(self.num_steps_reco, self.num_steps_gen)
 
