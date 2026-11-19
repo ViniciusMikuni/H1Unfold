@@ -136,9 +136,12 @@ class Dataset:
                 )
             self.num_events_kept += np.sum(keep_ifile)
 
-            per_rank = (self.nmax + self.size - 1) // self.size  # ceiling division
-            start = self.rank * per_rank
-            end = min(start + per_rank, self.nmax)
+            # If no explicit batch range is given, process the full file (up to nmax)
+            global_end = self.nmax if self.global_end is None else self.global_end
+            batch_events = global_end - self.global_start
+            per_rank = (batch_events + self.size - 1) // self.size  # ceiling division
+            start = self.global_start + self.rank * per_rank
+            end = min(start + per_rank, global_end)
 
             reco_p = h5.File(os.path.join(self.base_path, f), "r")[
                 "reco_particle_features"
