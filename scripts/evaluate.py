@@ -58,9 +58,20 @@ def parse_arguments():
         "--nboot", type=int, default=100, help="Number of bootstrap models to load"
     )
     parser.add_argument(
+        "--closure_only",
+        action="store_true",
+        default=False,
+        help="Only evaluate the closure model (e.g. before the model trained on data exists)",
+    )
+    parser.add_argument(
         "--verbose", action="store_true", default=False, help="Increase print level"
     )
     flags = parser.parse_args()
+    if flags.closure_only:
+        if flags.bootstrap:
+            parser.error("--closure_only cannot be combined with --bootstrap")
+        if "Rapgap" not in flags.file or "sys" in flags.file:
+            parser.error("--closure_only only applies to the nominal Rapgap file")
 
     return flags
 
@@ -111,20 +122,17 @@ def main():
                     flags, opt, dataset, dataloaders, bootstrap=True, nboot=i
                 )
 
-        weights["unfolded_weights"] = utils.evaluate_model(
-            flags, opt, dataset, dataloaders
-        )
+        if not flags.closure_only:
+            weights["unfolded_weights"] = utils.evaluate_model(
+                flags, opt, dataset, dataloaders
+            )
         if "Rapgap" in flags.file and "sys" not in flags.file:
+            # Same name train.py/omnifold.py give the closure model
+            closure_version = f"{opt['NAME']}_{flags.dataset}_closure"
+            if flags.load_pretrain:
+                closure_version += "_pretrained"
             weights["unfolded_weights_closure"] = utils.evaluate_model(
-                flags,
-                opt,
-                dataset,
-                dataloaders,
-                version=(
-                    opt["NAME"] + f"_{flags.dataset}_closure" + "_pretrained"
-                    if flags.load_pretrain
-                    else ""
-                ),
+                flags, opt, dataset, dataloaders, version=closure_version
             )
 
     if hvd.rank() == 0:
