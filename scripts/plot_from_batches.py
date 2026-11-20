@@ -34,7 +34,7 @@ from utils import ObservableInfo
 
 utils.SetStyle()
 
-var_names = ['deltaphi', 'jet_pt', 'jet_tau10', 'zjet', 'zjet_breit']#, 'eec', 'theta']
+var_names = ['deltaphi', 'jet_pt', 'jet_breit_pt', 'jet_tau10', 'zjet', 'zjet_breit']#, 'eec', 'theta']
 # var_names = ['deltaphi']#, 'eec', 'theta']
 
 
