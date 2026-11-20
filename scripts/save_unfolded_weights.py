@@ -75,9 +75,18 @@ def parse_arguments():
         help="Gen-level observables, but keep only events passing BOTH pass_gen and pass_reco. "
         "Use a separate --output_folder, since file names are unchanged",
     )
+    parser.add_argument(
+        "--closure_only",
+        action="store_true",
+        default=False,
+        help="Allow files without 'unfolded_weights' (closure-only evaluation, or a prep file "
+        "such as Djangoh); only the closure weights and mc_weights are saved",
+    )
     flags = parser.parse_args()
     if flags.require_reco and flags.reco:
         raise ValueError("--require_reco is for gen-level observables; do not combine with --reco")
+    if flags.closure_only and flags.bootstrap:
+        raise ValueError("--closure_only cannot be combined with --bootstrap")
 
     return flags
 
@@ -147,8 +156,11 @@ def load_weights_slice(flags, global_start, global_end):
 
             if "unfolded_weights" in fh5:
                 weights[flags.file] = fh5["unfolded_weights"][start:end][combined_mask]
-            else:
-                raise KeyError("File has no dataset 'unfolded_weights'")
+            elif not flags.closure_only:
+                raise KeyError(
+                    "File has no dataset 'unfolded_weights' "
+                    "(use --closure_only if only the closure model was evaluated)"
+                )
 
             if flags.bootstrap and "Rapgap" in flags.file:
                 for i in range(1, flags.nboot + 1):
@@ -250,6 +262,9 @@ def main():
             os.remove(output_path)
 
         with h5.File(output_path, 'w') as fh5:
+            if 'mc_weights' in results:
+                fh5.create_dataset("mc_weights", data=results['mc_weights'])
+
             if "data" not in flags.file and 'weights' in results and len(results['weights']) > 0:
                 if flags.file in results['weights']:
                     fh5.create_dataset("weights_nominal", data=results['weights'][flags.file])
@@ -260,9 +275,6 @@ def main():
                 else:
                     if flags.file in results['weights']:
                         fh5.create_dataset("weights", data=results['weights'][flags.file])
-
-                if 'mc_weights' in results:
-                    fh5.create_dataset("mc_weights", data=results['mc_weights'])
 
                 if "closure" in results['weights']:
                     fh5.create_dataset("closure_weights", data=results['weights']["closure"])
