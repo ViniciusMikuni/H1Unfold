@@ -69,11 +69,11 @@ particle_names = {
 
 observable_names = {
     "jet_pt": r"$p_{T}^{jet}$ [GeV]",
-    'jet_breit_pt': r'$p_{T}^{jet}$ [GeV] Breit frame',
+    "jet_breit_pt": r"$p_{T}^{jet}$ [GeV] Breit frame",
     "deltaphi": r"$\Delta\phi^{jet}$ [rad]",
     "jet_tau10": r"$\mathrm{ln}(\lambda_1^1)$",
     "zjet": r"$z^{jet}$",
-    'zjet_breit':r'$z^{jet}$ Breit frame'
+    "zjet_breit": r"$z^{jet}$ Breit frame",
 }
 
 dedicated_binning = {
@@ -356,7 +356,7 @@ def HistRoutine(
     weights=None,
     uncertainty=None,
     stat_uncertainty=None,
-    show_stat_points=True,
+    show_stat_points=None,
 ):
     """
     Generate a histogram plot with optional ratio and uncertainties.
@@ -518,6 +518,9 @@ def HistRoutine(
     )
 
     ## draw data points at 1 with stat uncertainties on the bottom panel
+    # Default (None) keeps the original behavior: only draw them when the reference is data
+    if show_stat_points is None:
+        show_stat_points = "data" in reference_name.lower()
     if show_stat_points:
         ax1.errorbar(
             xaxis,
@@ -611,7 +614,7 @@ def HistRoutinePart(
     weights=None,
     uncertainty=None,
     stat_uncertainty=None,
-    show_stat_points=True,
+    show_stat_points=None,
 ):
     """
     Generate a histogram plot with optional ratio and uncertainties.
@@ -773,6 +776,9 @@ def HistRoutinePart(
     )
 
     ## draw data points at 1 with stat uncertainties on the bottom panel
+    # Default (None) keeps the original behavior: only draw them when the reference is data
+    if show_stat_points is None:
+        show_stat_points = "data" in reference_name.lower()
     if show_stat_points:
         ax1.errorbar(
             xaxis,
@@ -872,54 +878,17 @@ def undo_standardizing(flags, dataloaders):
 #     return mc_file_names
 
 
-# def get_version(dataset, flags, opt):
-#     version = opt["NAME"]
-#     if "sys" in dataset:
-#         match = re.search(r"sys(\d+)", dataset)
-#         version += f"_sys{match.group(1)}"
-#     if "Djangoh" in dataset:
-#         # Djangoh used for model uncertainty
-#         version += "_sys_model"
-#     version += f"_{dataset}"
-
-#     # version += f"_{flags.dataset}"
-#     if flags.load_pretrain:
-#         version += "_pretrained"
-#     return version
-
 def get_version(dataset, flags, opt):
-    """Generate version string for model loading"""
-    version = opt["NAME"]  # This should be "H1_May2025"
-    
-    # Extract dataset type (ep/em) from filename
-    if "Eplus" in dataset or "ep" in dataset.lower():
-        dataset_type = "ep"
-    elif "Eminus" in dataset or "em" in dataset.lower():
-        dataset_type = "em" 
-    else:
-        # Fallback - extract from filename
-        if "Eplus0607" in dataset:
-            dataset_type = "ep"
-        elif "Eminus06" in dataset:
-            dataset_type = "em"
-        else:
-            dataset_type = "ep"  # Default fallback
-    
-    # Handle systematic variations
+    version = opt["NAME"]
     if "sys" in dataset:
         match = re.search(r"sys(\d+)", dataset)
-        if match:
-            version += f"_sys{match.group(1)}"
-    
+        version += f"_sys{match.group(1)}"
     if "Djangoh" in dataset:
+        # Djangoh used for model uncertainty
         version += "_sys_model"
-    
-    # Add dataset type (ep/em)
-    version += f"_{dataset_type}"
-    
-    # if flags.load_pretrain:
-    #     version += "_pretrained"
-        
+    version += f"_{flags.dataset}"
+    if flags.load_pretrain:
+        version += "_pretrained"
     return version
 
 
