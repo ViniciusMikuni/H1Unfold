@@ -68,7 +68,16 @@ def parse_arguments():
         "--verbose", action="store_true", default=False, help="Increase print level"
     )
     parser.add_argument("--eec", action="store_true", default=False, help="Get EEC")
+    parser.add_argument(
+        "--require_reco",
+        action="store_true",
+        default=False,
+        help="Gen-level observables, but keep only events passing BOTH pass_gen and pass_reco. "
+        "Use a separate --output_folder, since file names are unchanged",
+    )
     flags = parser.parse_args()
+    if flags.require_reco and flags.reco:
+        raise ValueError("--require_reco is for gen-level observables; do not combine with --reco")
 
     return flags
 
@@ -101,7 +110,7 @@ def get_dataloaders_batch(flags, file_names, batch_start, batch_end):
                 global_start=batch_start,
                 global_end = batch_end,
                 pass_fiducial=not flags.reco,
-                pass_reco=flags.reco,
+                pass_reco=flags.reco or flags.require_reco,
             )
 
     return dataloaders
@@ -129,7 +138,9 @@ def load_weights_slice(flags, global_start, global_end):
             pass_gen = fh5["gen_event_features"][start:end, -1] == 1
             pass_reco = fh5["reco_event_features"][start:end, -1] == 1
 
-            if not flags.reco:
+            if flags.require_reco:
+                combined_mask = pass_gen & pass_reco
+            elif not flags.reco:
                 combined_mask = pass_gen
             else:
                 combined_mask = pass_reco
