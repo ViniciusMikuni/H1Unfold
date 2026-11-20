@@ -263,7 +263,8 @@ def get_sample_name(base_name, dataset, extension="_prep.h5"):
     dataset = "Eplus0607" if dataset == "ep" else "Eminus06"
     sample_name = f"{base_name}_{dataset}{sys_name}{extension}"
 
-    print(f"sample name: {sample_name}")
+    if hvd.rank() == 0:
+        print(f"sample name: {sample_name}")
     return sample_name
 
 
@@ -897,7 +898,7 @@ def evaluate_model(
 ):
     if version is None:
         version = get_version(dataset, flags, opt)
-    print(f"version: {version}")
+
     model_name = "{}/OmniFold_{}_iter{}_step2/checkpoint".format(
         flags.weights, version, flags.niter
     )
@@ -905,8 +906,10 @@ def evaluate_model(
         model_name = "{}/OmniFold_{}_iter{}_step2_strap{}/checkpoint".format(
             flags.weights, version, flags.niter, nboot
         )
-    print(f"model name: {model_name}")
+
     if hvd.rank() == 0:
+        print(f"version: {version}")
+        print(f"model name: {model_name}")
         print("Loading model {}".format(model_name))
 
     mfold = Multifold(version=version, verbose=hvd.rank() == 0)
