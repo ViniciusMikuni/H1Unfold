@@ -167,6 +167,8 @@ def process_batch(flags, batch_start, batch_end, weights_dict, opt):
     undo_standardizing(flags, dataloaders)
     print(f"[rank {hvd.rank()}] process_batch: cluster_jets", flush=True)
     cluster_jets(dataloaders, n_workers=int(os.environ.get("SLURM_CPUS_PER_TASK", 1)))
+    print(f"[rank {hvd.rank()}] process_batch: cluster_breit", flush=True)
+    cluster_breit(flags, dataloaders)
 
     del dataloaders[flags.file].part, dataloaders[flags.file].mask
     gc.collect()
