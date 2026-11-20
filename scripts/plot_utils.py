@@ -1307,7 +1307,7 @@ def plot_observable(flags, var, dataloaders, version):
         return ak.to_numpy(counts), bins
 
     # Determine weight name
-    weight_name = "closure_weights" if flags.blind else "weights1"
+    weight_name = "closure_weights" if flags.blind else "weights"
     if flags.blind:
         data_name = "Rapgap_closure"
     elif flags.reco:
