@@ -14,7 +14,6 @@ import tensorflow as tf
 import re
 import horovod.tensorflow as hvd
 import gc
-from omnifold import Multifold
 
 # General utilities file
 
@@ -911,6 +910,8 @@ def evaluate_model(
         print(f"version: {version}")
         print(f"model name: {model_name}")
         print("Loading model {}".format(model_name))
+
+    from omnifold import Multifold
 
     mfold = Multifold(version=version, verbose=hvd.rank() == 0)
     mfold.PrepareModel()
