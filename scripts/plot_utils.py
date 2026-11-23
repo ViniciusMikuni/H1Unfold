@@ -5,7 +5,7 @@ import subprocess
 import h5py as h5
 import os
 from multiprocessing import Pool
-
+import horovod.tensorflow as hvd
 def _cluster_chunk(args):
     """Process a chunk of events for jet clustering (runs in a worker process)."""
     import fastjet
@@ -1079,6 +1079,7 @@ def cluster_breit(flags, dataloaders, clustering_type="all", fastjet_config=""):
     for dataloader_name, data in dataloaders.items():
         if data.event.shape[0] == 0:
             dataloaders[dataloader_name].all_jets_breit = np.zeros((0, 4, 8), dtype=np.float32)
+            dataloaders[dataloader_name].all_jets_breit_centauro = np.zeros((0, 4, 8), dtype=np.float32)
             continue
 
         electron_momentum = _convert_electron_kinematics(data.event)
