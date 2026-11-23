@@ -14,7 +14,6 @@ import tensorflow as tf
 import re
 import horovod.tensorflow as hvd
 import gc
-from omnifold import Multifold
 
 # General utilities file
 
@@ -69,7 +68,7 @@ particle_names = {
 
 observable_names = {
     "jet_pt": r"$p_{T}^{jet}$ [GeV]",
-    'jet_breit_pt': r'$p_{T}^{jet}$ [GeV] Breit frame',
+    "jet_breit_pt": r"$p_{T}^{jet}$ [GeV] Breit frame",
     "deltaphi": r"$\Delta\phi^{jet}$ [rad]",
     "jet_tau10": r"$\mathrm{ln}(\lambda_1^1)$",
     "zjet": r"$z^{jet}$",
@@ -289,6 +288,9 @@ def get_sample_name(base_name, dataset, extension="_prep.h5"):
 
     dataset = "Eplus0607" if dataset == "ep" else "Eminus06"
     sample_name = f"{base_name}_{dataset}{sys_name}{extension}"
+
+    if hvd.rank() == 0:
+        print(f"sample name: {sample_name}")
     return sample_name
 
 
@@ -381,6 +383,7 @@ def HistRoutine(
     weights=None,
     uncertainty=None,
     stat_uncertainty=None,
+    show_stat_points=None,
 ):
     """
     Generate a histogram plot with optional ratio and uncertainties.
@@ -542,7 +545,10 @@ def HistRoutine(
     )
 
     ## draw data points at 1 with stat uncertainties on the bottom panel
-    if "data" in reference_name.lower():
+    # Default (None) keeps the original behavior: only draw them when the reference is data
+    if show_stat_points is None:
+        show_stat_points = "data" in reference_name.lower()
+    if show_stat_points:
         ax1.errorbar(
             xaxis,
             np.ones_like(xaxis),
@@ -638,6 +644,7 @@ def HistRoutinePart(
     weights=None,
     uncertainty=None,
     stat_uncertainty=None,
+    show_stat_points=None,
 ):
     """
     Generate a histogram plot with optional ratio and uncertainties.
@@ -799,7 +806,10 @@ def HistRoutinePart(
     )
 
     ## draw data points at 1 with stat uncertainties on the bottom panel
-    if "data" in reference_name.lower():
+    # Default (None) keeps the original behavior: only draw them when the reference is data
+    if show_stat_points is None:
+        show_stat_points = "data" in reference_name.lower()
+    if show_stat_points:
         ax1.errorbar(
             xaxis,
             np.ones_like(xaxis),
@@ -927,7 +937,11 @@ def evaluate_model(
         )
 
     if hvd.rank() == 0:
+        print(f"version: {version}")
+        print(f"model name: {model_name}")
         print("Loading model {}".format(model_name))
+
+    from omnifold import Multifold
 
     mfold = Multifold(version=version, verbose=hvd.rank() == 0)
     mfold.PrepareModel()

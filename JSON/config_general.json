@@ -1,5 +1,5 @@
 {
-    'NAME': 'H1_May2025',
+    'NAME': 'H1_Oct2026_passreco_700kdjangoh_12milrapgap',
     'MC_NAMES_test':['test_sim.h5'],    
     'MC_NAMES':['Rapgap'],
     'NBOOTSTRAP':99,

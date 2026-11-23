@@ -73,6 +73,12 @@ if __name__ == "__main__":
         default=False,
         help="Display additional information during training",
     )
+    parser.add_argument(
+        "--pass_reco_only",
+        action="store_true",
+        default=False,
+        help="Train only on MC events passing pass_reco (step 2 ignores reco-failing events)",
+    )
     parser.add_argument("--jobNum", type=int, default=-1, help="SBATCH Job Number")
 
     flags = parser.parse_args()
@@ -107,6 +113,7 @@ if __name__ == "__main__":
         if not (flags.nstrap > 0):  # ensure tf seed isn't same for multiple bootstraps
             tf.random.set_seed(1234 * (flags.jobNum + 1))
         version += f"_job{flags.jobNum}"
+    nmax = 700_000 if flags.closure else None
 
     data = Dataset(
         data_file_names,
@@ -114,7 +121,7 @@ if __name__ == "__main__":
         is_mc=False,
         rank=hvd.rank(),
         size=hvd.size(),
-        nmax=nmax,
+        nmax = 700_000 if flags.closure else None,
     )  # match the normalization from MC files
 
     mc = Dataset(
@@ -123,8 +130,9 @@ if __name__ == "__main__":
         is_mc=True,
         rank=hvd.rank(),
         size=hvd.size(),
-        nmax=None if flags.pretrain else 5_000_000,
+        nmax=None if flags.pretrain else 12_500_000,
         norm=data.nmax,
+        pass_reco=flags.pass_reco_only,
     )  # Pretrain using all the events, but use smaller dataset during normal training
 
     if flags.nstrap > 0:
