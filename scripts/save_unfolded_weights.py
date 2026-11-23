@@ -240,6 +240,8 @@ def main():
 
     stem = os.path.splitext(flags.file)[0]
     base_name = stem.split("_unfolded")[0].removesuffix("_prep") + "_"
+    
+    os.makedirs(flags.output_folder, exist_ok=True)
 
     # Strided round-robin: rank r handles batches r, r+size, r+2*size, ...
     for batch_idx in range(hvd.rank(), num_batches, hvd.size()):
