@@ -36,6 +36,25 @@ utils.SetStyle()
 
 var_names = ['deltaphi', 'jet_pt', 'jet_breit_pt', 'jet_tau10', 'zjet', 'zjet_breit']#, 'eec', 'theta']
 # var_names = ['deltaphi']#, 'eec', 'theta']
+# Only present in batch files made with save_unfolded_weights.py --centauro
+centauro_var_names = ['zjet_centauro', 'jet_centauro_pt', 'Delta_zjet']
+
+
+def get_valid_mask(fh5, var, values):
+    """
+    Mask selecting the entries of `values` (fh5[var][:]) that enter the histogram.
+      - Centauro per-jet observables: jets with zjet_centauro > 0.2
+      - Delta_zjet (per event): events where both kt and Centauro found a jet (not NaN)
+      - Other per-jet observables: jets with jet_pt > 0
+      - Other per-event observables: all events
+    """
+    if var == 'Delta_zjet':
+        return ~np.isnan(values)
+    if 'centauro' in var:
+        return fh5['zjet_centauro'][:] > 0.2
+    if values.ndim == 2:
+        return fh5['jet_pt'][:] > 0
+    return np.ones(values.shape, dtype=bool)
 
 
 # ---------------------------------------------------------------------------
@@ -197,15 +216,11 @@ def _accumulate_jet_file(fh5, var, binning, weight_keys):
     out = {lbl: np.zeros(n_bins) for lbl, _ in weight_keys}
 
     values = fh5[var][:]        # (N, J) or (N,)
-    jet_pt = fh5['jet_pt'][:]   # (N, J)
     mc_w = fh5['mc_weights'][:] # (N,)
 
     per_jet = values.ndim == 2
-    if per_jet:
-        valid = jet_pt > 0
-        flat_vals = values[valid]
-    else:
-        flat_vals = values
+    valid = get_valid_mask(fh5, var, values)
+    flat_vals = values[valid]
 
     for lbl, wk in weight_keys:
         # 'weights' is absent in bootstrap-mode batch files; fall back to 'weights_nominal'
@@ -219,7 +234,7 @@ def _accumulate_jet_file(fh5, var, binning, weight_keys):
         if per_jet:
             flat_w = np.broadcast_to(event_w[:, None], values.shape).copy()[valid]
         else:
-            flat_w = event_w
+            flat_w = event_w[valid]
 
         out[lbl] += np.histogram(flat_vals, bins=binning, weights=flat_w)[0]
 
@@ -440,10 +455,8 @@ def plot_observable(flags, var, batch_files, version):
                     data_raw_counts += np.histogram(eec_b[valid], bins=binning)[0]
                 else:
                     vals = fh5[var][:]
-                    jpt = fh5['jet_pt'][:]
-                    valid = jpt > 0
-                    flat = vals[valid] if vals.ndim == 2 else vals
-                    data_raw_counts += np.histogram(flat, bins=binning)[0]
+                    valid = get_valid_mask(fh5, var, vals)
+                    data_raw_counts += np.histogram(vals[valid], bins=binning)[0]
             gc.collect()
 
     # Bootstrap (weights1..weightsN stored inside the same Rapgap batch files)
@@ -625,7 +638,21 @@ def main():
 
     version = opt['NAME']
 
-    for var in var_names:
+    # Plot the Centauro observables only if every set of batch files contains them
+    plot_vars = list(var_names)
+    first_files = [files[0] for files in batch_files.values() if files]
+    if first_files:
+        available = None
+        for fpath in first_files:
+            with h5.File(fpath, 'r') as fh5:
+                keys = set(fh5.keys())
+            available = keys if available is None else available & keys
+        missing = [v for v in centauro_var_names if v not in available]
+        if missing:
+            print(f'Centauro observables not in batch files, skipping: {missing}')
+        plot_vars += [v for v in centauro_var_names if v in available]
+
+    for var in plot_vars:
         if 'weight' in var:
             continue
         plot_observable(flags, var, batch_files, version)
