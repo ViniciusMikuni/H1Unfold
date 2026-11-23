@@ -7,10 +7,12 @@ function print_the_help {
   echo "USAGE: ${0} -- <install_directory>"
   echo "  OPTIONS: "
   echo "    --install_directory     where fastjet and fastjet-contrib will be installed"
+  echo "                            (default: the repository root, where the scripts expect it)"
   echo "    -h, --help                print this help menu"
 }
 
-install_directory="./"
+# Default to the repository root, where the scripts look for ../fastjet-3.4.3-install.
+install_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 image="vmikuni/tensorflow:ngc-23.12-tf2-v1"
 original_directory=$PWD
 exit_script=false
