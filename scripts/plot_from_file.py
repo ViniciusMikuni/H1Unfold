@@ -162,6 +162,10 @@ def main():
     for var in var_names:
         if "weight" in var:
             continue
+        # Centauro observables are only saved when save_unfolded.py ran with --centauro
+        if any(var not in dataloader for dataloader in dataloaders.values()):
+            print(f"{var} not in the input files, skipping")
+            continue
         plot_observable(flags, var, dataloaders, opt["NAME"])
 
 

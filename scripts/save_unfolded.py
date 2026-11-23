@@ -61,6 +61,12 @@ def parse_arguments():
     )
     parser.add_argument("--eec", action="store_true", default=False, help="Get EEC")
     parser.add_argument(
+        "--centauro",
+        action="store_true",
+        default=False,
+        help="Also cluster Breit-frame jets with Centauro and save the Centauro observables",
+    )
+    parser.add_argument(
         "--fastjet_config_path",
         type=str,
         default="/global/cfs/cdirs/m3246/rmilton/fastjet-3.4.3-install/bin/fastjet-config",
@@ -151,9 +157,12 @@ def main():
     undo_standardizing(flags, dataloaders)
 
     cluster_jets(dataloaders)
-    compile_centauro(flags.fastjet_config_path)
-    cluster_breit(flags, dataloaders)
-    calculate_Delta_zjet(dataloaders)
+    if flags.centauro:
+        compile_centauro(flags.fastjet_config_path)
+        cluster_breit(flags, dataloaders, clustering_type="all")
+        calculate_Delta_zjet(dataloaders)
+    else:
+        cluster_breit(flags, dataloaders, clustering_type="kt")
     del dataloaders[flags.file].part, dataloaders[flags.file].mask
     gc.collect()
     gather_data(dataloaders)
@@ -203,21 +212,22 @@ def main():
             dset = fh5.create_dataset(
                 "zjet_breit", data=dataloaders[flags.file].all_jets_breit[:, :, 7]
             )
-            dset = fh5.create_dataset(
-                "zjet_centauro",
-                data=dataloaders[flags.file].all_jets_breit_centauro[:, :, 7],
-            )
-            dset = fh5.create_dataset(
-                "Delta_zjet", data=dataloaders[flags.file].Delta_zjet
-            )
-            dset = fh5.create_dataset(
-                "jet_centauro_pt",
-                data=dataloaders[flags.file].all_jets_breit_centauro[:, :, 0],
-            )
-            dset = fh5.create_dataset(
-                "jet_centauro_E",
-                data=dataloaders[flags.file].all_jets_breit_centauro[:, :, 3],
-            )
+            if flags.centauro:
+                dset = fh5.create_dataset(
+                    "zjet_centauro",
+                    data=dataloaders[flags.file].all_jets_breit_centauro[:, :, 7],
+                )
+                dset = fh5.create_dataset(
+                    "Delta_zjet", data=dataloaders[flags.file].Delta_zjet
+                )
+                dset = fh5.create_dataset(
+                    "jet_centauro_pt",
+                    data=dataloaders[flags.file].all_jets_breit_centauro[:, :, 0],
+                )
+                dset = fh5.create_dataset(
+                    "jet_centauro_E",
+                    data=dataloaders[flags.file].all_jets_breit_centauro[:, :, 3],
+                )
             dset = fh5.create_dataset("eec", data=dataloaders[flags.file].eec[:, :, 0])
             dset = fh5.create_dataset(
                 "E_wgt", data=dataloaders[flags.file].eec[:, :, 1]

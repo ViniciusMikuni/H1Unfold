@@ -885,8 +885,9 @@ def compile_centauro(fastjet_config):
     hvd.broadcast_object(None, root_rank=0)
 
 
-def cluster_breit(flags, dataloaders, clustering_type="all"):
-    """Centauro clustering needs compile_centauro() to have been called first."""
+def cluster_breit(flags, dataloaders, clustering_type="kt"):
+    """clustering_type: "kt", "centauro" or "all".
+    Centauro clustering needs compile_centauro() to have been called first."""
     import fastjet
     import awkward as ak
     import vector
