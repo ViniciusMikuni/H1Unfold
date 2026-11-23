@@ -1,7 +1,7 @@
 #!/bin/bash
 # Run from the login node. Downloads happen on the host; configure/make run inside the
 # shifter image used to run the code, so fastjet/fjcontrib are compiled with the same
-# g++ as run_centauro.sh.
+# g++ as compile_centauro.sh.
 
 function print_the_help {
   echo "USAGE: ${0} -- <install_directory>"

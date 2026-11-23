@@ -151,7 +151,8 @@ def main():
     undo_standardizing(flags, dataloaders)
 
     cluster_jets(dataloaders)
-    cluster_breit(flags, dataloaders, fastjet_config=flags.fastjet_config_path)
+    compile_centauro(flags.fastjet_config_path)
+    cluster_breit(flags, dataloaders)
     calculate_Delta_zjet(dataloaders)
     del dataloaders[flags.file].part, dataloaders[flags.file].mask
     gc.collect()

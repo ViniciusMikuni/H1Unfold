@@ -209,7 +209,6 @@ def process_batch(flags, batch_start, batch_end, weights_dict, opt):
             flags,
             dataloaders,
             clustering_type="all",
-            fastjet_config=flags.fastjet_config_path,
         )
         print(f"[rank {hvd.rank()}] process_batch: calculate_Delta_zjet", flush=True)
         calculate_Delta_zjet(dataloaders)
@@ -272,6 +271,9 @@ def main():
     base_name = stem.split("_unfolded")[0].removesuffix("_prep") + "_"
     
     os.makedirs(flags.output_folder, exist_ok=True)
+
+    if flags.centauro:
+        compile_centauro(flags.fastjet_config_path)
 
     # Strided round-robin: rank r handles batches r, r+size, r+2*size, ...
     for batch_idx in range(hvd.rank(), num_batches, hvd.size()):

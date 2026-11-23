@@ -877,7 +877,16 @@ def plot_zjet(flags, dataloaders, data_weights, version, frame="lab"):
     fig.savefig(f"../plots/{version}_zjet_{frame}.pdf")
 
 
-def cluster_breit(flags, dataloaders, clustering_type="all", fastjet_config=""):
+def compile_centauro(fastjet_config):
+    """Compile ./centauro on rank 0; the other ranks wait until it's done."""
+    if hvd.rank() == 0:
+        print(f"Compiling Centauro with fastjet at {fastjet_config}")
+        subprocess.run(["./compile_centauro.sh", fastjet_config], check=True)
+    hvd.broadcast_object(None, root_rank=0)
+
+
+def cluster_breit(flags, dataloaders, clustering_type="all"):
+    """Centauro clustering needs compile_centauro() to have been called first."""
     import fastjet
     import awkward as ak
     import vector
@@ -1127,11 +1136,6 @@ def cluster_breit(flags, dataloaders, clustering_type="all", fastjet_config=""):
             )
 
         if clustering_type == "centauro" or clustering_type == "all":
-            if fastjet_config == "":
-                raise ValueError("fastjet_config needs to be set when using Centauro!")
-            else:
-                if hvd.rank() == 0:
-                    print(f"Using fastjet at {fastjet_config} for Centauro")
             # Saving Breit particles to an h5 file so we can cluster in C++ with Centauro
             px, py, pz, energy = [], [], [], []
             max_num_particles = len(max(events, key=len))
@@ -1161,17 +1165,11 @@ def cluster_breit(flags, dataloaders, clustering_type="all", fastjet_config=""):
             with h5.File(breit_file_name, "w") as fh5:
                 dset = fh5.create_dataset("breit_particles", data=breit_particles)
 
-            # To use multiple GPUs, make a copy of the scripts for each GPU
+            # ./centauro is built once per job by compile_centauro()
             subprocess.run(
-                [f"cp ./run_centauro.sh ./run_centauro_{hvd.rank()}.sh"], shell=True
+                ["./centauro", "--input", breit_file_name, "--output", jet_file_name, "--jet_radius", "1.0"],
+                check=True,
             )
-            subprocess.run(
-                [
-                    f"./run_centauro_{hvd.rank()}.sh --input {breit_file_name} --output {jet_file_name} --jet_radius {1.0} --GPU_ID {hvd.rank()} --fastjet_config_path {fastjet_config}"
-                ],
-                shell=True,
-            )
-            subprocess.run([f"rm ./run_centauro_{hvd.rank()}.sh"], shell=True)
 
             # The Centauro jets are already zero padded so we don't need anymore processing
             # Take the first 40 jets, which should be more than enough
