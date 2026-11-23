@@ -78,7 +78,7 @@ def parse_arguments():
     parser.add_argument(
         "--fastjet_config_path",
         type=str,
-        default="/global/cfs/cdirs/m3246/rmilton/fastjet-3.4.3-install/bin/fastjet-config",
+        default="../fastjet-3.4.3-install/bin/fastjet-config",
         help="Path to the fastjet-config of a fastjet install with fastjet-contrib (used with --centauro)",
     )
     parser.add_argument(
