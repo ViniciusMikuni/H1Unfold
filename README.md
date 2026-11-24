@@ -120,9 +120,14 @@ Key arguments:
 | `--nboot` | `50` | Number of bootstrap replicas |
 | `--reco` | `False` | Process reco-level events instead of gen-level |
 
+## Including Centauro in analysis
+To include Centauro in the jet clustering and plotting, you need to install a separate fastjet installation that has fjcontrib. `install_fastjet_contrib.sh` does this automatically. This should be run from outside the shifter container.
+
+Once installed, `save_unfolded_weights.py` can calculate the Centauro observables with the `--centauro` flag. The path to the fastjet config file is set with `--fastjet_config_path` (by default it follows the default path in `install_fastjet_contrib.sh`).
+
 ## Plotting from batch files
 
-`plot_from_batches.py` is a memory-efficient alternative to `plot.py`. Instead of loading all events at once, it iterates over the batch HDF5 files produced by `save_unfolded_weights.py` and accumulates weighted histograms for each observable.
+`plot_from_batches.py` is a memory-efficient alternative to `plot.py`. Instead of loading all events at once, it iterates over the batch HDF5 files produced by `save_unfolded_weights.py` and accumulates weighted histograms for each observable. Centauro observables are plotted if they're contained in the .h5 files.
 
 Systematics, closure, and bootstrap statistical uncertainties are computed in the same way as the standard plotting code.
 
