@@ -20,7 +20,7 @@ Besides the tensorflow module, we only require a few additional packages that yo
 
 ```bash
 module load tensorflow
-pip install uproot awkward fastjet
+pip install uproot awkward fastjet==3.4.3.1
 ```
 
 ### Preparing new datasets
@@ -43,9 +43,14 @@ All the libraries required to run the code in the repo can be acessed through th
 shifter --image=vmikuni/tensorflow:ngc-23.12-tf2-v1 --module=gpu,nccl-2.18
 ```
 
+The image does not include `fastjet` or `vector`. Install them once into your user site-packages from inside the image.
+```bash
+shifter --image=vmikuni/tensorflow:ngc-23.12-tf2-v1 --module=none pip install --user fastjet==3.4.3.1 vector
+```
+
 You can also submit jobs to slurm using the same shifter image. For an interactive session you can do:
 ```bash
-salloc -C gpu -q interactive  -t 10 -n 16 --ntasks-per-node=4 --gpus-per-task=1  -A m3246 --gpu-bind=none  --image vmikuni/tensorflow:ngc-23.04-tf2-v1 --module=gpu,nccl-2.15
+salloc -C gpu -q interactive  -t 10 -n 16 --ntasks-per-node=4 --gpus-per-task=1  -A m3246 --gpu-bind=none  --image vmikuni/tensorflow:ngc-23.12-tf2-v1 --module=gpu,nccl-2.15
 ```
 
 For an example for a job submission file, look at ```submit.sh``` in the scripts folder.
@@ -120,9 +125,14 @@ Key arguments:
 | `--nboot` | `50` | Number of bootstrap replicas |
 | `--reco` | `False` | Process reco-level events instead of gen-level |
 
+## Including Centauro in analysis
+To include Centauro in the jet clustering and plotting, you need to install a separate fastjet installation that has fjcontrib. `install_fastjet_contrib.sh` does this automatically. This should be run from outside the shifter container.
+
+Once installed, `save_unfolded_weights.py` can calculate the Centauro observables with the `--centauro` flag. The path to the fastjet config file is set with `--fastjet_config_path` (by default it follows the default path in `install_fastjet_contrib.sh`).
+
 ## Plotting from batch files
 
-`plot_from_batches.py` is a memory-efficient alternative to `plot.py`. Instead of loading all events at once, it iterates over the batch HDF5 files produced by `save_unfolded_weights.py` and accumulates weighted histograms for each observable.
+`plot_from_batches.py` is a memory-efficient alternative to `plot.py`. Instead of loading all events at once, it iterates over the batch HDF5 files produced by `save_unfolded_weights.py` and accumulates weighted histograms for each observable. Centauro observables are plotted if they're contained in the .h5 files.
 
 Systematics, closure, and bootstrap statistical uncertainties are computed in the same way as the standard plotting code.
 
@@ -170,6 +180,6 @@ To plot using multiple GPUs run:
 ```bash
 salloc -C gpu -q interactive  -t 40 -n 16 --ntasks-per-node=4 --gpus-per-task=1  -A m3246  --gpu-bind None
 module load tensorflow
-[pip install --user fastjet] #Do it only once
+[pip install --user fastjet==3.4.3.1] #Do it only once
 srun  python plot.py --niter 5 --closure --load_pretrain --data_folder /global/cfs/cdirs/m3246/H1/h5/ --weights /global/cfs/cdirs/m3246/H1/weights/
 ``` -->

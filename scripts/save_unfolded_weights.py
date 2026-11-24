@@ -69,6 +69,19 @@ def parse_arguments():
     )
     parser.add_argument("--eec", action="store_true", default=False, help="Get EEC")
     parser.add_argument(
+        "--centauro",
+        action="store_true",
+        default=False,
+        help="Also cluster Breit-frame jets with Centauro and save the Centauro observables "
+        "(zjet_centauro, jet_centauro_pt, jet_centauro_E, Delta_zjet)",
+    )
+    parser.add_argument(
+        "--fastjet_config_path",
+        type=str,
+        default="../fastjet-3.4.3-install/bin/fastjet-config",
+        help="Path to the fastjet-config of a fastjet install with fastjet-contrib (used with --centauro)",
+    )
+    parser.add_argument(
         "--require_reco",
         action="store_true",
         default=False,
@@ -191,7 +204,16 @@ def process_batch(flags, batch_start, batch_end, weights_dict, opt):
     print(f"[rank {hvd.rank()}] process_batch: cluster_jets", flush=True)
     cluster_jets(dataloaders, n_workers=int(os.environ.get("SLURM_CPUS_PER_TASK", 1)))
     print(f"[rank {hvd.rank()}] process_batch: cluster_breit", flush=True)
-    cluster_breit(flags, dataloaders)
+    if flags.centauro:
+        cluster_breit(
+            flags,
+            dataloaders,
+            clustering_type="all",
+        )
+        print(f"[rank {hvd.rank()}] process_batch: calculate_Delta_zjet", flush=True)
+        calculate_Delta_zjet(dataloaders)
+    else:
+        cluster_breit(flags, dataloaders, clustering_type="kt")
 
     del dataloaders[flags.file].part, dataloaders[flags.file].mask
     gc.collect()
@@ -207,6 +229,13 @@ def process_batch(flags, batch_start, batch_end, weights_dict, opt):
         'zjet': dataset.all_jets[:, :, 9],
         'zjet_breit': dataset.all_jets_breit[:, :, 7],
     }
+
+    if flags.centauro:
+        results['zjet_centauro'] = dataset.all_jets_breit_centauro[:, :, 7]
+        results['jet_centauro_pt'] = dataset.all_jets_breit_centauro[:, :, 0]
+        results['jet_centauro_E'] = dataset.all_jets_breit_centauro[:, :, 3]
+        # Events without a kt or Centauro jet have NaN for Delta_zjet
+        results['Delta_zjet'] = np.asarray(dataset.Delta_zjet, dtype=np.float64)
 
     if "data" not in flags.file:
         results['mc_weights'] = dataset.weight
@@ -242,6 +271,9 @@ def main():
     base_name = stem.split("_unfolded")[0].removesuffix("_prep") + "_"
     
     os.makedirs(flags.output_folder, exist_ok=True)
+
+    if flags.centauro:
+        compile_centauro(flags.fastjet_config_path)
 
     # Strided round-robin: rank r handles batches r, r+size, r+2*size, ...
     for batch_idx in range(hvd.rank(), num_batches, hvd.size()):
@@ -287,6 +319,9 @@ def main():
             fh5.create_dataset("jet_tau10", data=results['jet_tau10'])
             fh5.create_dataset("zjet", data=results['zjet'])
             fh5.create_dataset("zjet_breit", data=results['zjet_breit'])
+            for var in ("zjet_centauro", "jet_centauro_pt", "jet_centauro_E", "Delta_zjet"):
+                if var in results:
+                    fh5.create_dataset(var, data=results[var])
 
         n_entries = results['jet_pt'].shape[0]
         print(f"[rank {hvd.rank()}] saved batch {batch_idx} to {output_file_name} ({n_entries:,} entries)", flush=True)

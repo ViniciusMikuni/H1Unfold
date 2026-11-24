@@ -3,3 +3,13 @@ __pycache__/
 *~
 *.txt
 #*
+
+# fastjet + fjcontrib built by scripts/install_fastjet_contrib.sh
+fastjet-3.4.3/
+fastjet-3.4.3-install/
+fjcontrib-1.100/
+
+# Centauro binary from scripts/compile_centauro.sh and temp files from cluster_breit
+scripts/centauro
+scripts/breit_particles_*.h5
+scripts/centauro_jets_*.h5

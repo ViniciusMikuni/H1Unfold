@@ -7,6 +7,7 @@ import h5py as h5
 
 utils.SetStyle()
 
+
 var_names = [
     "weights",
     "mc_weights",
@@ -16,6 +17,9 @@ var_names = [
     "jet_tau10",
     "zjet",
     "zjet_breit",
+    "zjet_centauro",
+    "Delta_zjet",
+    "jet_centauro_pt",
 ]
 # var_names = ['jet_tau10']
 
@@ -157,6 +161,10 @@ def main():
 
     for var in var_names:
         if "weight" in var:
+            continue
+        # Centauro observables are only saved when save_unfolded.py ran with --centauro
+        if any(var not in dataloader for dataloader in dataloaders.values()):
+            print(f"{var} not in the input files, skipping")
             continue
         plot_observable(flags, var, dataloaders, opt["NAME"])
 
