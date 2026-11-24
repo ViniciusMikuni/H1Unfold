@@ -20,7 +20,7 @@ Besides the tensorflow module, we only require a few additional packages that yo
 
 ```bash
 module load tensorflow
-pip install uproot awkward fastjet
+pip install uproot awkward fastjet==3.4.3.1
 ```
 
 ### Preparing new datasets
@@ -43,9 +43,14 @@ All the libraries required to run the code in the repo can be acessed through th
 shifter --image=vmikuni/tensorflow:ngc-23.12-tf2-v1 --module=gpu,nccl-2.18
 ```
 
+The image does not include `fastjet` or `vector`. Install them once into your user site-packages from inside the image.
+```bash
+shifter --image=vmikuni/tensorflow:ngc-23.12-tf2-v1 --module=none pip install --user fastjet==3.4.3.1 vector
+```
+
 You can also submit jobs to slurm using the same shifter image. For an interactive session you can do:
 ```bash
-salloc -C gpu -q interactive  -t 10 -n 16 --ntasks-per-node=4 --gpus-per-task=1  -A m3246 --gpu-bind=none  --image vmikuni/tensorflow:ngc-23.04-tf2-v1 --module=gpu,nccl-2.15
+salloc -C gpu -q interactive  -t 10 -n 16 --ntasks-per-node=4 --gpus-per-task=1  -A m3246 --gpu-bind=none  --image vmikuni/tensorflow:ngc-23.12-tf2-v1 --module=gpu,nccl-2.15
 ```
 
 For an example for a job submission file, look at ```submit.sh``` in the scripts folder.
@@ -175,6 +180,6 @@ To plot using multiple GPUs run:
 ```bash
 salloc -C gpu -q interactive  -t 40 -n 16 --ntasks-per-node=4 --gpus-per-task=1  -A m3246  --gpu-bind None
 module load tensorflow
-[pip install --user fastjet] #Do it only once
+[pip install --user fastjet==3.4.3.1] #Do it only once
 srun  python plot.py --niter 5 --closure --load_pretrain --data_folder /global/cfs/cdirs/m3246/H1/h5/ --weights /global/cfs/cdirs/m3246/H1/weights/
 ``` -->
