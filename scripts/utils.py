@@ -72,7 +72,7 @@ observable_names = {
     "deltaphi": r"$\Delta\phi^{jet}$ [rad]",
     "jet_tau10": r"$\mathrm{ln}(\lambda_1^1)$",
     "zjet": r"$z^{jet}$",
-    'zjet_breit':r'$z^{jet}$ Breit frame',
+    "zjet_breit": r"$z^{jet}$ Breit frame",
     "zjet_centauro": r"$z^{jet} Centauro$",
     "Delta_zjet": r"$\Delta z^{jet}$",
     "jet_centauro_pt": r"$p_{T}^{jet}$ Centauro [GeV]",
